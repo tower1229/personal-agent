@@ -3,6 +3,12 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const runStatuses = ["succeeded", "failed"] as const;
 export type RunStatus = (typeof runStatuses)[number];
 
+export const todoStatuses = ["open", "completed"] as const;
+export type TodoStatus = (typeof todoStatuses)[number];
+
+export const toolCallStatuses = ["succeeded", "failed"] as const;
+export type ToolCallStatus = (typeof toolCallStatuses)[number];
+
 export const runs = sqliteTable("runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
@@ -17,5 +23,33 @@ export const runs = sqliteTable("runs", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
+export const todos = sqliteTable("todos", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull(),
+  status: text("status", { enum: todoStatuses }).notNull(),
+  dueAt: integer("due_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" })
+});
+
+export const toolCalls = sqliteTable("tool_calls", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  runId: integer("run_id"),
+  userId: text("user_id").notNull(),
+  chatId: text("chat_id").notNull(),
+  toolName: text("tool_name").notNull(),
+  argsJson: text("args_json").notNull(),
+  resultJson: text("result_json"),
+  status: text("status", { enum: toolCallStatuses }).notNull(),
+  error: text("error"),
+  latencyMs: integer("latency_ms").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+});
+
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
+export type Todo = typeof todos.$inferSelect;
+export type NewTodo = typeof todos.$inferInsert;
+export type ToolCall = typeof toolCalls.$inferSelect;
+export type NewToolCall = typeof toolCalls.$inferInsert;

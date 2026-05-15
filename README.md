@@ -1,6 +1,6 @@
 # Personal Agent
 
-一个用于学习的小型个人 Agent 运行系统。当前第 1 周实现了 TypeScript 项目骨架、Telegram Bot、OpenAI 模型调用、SQLite + Drizzle 运行记录。
+一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录，以及 todo 工具调用。
 
 ## 环境变量
 
@@ -49,7 +49,11 @@ npm run db:generate
 npm run db:migrate
 ```
 
-迁移会创建 `runs` 表，用于记录每次用户消息的输入、输出、状态、耗时和错误信息。
+迁移会创建：
+
+- `runs`：记录每次用户消息的输入、输出、状态、耗时和错误信息
+- `todos`：记录用户待办
+- `tool_calls`：记录每次工具调用的参数、结果、状态、耗时和错误信息
 
 ## 启动开发服务
 
@@ -75,3 +79,21 @@ npm start
 7. 发送任意文本消息，Bot 会调用模型生成回复，并把本次运行写入 SQLite 的 `runs` 表。
 
 如果模型调用失败，Bot 会返回友好的错误提示，并在 `runs.status` 中记录为 `failed`，同时写入错误信息。
+
+## Week 2 Todo 工具示例
+
+启动 Bot 后，可以在 Telegram 中发送：
+
+```text
+帮我创建一个待办：明天晚上学习 Agent tool calling
+```
+
+```text
+列出我的待办
+```
+
+```text
+完成第 1 个待办
+```
+
+Agent 会让模型决定是否调用 todo 工具。工具参数会先经过 Zod 校验，执行结果会写入 `tool_calls` 表，最终再由模型生成自然语言回复。
