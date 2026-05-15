@@ -18,6 +18,7 @@ cp .env.example .env
 | `OPENAI_API_KEY` | OpenAI-compatible provider API Key，例如 DeepSeek API Key |
 | `OPENAI_BASE_URL` | OpenAI-compatible API 地址，DeepSeek 使用 `https://api.deepseek.com` |
 | `OPENAI_MODEL` | 使用的模型名称，例如 `deepseek-v4-pro` 或 `deepseek-v4-flash` |
+| `USER_TIMEZONE` | 用户默认时区，用于解析“明天”“今晚”等相对时间，默认 `Asia/Shanghai` |
 | `DATABASE_URL` | SQLite 文件路径，默认 `data/personal-agent.sqlite` |
 | `NODE_ENV` | 运行环境，默认 `development` |
 
@@ -97,3 +98,5 @@ npm start
 ```
 
 Agent 会让模型决定是否调用 todo 工具。工具参数会先经过 Zod 校验，执行结果会写入 `tool_calls` 表，最终再由模型生成自然语言回复。
+
+当前 `tool_calls.run_id` 仍允许为空。后续做 observability 时，建议把 `runs` 生命周期改成先创建 `running` run，再把 run id 传入 Agent，最后更新 run 的最终状态。

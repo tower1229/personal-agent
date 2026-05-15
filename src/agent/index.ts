@@ -20,6 +20,19 @@ export interface GenerateReplyInput {
   chatId: string;
 }
 
+function getCurrentLocalTime(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: env.USER_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(new Date());
+}
+
 export async function generateReply({
   input,
   userId,
@@ -31,10 +44,14 @@ export async function generateReply({
       content: [
         "You are a concise personal Agent assistant.",
         "Reply in the user's language and keep answers practical.",
+        "Do not use Markdown formatting in Telegram replies.",
         "Use todo tools when the user asks to create, list, or complete todos.",
         "Never ask the user for user_id or chat_id; they are supplied by the system.",
         "When the user refers to an ordinal todo such as the first todo, list open todos first and then use the matching id.",
-        `Current date: ${new Date().toISOString()}`
+        `Current timezone: ${env.USER_TIMEZONE}.`,
+        `Current local time: ${getCurrentLocalTime()}.`,
+        `Current UTC time: ${new Date().toISOString()}.`,
+        `When parsing relative dates like tomorrow or tonight, use ${env.USER_TIMEZONE} unless the user says otherwise.`
       ].join(" ")
     },
     {
@@ -84,6 +101,9 @@ export async function generateReply({
           context: {
             userId,
             chatId,
+            // TODO: Create runs before Agent execution and pass the real run id
+            // here, then update the run after completion. That will let
+            // tool_calls.run_id support observability without nullable joins.
             runId: null
           }
         });
