@@ -8,6 +8,13 @@
       "when": 1778849471500,
       "tag": "0000_flashy_marrow",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1778850840463,
+      "tag": "0001_daffy_nitro",
+      "breakpoints": true
     }
   ]
 }

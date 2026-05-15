@@ -7,11 +7,13 @@ export const runs = sqliteTable("runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
   chatId: text("chat_id").notNull(),
+  model: text("model").notNull(),
   input: text("input").notNull(),
   output: text("output"),
   status: text("status", { enum: runStatuses }).notNull(),
   latencyMs: integer("latency_ms").notNull(),
   error: text("error"),
+  metadataJson: text("metadata_json"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 

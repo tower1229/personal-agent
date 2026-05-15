@@ -6,6 +6,8 @@ const openai = new OpenAI({
   baseURL: env.OPENAI_BASE_URL
 });
 
+const timeoutMs = 30_000;
+
 export interface GenerateReplyInput {
   input: string;
   userId: string;
@@ -29,6 +31,8 @@ export async function generateReply({
       }
     ],
     stream: false
+  }, {
+    timeout: timeoutMs
   });
 
   const output = completion.choices[0]?.message?.content?.trim();

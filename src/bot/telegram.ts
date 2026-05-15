@@ -31,16 +31,19 @@ async function recordRunSafely(input: {
   status: RunStatus;
   latencyMs: number;
   error: string | null;
+  metadata: Record<string, unknown>;
 }): Promise<void> {
   try {
     await createRun({
       userId: input.userId,
       chatId: input.chatId,
+      model: env.OPENAI_MODEL,
       input: input.message,
       output: input.output,
       status: input.status,
       latencyMs: input.latencyMs,
       error: input.error,
+      metadataJson: JSON.stringify(input.metadata),
       createdAt: new Date()
     });
   } catch (error) {
@@ -60,6 +63,11 @@ export function createTelegramBot(): Telegraf {
     const message = ctx.message.text;
     const userId = String(ctx.from?.id ?? "unknown");
     const chatId = String(ctx.chat.id);
+    const metadata = {
+      telegram_message_id: ctx.message.message_id,
+      username: ctx.from?.username ?? null,
+      is_command: message.startsWith("/")
+    };
 
     try {
       const output = await generateReply({
@@ -77,7 +85,8 @@ export function createTelegramBot(): Telegraf {
         output,
         status: "succeeded",
         latencyMs,
-        error: null
+        error: null,
+        metadata
       });
     } catch (error) {
       const latencyMs = Date.now() - startedAt;
@@ -89,10 +98,11 @@ export function createTelegramBot(): Telegraf {
         userId,
         chatId,
         message,
-        output: friendlyErrorMessage,
+        output: null,
         status: "failed",
         latencyMs,
-        error: errorMessage
+        error: errorMessage,
+        metadata
       });
     }
   });
