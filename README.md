@@ -1,6 +1,6 @@
 # Personal Agent
 
-一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用，以及长期记忆系统。
+一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用、长期记忆系统，以及简单文档 RAG。
 
 ## 环境变量
 
@@ -58,6 +58,8 @@ npm run db:migrate
 - `memories`：记录用户长期记忆
 - `memory_events`：记录记忆创建、搜索、删除等事件
 - `approval_requests`：记录高风险工具执行前的用户确认请求
+- `documents`：记录用户保存的文档
+- `document_chunks`：记录文档切分后的检索片段
 
 ## 启动开发服务
 
@@ -140,3 +142,62 @@ Agent：已删除
 ```
 
 Bot 会拒绝当前 pending approval，不会执行对应工具。
+
+## Week 5 Document RAG 示例
+
+保存一段项目说明文档：
+
+```text
+保存这段项目说明文档，标题是 Personal Agent 计划：
+这个项目分 8 周实现。Week 5 的目标是文档处理和简单 RAG，先使用关键词检索，不引入向量数据库。
+```
+
+根据刚才保存的文档提问：
+
+```text
+根据我保存的文档，Week 5 的目标是什么？
+```
+
+查询没有依据的问题：
+
+```text
+根据我保存的文档，Week 9 要做什么？
+```
+
+如果没有检索到相关 chunks，Agent 应明确说明没有在已保存文档中找到相关信息，不应基于常识编造文档来源。
+
+## 上传文档
+
+Telegram Bot 支持直接上传文本类文档并自动导入知识库。
+
+支持文件类型：
+
+- `.txt`
+- `.md`
+- `.markdown`
+- `.json`
+- `.csv`
+
+当前文件大小限制为 2MB。暂不支持 PDF、DOCX、XLSX、图片 OCR。
+
+上传后，Bot 会下载文件内容，按 UTF-8 当作纯文本解析，调用统一的文档入库逻辑，写入 `documents` 和 `document_chunks`。JSON / CSV 暂时也按纯文本导入，不做结构化解析。
+
+测试步骤：
+
+1. 执行 `npm run dev`。
+2. 在 Telegram 中向 Bot 上传一个 2MB 以下的 `.md` 或 `.txt` 文件。
+3. 看到类似回复：
+
+```text
+已导入文档：filename.md
+切分片段：3
+你现在可以问：根据我上传的文档，xxx 是什么？
+```
+
+4. 继续提问：
+
+```text
+根据我上传的文档，项目目标是什么？
+```
+
+如果重复上传相同内容，Bot 会回复已跳过重复导入。

@@ -36,6 +36,9 @@ export const approvalRequestStatuses = [
 export type ApprovalRequestStatus =
   (typeof approvalRequestStatuses)[number];
 
+export const documentSourceTypes = ["text", "markdown"] as const;
+export type DocumentSourceType = (typeof documentSourceTypes)[number];
+
 export const runs = sqliteTable("runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
@@ -110,6 +113,25 @@ export const approvalRequests = sqliteTable("approval_requests", {
   executedAt: integer("executed_at", { mode: "timestamp_ms" })
 });
 
+export const documents = sqliteTable("documents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull(),
+  sourceType: text("source_type", { enum: documentSourceTypes }).notNull(),
+  contentHash: text("content_hash").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+});
+
+export const documentChunks = sqliteTable("document_chunks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  documentId: integer("document_id").notNull(),
+  userId: text("user_id").notNull(),
+  chunkIndex: integer("chunk_index").notNull(),
+  content: text("content").notNull(),
+  metadataJson: text("metadata_json"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+});
+
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
 export type Todo = typeof todos.$inferSelect;
@@ -122,3 +144,7 @@ export type MemoryEvent = typeof memoryEvents.$inferSelect;
 export type NewMemoryEvent = typeof memoryEvents.$inferInsert;
 export type ApprovalRequest = typeof approvalRequests.$inferSelect;
 export type NewApprovalRequest = typeof approvalRequests.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type DocumentChunk = typeof documentChunks.$inferSelect;
+export type NewDocumentChunk = typeof documentChunks.$inferInsert;
