@@ -10,7 +10,9 @@ const envSchema = z.object({
   OPENAI_BASE_URL: z.string().url().optional(),
   OPENAI_MODEL: z.string().min(1).default("deepseek-v4-pro"),
   USER_TIMEZONE: z.string().min(1).default("Asia/Shanghai"),
-  DATABASE_URL: z.string().min(1).default("data/personal-agent.sqlite")
+  DATABASE_URL: z.string().min(1).default("data/personal-agent.sqlite"),
+  ADMIN_TOKEN: z.string().min(1, "ADMIN_TOKEN is required"),
+  ADMIN_PORT: z.coerce.number().int().min(1).max(65535).default(3000)
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

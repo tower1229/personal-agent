@@ -39,6 +39,20 @@ export type ApprovalRequestStatus =
 export const documentSourceTypes = ["text", "markdown"] as const;
 export type DocumentSourceType = (typeof documentSourceTypes)[number];
 
+export const workflowTypes = ["daily_brief"] as const;
+export type WorkflowType = (typeof workflowTypes)[number];
+
+export const workflowStatuses = ["running", "succeeded", "failed"] as const;
+export type WorkflowStatus = (typeof workflowStatuses)[number];
+
+export const workflowStepStatuses = [
+  "running",
+  "succeeded",
+  "failed",
+  "skipped"
+] as const;
+export type WorkflowStepStatus = (typeof workflowStepStatuses)[number];
+
 export const runs = sqliteTable("runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
@@ -132,6 +146,29 @@ export const documentChunks = sqliteTable("document_chunks", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
+export const workflows = sqliteTable("workflows", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull(),
+  type: text("type", { enum: workflowTypes }).notNull(),
+  status: text("status", { enum: workflowStatuses }).notNull(),
+  inputJson: text("input_json").notNull(),
+  outputJson: text("output_json"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
+});
+
+export const workflowSteps = sqliteTable("workflow_steps", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workflowId: integer("workflow_id").notNull(),
+  stepName: text("step_name").notNull(),
+  status: text("status", { enum: workflowStepStatuses }).notNull(),
+  inputJson: text("input_json"),
+  outputJson: text("output_json"),
+  error: text("error"),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" })
+});
+
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
 export type Todo = typeof todos.$inferSelect;
@@ -148,3 +185,7 @@ export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
 export type DocumentChunk = typeof documentChunks.$inferSelect;
 export type NewDocumentChunk = typeof documentChunks.$inferInsert;
+export type Workflow = typeof workflows.$inferSelect;
+export type NewWorkflow = typeof workflows.$inferInsert;
+export type WorkflowStep = typeof workflowSteps.$inferSelect;
+export type NewWorkflowStep = typeof workflowSteps.$inferInsert;

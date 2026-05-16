@@ -12,6 +12,10 @@ import { createRun } from "../db/runs.js";
 import { type RunStatus } from "../db/schema.js";
 import { ingestDocument } from "../services/documentIngestion.js";
 import { executeRegisteredTool } from "../tools/registry.js";
+import {
+  DailyBriefWorkflowError,
+  runDailyBriefWorkflow
+} from "../workflows/dailyBrief.js";
 
 const friendlyErrorMessage =
   "抱歉，我刚刚处理消息时遇到问题。请稍后再试。";
@@ -51,6 +55,16 @@ function getSourceType(fileName: string): "text" | "markdown" {
   }
 
   return "text";
+}
+
+function isDailyBriefTrigger(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+
+  return (
+    normalized === "生成今日简报" ||
+    normalized === "今日简报" ||
+    normalized === "daily brief"
+  );
 }
 
 async function downloadTelegramFile(input: {
@@ -350,6 +364,31 @@ export function createTelegramBot(): Telegraf {
         return;
       }
 
+      if (isDailyBriefTrigger(message)) {
+        const result = await runDailyBriefWorkflow({
+          userId,
+          chatId,
+          triggerMessage: message
+        });
+        const latencyMs = Date.now() - startedAt;
+
+        await replySafely(ctx, result.output);
+        await recordRunSafely({
+          userId,
+          chatId,
+          message,
+          output: result.output,
+          status: "succeeded",
+          latencyMs,
+          error: null,
+          metadata: {
+            ...metadata,
+            workflow_id: result.workflowId
+          }
+        });
+        return;
+      }
+
       const output = await generateReply({
         input: message,
         userId,
@@ -382,7 +421,13 @@ export function createTelegramBot(): Telegraf {
         status: "failed",
         latencyMs,
         error: errorMessage,
-        metadata
+        metadata:
+          error instanceof DailyBriefWorkflowError
+            ? {
+                ...metadata,
+                workflow_id: error.workflowId
+              }
+            : metadata
       });
     }
   });

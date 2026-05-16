@@ -1,6 +1,6 @@
 # Personal Agent
 
-一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用、长期记忆系统，以及简单文档 RAG。
+一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用、长期记忆系统、简单文档 RAG，以及代码编排的 workflow。
 
 ## 环境变量
 
@@ -20,6 +20,8 @@ cp .env.example .env
 | `OPENAI_MODEL` | 使用的模型名称，例如 `deepseek-v4-pro` 或 `deepseek-v4-flash` |
 | `USER_TIMEZONE` | 用户默认时区，用于解析“明天”“今晚”等相对时间，默认 `Asia/Shanghai` |
 | `DATABASE_URL` | SQLite 文件路径，默认 `data/personal-agent.sqlite` |
+| `ADMIN_TOKEN` | Admin API Bearer token，仅用于本地调试 |
+| `ADMIN_PORT` | Admin API 端口，默认 `3000` |
 | `NODE_ENV` | 运行环境，默认 `development` |
 
 不要把 `.env` 提交到 Git。
@@ -60,12 +62,16 @@ npm run db:migrate
 - `approval_requests`：记录高风险工具执行前的用户确认请求
 - `documents`：记录用户保存的文档
 - `document_chunks`：记录文档切分后的检索片段
+- `workflows`：记录 workflow 的输入、输出和整体状态
+- `workflow_steps`：记录 workflow 每一步的状态、输入、输出和错误
 
 ## 启动开发服务
 
 ```bash
 npm run dev
 ```
+
+启动后会同时运行 Telegram Bot polling 和 Hono Admin API。Admin API 默认只监听 `127.0.0.1`，不要直接暴露到公网。
 
 生产构建和启动：
 
@@ -201,3 +207,82 @@ Telegram Bot 支持直接上传文本类文档并自动导入知识库。
 ```
 
 如果重复上传相同内容，Bot 会回复已跳过重复导入。
+
+## Week 6 Workflow 示例
+
+当前实现了 `daily_brief` workflow。用户发送以下任一文本时，不走普通 Agent 对话，而是直接执行代码编排的 workflow：
+
+```text
+生成今日简报
+```
+
+```text
+今日简报
+```
+
+```text
+daily brief
+```
+
+workflow 会依次执行：
+
+- `list_open_todos`：查询当前用户 open 待办
+- `load_important_memories`：加载当前用户最多 10 条重要记忆
+- `search_recent_documents`：加载当前用户最近保存的文档
+- `generate_brief`：调用模型生成中文简报
+- `save_result`：把结果写入 `workflows.output_json`
+
+测试步骤：
+
+1. 先创建一些待办、记忆或上传文档。
+2. 在 Telegram 中发送：
+
+```text
+生成今日简报
+```
+
+3. Bot 会回复今日简报，内容包括今日待办、重要记忆或偏好、相关文档或项目背景、建议行动。
+4. 可以用 SQLite 查看执行记录：
+
+```sql
+select id, type, status, output_json from workflows order by id desc limit 5;
+select workflow_id, step_name, status, error from workflow_steps order by id desc limit 20;
+```
+
+## Week 7 Admin API
+
+Admin API 使用 Hono 和 `@hono/node-server`，base path 为 `/admin`。所有接口都需要：
+
+```http
+Authorization: Bearer <ADMIN_TOKEN>
+```
+
+健康检查：
+
+```bash
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/health
+```
+
+查看 runs：
+
+```bash
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" "http://localhost:3000/admin/runs?limit=20"
+```
+
+查看单个 run 详情：
+
+```bash
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/runs/1
+```
+
+其他接口：
+
+```text
+GET /admin/tool-calls
+GET /admin/workflows
+GET /admin/workflows/:id
+GET /admin/memories
+GET /admin/approvals
+```
+
+这些接口只用于开发调试，不会返回 `.env`、Telegram Bot token、OpenAI API key 或 Admin token。
