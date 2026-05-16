@@ -15,7 +15,7 @@
     "@hono/node-server": "^2.0.2",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "^0.43.1",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.18",
     "openai": "^4.100.0",
     "telegraf": "^4.16.3",
