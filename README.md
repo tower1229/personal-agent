@@ -57,6 +57,7 @@ npm run db:migrate
 - `tool_calls`：记录每次工具调用的参数、结果、状态、耗时和错误信息
 - `memories`：记录用户长期记忆
 - `memory_events`：记录记忆创建、搜索、删除等事件
+- `approval_requests`：记录高风险工具执行前的用户确认请求
 
 ## 启动开发服务
 
@@ -120,3 +121,22 @@ Agent 会让模型决定是否调用 todo 工具。工具参数会先经过 Zod 
 ```
 
 Agent 会在用户明确要求“记住”“以后请记得”“保存这个偏好”时调用 `save_memory`。当用户询问之前说过什么或偏好时，会调用 `search_memory`。每次回复前，Agent 还会自动加载当前用户最多 10 条重要记忆作为上下文，但不会把所有历史聊天塞进 prompt。
+
+## Week 4 Approval 使用示例
+
+高风险工具不会被 Agent 直接执行，会先创建 approval request。
+
+```text
+用户：删除关于 TypeScript 的那条记忆
+Agent：即将删除关于 TypeScript 的记忆。请回复“确认”或“取消”
+用户：确认
+Agent：已删除
+```
+
+如果用户回复：
+
+```text
+取消
+```
+
+Bot 会拒绝当前 pending approval，不会执行对应工具。

@@ -1,4 +1,5 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { createApprovalRequest } from "../db/approvals.js";
 import { createToolCall } from "../db/toolCalls.js";
 import { deleteMemoryTool } from "./memory/deleteMemory.js";
 import { saveMemoryTool } from "./memory/saveMemory.js";
@@ -6,7 +7,11 @@ import { searchMemoryTool } from "./memory/searchMemory.js";
 import { completeTodoTool } from "./todo/completeTodo.js";
 import { createTodoTool } from "./todo/createTodo.js";
 import { listTodosTool } from "./todo/listTodos.js";
-import { type AgentTool, type ToolExecutionContext } from "./types.js";
+import {
+  type AgentTool,
+  type ToolExecutionContext,
+  type ToolRiskLevel
+} from "./types.js";
 
 export const tools = [
   createTodoTool,
@@ -35,6 +40,21 @@ function parseToolArgs(argsJson: string): unknown {
   return JSON.parse(argsJson);
 }
 
+function requiresApproval(riskLevel: ToolRiskLevel): boolean {
+  return (
+    riskLevel === "write_high" ||
+    riskLevel === "external_send" ||
+    riskLevel === "destructive"
+  );
+}
+
+function buildApprovalSummary(input: {
+  tool: AgentTool;
+  argsJson: string;
+}): string {
+  return `即将执行高风险工具 ${input.tool.name}。参数：${input.argsJson}`;
+}
+
 export function getOpenAITools() {
   return tools.map((tool) => ({
     type: "function" as const,
@@ -52,6 +72,7 @@ export async function executeRegisteredTool(input: {
   toolName: string;
   argsJson: string;
   context: ToolExecutionContext;
+  allowHighRiskExecution?: boolean;
 }): Promise<unknown> {
   const startedAt = Date.now();
   const tool = toolByName.get(input.toolName);
@@ -64,6 +85,34 @@ export async function executeRegisteredTool(input: {
 
     parsedArgs = parseToolArgs(input.argsJson);
     const args = tool.inputSchema.parse(parsedArgs);
+    const normalizedArgsJson = JSON.stringify(args);
+
+    if (requiresApproval(tool.riskLevel) && !input.allowHighRiskExecution) {
+      const summary = buildApprovalSummary({
+        tool,
+        argsJson: normalizedArgsJson
+      });
+      const approval = await createApprovalRequest({
+        userId: input.context.userId,
+        chatId: input.context.chatId,
+        runId: input.context.runId ?? null,
+        toolName: input.toolName,
+        toolArgsJson: normalizedArgsJson,
+        summary
+      });
+
+      return {
+        approval: {
+          id: approval.id,
+          status: approval.status,
+          tool_name: approval.toolName,
+          summary: approval.summary
+        },
+        message:
+          "This action requires user approval. Ask the user to reply 确认 or 取消. Do not say it has been executed."
+      };
+    }
+
     const result = await tool.execute(args, input.context);
     const latencyMs = Date.now() - startedAt;
 
@@ -72,7 +121,7 @@ export async function executeRegisteredTool(input: {
       userId: input.context.userId,
       chatId: input.context.chatId,
       toolName: input.toolName,
-      argsJson: JSON.stringify(parsedArgs),
+      argsJson: normalizedArgsJson,
       resultJson: JSON.stringify(result),
       status: "succeeded",
       error: null,

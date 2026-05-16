@@ -29,6 +29,13 @@
       "when": 1778894884395,
       "tag": "0003_colossal_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1778897189868,
+      "tag": "0004_bizarre_groot",
+      "breakpoints": true
     }
   ]
 }

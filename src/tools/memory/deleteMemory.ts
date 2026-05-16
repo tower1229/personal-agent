@@ -17,7 +17,7 @@ export const deleteMemoryTool: AgentTool<typeof deleteMemoryInputSchema> = {
   description:
     "Delete one long-term memory by id for the current user. If the user says delete this memory without an id, search memories first.",
   inputSchema: deleteMemoryInputSchema,
-  riskLevel: "write_low",
+  riskLevel: "destructive",
   async execute(args, context) {
     const memory = await deleteMemory({
       userId: context.userId,

@@ -1,6 +1,11 @@
 import { type z } from "zod";
 
-export type ToolRiskLevel = "read" | "write_low";
+export type ToolRiskLevel =
+  | "read"
+  | "write_low"
+  | "write_high"
+  | "external_send"
+  | "destructive";
 
 export interface ToolExecutionContext {
   userId: string;

@@ -26,6 +26,16 @@ export const memoryEventTypes = [
 ] as const;
 export type MemoryEventType = (typeof memoryEventTypes)[number];
 
+export const approvalRequestStatuses = [
+  "pending",
+  "approved",
+  "rejected",
+  "executed",
+  "expired"
+] as const;
+export type ApprovalRequestStatus =
+  (typeof approvalRequestStatuses)[number];
+
 export const runs = sqliteTable("runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
@@ -86,6 +96,20 @@ export const memoryEvents = sqliteTable("memory_events", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
+export const approvalRequests = sqliteTable("approval_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull(),
+  chatId: text("chat_id").notNull(),
+  runId: integer("run_id"),
+  toolName: text("tool_name").notNull(),
+  toolArgsJson: text("tool_args_json").notNull(),
+  summary: text("summary").notNull(),
+  status: text("status", { enum: approvalRequestStatuses }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+  executedAt: integer("executed_at", { mode: "timestamp_ms" })
+});
+
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
 export type Todo = typeof todos.$inferSelect;
@@ -96,3 +120,5 @@ export type Memory = typeof memories.$inferSelect;
 export type NewMemory = typeof memories.$inferInsert;
 export type MemoryEvent = typeof memoryEvents.$inferSelect;
 export type NewMemoryEvent = typeof memoryEvents.$inferInsert;
+export type ApprovalRequest = typeof approvalRequests.$inferSelect;
+export type NewApprovalRequest = typeof approvalRequests.$inferInsert;

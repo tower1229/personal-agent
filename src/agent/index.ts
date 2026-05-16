@@ -70,6 +70,8 @@ export async function generateReply({
         "You are a concise personal Agent assistant.",
         "Reply in the user's language and keep answers practical.",
         "Do not use Markdown formatting in Telegram replies.",
+        "For actions that require approval, clearly tell the user what will be done and ask them to reply 确认 or 取消.",
+        "Do not claim that a high-risk action was executed unless the approval has already been executed.",
         "Use todo tools when the user asks to create, list, or complete todos.",
         "Use save_memory when the user clearly says to remember something, asks you to remember it later, or asks to save a preference.",
         "Use search_memory when the user asks what you remember, what they previously said, or asks about saved preferences or facts.",
