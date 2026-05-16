@@ -4,6 +4,7 @@ import {
   type ChatCompletionToolMessageParam
 } from "openai/resources/chat/completions";
 import { env } from "../config/env.js";
+import { listImportantMemories } from "../db/memories.js";
 import { executeRegisteredTool, getOpenAITools } from "../tools/registry.js";
 
 const openai = new OpenAI({
@@ -33,11 +34,35 @@ function getCurrentLocalTime(): string {
   }).format(new Date());
 }
 
+async function buildMemoryContext(userId: string): Promise<string> {
+  const memories = await listImportantMemories({
+    userId,
+    limit: 10
+  });
+
+  if (!memories.length) {
+    return "No saved long-term memories for this user.";
+  }
+
+  return memories
+    .map((memory) =>
+      [
+        `id=${memory.id}`,
+        `type=${memory.type}`,
+        `importance=${memory.importance}`,
+        `confidence=${memory.confidence}`,
+        `content=${memory.content}`
+      ].join(" | ")
+    )
+    .join("\n");
+}
+
 export async function generateReply({
   input,
   userId,
   chatId
 }: GenerateReplyInput): Promise<string> {
+  const memoryContext = await buildMemoryContext(userId);
   const messages: ChatCompletionMessageParam[] = [
     {
       role: "system",
@@ -46,12 +71,18 @@ export async function generateReply({
         "Reply in the user's language and keep answers practical.",
         "Do not use Markdown formatting in Telegram replies.",
         "Use todo tools when the user asks to create, list, or complete todos.",
+        "Use save_memory when the user clearly says to remember something, asks you to remember it later, or asks to save a preference.",
+        "Use search_memory when the user asks what you remember, what they previously said, or asks about saved preferences or facts.",
+        "Use delete_memory when the user asks to delete a saved memory. If the target is ambiguous, search memories first.",
+        "Do not automatically save sensitive information unless the user explicitly asks you to remember it.",
         "Never ask the user for user_id or chat_id; they are supplied by the system.",
         "When the user refers to an ordinal todo such as the first todo, list open todos first and then use the matching id.",
         `Current timezone: ${env.USER_TIMEZONE}.`,
         `Current local time: ${getCurrentLocalTime()}.`,
         `Current UTC time: ${new Date().toISOString()}.`,
-        `When parsing relative dates like tomorrow or tonight, use ${env.USER_TIMEZONE} unless the user says otherwise.`
+        `When parsing relative dates like tomorrow or tonight, use ${env.USER_TIMEZONE} unless the user says otherwise.`,
+        "Relevant long-term memories for this user:",
+        memoryContext
       ].join(" ")
     },
     {

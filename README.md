@@ -1,6 +1,6 @@
 # Personal Agent
 
-一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录，以及 todo 工具调用。
+一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用，以及长期记忆系统。
 
 ## 环境变量
 
@@ -55,6 +55,8 @@ npm run db:migrate
 - `runs`：记录每次用户消息的输入、输出、状态、耗时和错误信息
 - `todos`：记录用户待办
 - `tool_calls`：记录每次工具调用的参数、结果、状态、耗时和错误信息
+- `memories`：记录用户长期记忆
+- `memory_events`：记录记忆创建、搜索、删除等事件
 
 ## 启动开发服务
 
@@ -100,3 +102,21 @@ npm start
 Agent 会让模型决定是否调用 todo 工具。工具参数会先经过 Zod 校验，执行结果会写入 `tool_calls` 表，最终再由模型生成自然语言回复。
 
 当前 `tool_calls.run_id` 仍允许为空。后续做 observability 时，建议把 `runs` 生命周期改成先创建 `running` run，再把 run id 传入 Agent，最后更新 run 的最终状态。
+
+## Week 3 Memory 使用示例
+
+启动 Bot 后，可以在 Telegram 中发送：
+
+```text
+记住：我更喜欢用 TypeScript 学 Agent
+```
+
+```text
+我之前说过我喜欢用什么语言？
+```
+
+```text
+删除这条记忆
+```
+
+Agent 会在用户明确要求“记住”“以后请记得”“保存这个偏好”时调用 `save_memory`。当用户询问之前说过什么或偏好时，会调用 `search_memory`。每次回复前，Agent 还会自动加载当前用户最多 10 条重要记忆作为上下文，但不会把所有历史聊天塞进 prompt。

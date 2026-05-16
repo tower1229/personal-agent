@@ -1,5 +1,8 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { createToolCall } from "../db/toolCalls.js";
+import { deleteMemoryTool } from "./memory/deleteMemory.js";
+import { saveMemoryTool } from "./memory/saveMemory.js";
+import { searchMemoryTool } from "./memory/searchMemory.js";
 import { completeTodoTool } from "./todo/completeTodo.js";
 import { createTodoTool } from "./todo/createTodo.js";
 import { listTodosTool } from "./todo/listTodos.js";
@@ -8,7 +11,10 @@ import { type AgentTool, type ToolExecutionContext } from "./types.js";
 export const tools = [
   createTodoTool,
   listTodosTool,
-  completeTodoTool
+  completeTodoTool,
+  saveMemoryTool,
+  searchMemoryTool,
+  deleteMemoryTool
 ] satisfies AgentTool[];
 
 const toolByName = new Map(tools.map((tool) => [tool.name, tool]));

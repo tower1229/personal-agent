@@ -9,6 +9,23 @@ export type TodoStatus = (typeof todoStatuses)[number];
 export const toolCallStatuses = ["succeeded", "failed"] as const;
 export type ToolCallStatus = (typeof toolCallStatuses)[number];
 
+export const memoryTypes = [
+  "profile",
+  "preference",
+  "fact",
+  "project",
+  "note"
+] as const;
+export type MemoryType = (typeof memoryTypes)[number];
+
+export const memoryEventTypes = [
+  "created",
+  "updated",
+  "deleted",
+  "searched"
+] as const;
+export type MemoryEventType = (typeof memoryEventTypes)[number];
+
 export const runs = sqliteTable("runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
@@ -47,9 +64,35 @@ export const toolCalls = sqliteTable("tool_calls", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
+export const memories = sqliteTable("memories", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull(),
+  type: text("type", { enum: memoryTypes }).notNull(),
+  content: text("content").notNull(),
+  confidence: integer("confidence").notNull().default(80),
+  importance: integer("importance").notNull().default(50),
+  source: text("source"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
+});
+
+export const memoryEvents = sqliteTable("memory_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memoryId: integer("memory_id"),
+  userId: text("user_id").notNull(),
+  eventType: text("event_type", { enum: memoryEventTypes }).notNull(),
+  sourceRunId: integer("source_run_id"),
+  reason: text("reason"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+});
+
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
 export type Todo = typeof todos.$inferSelect;
 export type NewTodo = typeof todos.$inferInsert;
 export type ToolCall = typeof toolCalls.$inferSelect;
 export type NewToolCall = typeof toolCalls.$inferInsert;
+export type Memory = typeof memories.$inferSelect;
+export type NewMemory = typeof memories.$inferInsert;
+export type MemoryEvent = typeof memoryEvents.$inferSelect;
+export type NewMemoryEvent = typeof memoryEvents.$inferInsert;
