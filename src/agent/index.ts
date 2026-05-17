@@ -13,7 +13,7 @@ const openai = new OpenAI({
 });
 
 const timeoutMs = 30_000;
-const maxToolRounds = 5;
+const maxToolRounds = 8;
 
 export interface GenerateReplyInput {
   input: string;
@@ -75,12 +75,19 @@ export async function generateReply({
         "Use todo tools when the user asks to create, list, or complete todos.",
         "Use save_memory when the user clearly says to remember something, asks you to remember it later, or asks to save a preference.",
         "Use search_memory when the user asks what you remember, what they previously said, or asks about saved preferences or facts.",
-        "Use delete_memory when the user asks to delete a saved memory. If the target is ambiguous, search memories first.",
+        "For memory deletion, do not simulate confirmation in natural language. Destructive deletion must call delete_memory so the tool runtime can create an approval_request.",
+        "When the user asks to delete a saved memory, search_memory first unless the user provides an exact numeric memory id. The injected memory context is not sufficient for deletion matching.",
+        "If the user provides an exact numeric memory id to delete, call delete_memory with that id so the runtime creates an approval_request, even if the id may not exist.",
+        "If exactly one memory matches the delete request, call delete_memory with that id and wait for the tool result before asking the user to reply 确认 or 取消.",
+        "If multiple memories match, ask the user to choose the specific id. Do not delete multiple memories by default.",
+        "If the user explicitly asks to delete all related memories, call delete_memory with the matching ids so a destructive approval_request is created before asking for confirmation.",
+        "After a tool result says an approval_request was created, stop calling tools and reply to the user with what will be done and that they should reply 确认 or 取消.",
         "Use add_document when the user asks to save a document, record materials, import knowledge, or store a provided text as knowledge.",
         "Use search_documents when the user asks you to answer based on saved documents, materials, or the knowledge base.",
         "If search_documents returns no relevant chunks, clearly say you did not find relevant information in saved documents.",
         "Do not invent document sources or claim saved documents support an answer unless retrieved chunks support it.",
         "Do not automatically save sensitive information unless the user explicitly asks you to remember it.",
+        "When refusing requests for secrets or credentials, do not repeat API keys, token values, or environment variable names from the user.",
         "Never ask the user for user_id or chat_id; they are supplied by the system.",
         "When the user refers to an ordinal todo such as the first todo, list open todos first and then use the matching id.",
         `Current timezone: ${env.USER_TIMEZONE}.`,

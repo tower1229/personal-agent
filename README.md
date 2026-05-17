@@ -312,11 +312,11 @@ GET /admin/approvals
 
 ## Week 8 Eval
 
-Eval cases 位于 [eval/cases.json](eval/cases.json)，固定使用：
+Eval cases 位于 [eval/cases.json](eval/cases.json)。每次 eval run 会使用独立身份，避免污染真实用户和前一次 eval：
 
 ```text
-userId = eval-user
-chatId = eval-chat
+userId = eval-user-<evalRunId>
+chatId = eval-chat-<evalRunId>
 ```
 
 运行：
@@ -328,9 +328,11 @@ npm run eval
 Eval runner 会：
 
 - 读取 `eval/cases.json`
-- 调用现有 Agent 或 `daily_brief` workflow
+- 调用统一 `handleUserTextMessage` 服务，和 Telegram 文本消息走同一条 approval、workflow、Agent 路由
+- 在每条 case 前执行独立 setup，例如创建待办、保存记忆、导入文档或创建 pending approval
 - 捕获单条 case 错误，不中断整轮 eval
 - 检查 expected keywords、forbidden keywords、tool_calls 和 approval_requests
+- 输出 `keywordPassed`、`forbiddenPassed`、`expectedToolsPassed`、`approvalPassed`、`failureReasons`
 - 写入 `eval_runs` 和 `eval_results`
 - 输出总数、通过数、失败数和通过率
 
@@ -348,6 +350,21 @@ delete from document_chunks where user_id = 'eval-user';
 delete from tool_calls where user_id = 'eval-user';
 delete from approval_requests where user_id = 'eval-user';
 delete from workflows where user_id = 'eval-user';
+```
+
+如果使用新版本的独立 eval 用户，可以按前缀清理：
+
+```sql
+delete from eval_results;
+delete from eval_runs;
+delete from todos where user_id like 'eval-user-%';
+delete from memories where user_id like 'eval-user-%';
+delete from documents where user_id like 'eval-user-%';
+delete from document_chunks where user_id like 'eval-user-%';
+delete from tool_calls where user_id like 'eval-user-%';
+delete from approval_requests where user_id like 'eval-user-%';
+delete from workflows where user_id like 'eval-user-%';
+delete from runs where user_id like 'eval-user-%';
 ```
 
 ## Docker 启动

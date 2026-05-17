@@ -1,24 +1,10 @@
 import { type Context, Telegraf } from "telegraf";
-import { generateReply } from "../agent/index.js";
 import { env } from "../config/env.js";
-import {
-  approveRequest,
-  expireOldApprovals,
-  getLatestPendingApprovalForUser,
-  markApprovalExecuted,
-  rejectRequest
-} from "../db/approvals.js";
 import { createRun } from "../db/runs.js";
 import { type RunStatus } from "../db/schema.js";
 import { ingestDocument } from "../services/documentIngestion.js";
-import { executeRegisteredTool } from "../tools/registry.js";
-import {
-  DailyBriefWorkflowError,
-  runDailyBriefWorkflow
-} from "../workflows/dailyBrief.js";
+import { handleUserTextMessage } from "../services/messageHandler.js";
 
-const friendlyErrorMessage =
-  "抱歉，我刚刚处理消息时遇到问题。请稍后再试。";
 const documentImportErrorMessage = "抱歉，文档导入失败。请稍后再试。";
 const maxUploadFileSizeBytes = 2 * 1024 * 1024;
 const supportedDocumentExtensions = new Set([
@@ -55,16 +41,6 @@ function getSourceType(fileName: string): "text" | "markdown" {
   }
 
   return "text";
-}
-
-function isDailyBriefTrigger(message: string): boolean {
-  const normalized = message.trim().toLowerCase();
-
-  return (
-    normalized === "生成今日简报" ||
-    normalized === "今日简报" ||
-    normalized === "daily brief"
-  );
 }
 
 async function downloadTelegramFile(input: {
@@ -116,83 +92,6 @@ async function recordRunSafely(input: {
   } catch (error) {
     console.error("Failed to record run:", error);
   }
-}
-
-function formatApprovalExecutionReply(result: unknown): string {
-  if (
-    result &&
-    typeof result === "object" &&
-    "deletedMemory" in result &&
-    result.deletedMemory &&
-    typeof result.deletedMemory === "object" &&
-    "content" in result.deletedMemory
-  ) {
-    return `已删除记忆：${String(result.deletedMemory.content)}`;
-  }
-
-  return "已执行确认的操作。";
-}
-
-async function handleApprovalDecision(input: {
-  ctx: Context;
-  message: string;
-  userId: string;
-  chatId: string;
-}): Promise<boolean> {
-  const normalizedMessage = input.message.trim();
-
-  if (normalizedMessage !== "确认" && normalizedMessage !== "取消") {
-    return false;
-  }
-
-  await expireOldApprovals({
-    olderThanMs: 24 * 60 * 60 * 1000
-  });
-
-  const pendingApproval = await getLatestPendingApprovalForUser({
-    userId: input.userId,
-    chatId: input.chatId
-  });
-
-  if (!pendingApproval) {
-    return false;
-  }
-
-  if (normalizedMessage === "取消") {
-    await rejectRequest({
-      id: pendingApproval.id,
-      userId: input.userId,
-      chatId: input.chatId
-    });
-    await replySafely(input.ctx, "已取消这次操作。");
-    return true;
-  }
-
-  const approved = await approveRequest({
-    id: pendingApproval.id,
-    userId: input.userId,
-    chatId: input.chatId
-  });
-
-  const result = await executeRegisteredTool({
-    toolName: approved.toolName,
-    argsJson: approved.toolArgsJson,
-    context: {
-      userId: input.userId,
-      chatId: input.chatId,
-      runId: approved.runId
-    },
-    allowHighRiskExecution: true
-  });
-
-  await markApprovalExecuted({
-    id: approved.id,
-    userId: input.userId,
-    chatId: input.chatId
-  });
-
-  await replySafely(input.ctx, formatApprovalExecutionReply(result));
-  return true;
 }
 
 export function createTelegramBot(): Telegraf {
@@ -330,7 +229,6 @@ export function createTelegramBot(): Telegraf {
   });
 
   bot.on("text", async (ctx) => {
-    const startedAt = Date.now();
     const message = ctx.message.text;
     const userId = String(ctx.from?.id ?? "unknown");
     const chatId = String(ctx.chat.id);
@@ -340,96 +238,14 @@ export function createTelegramBot(): Telegraf {
       is_command: message.startsWith("/")
     };
 
-    try {
-      const handledApproval = await handleApprovalDecision({
-        ctx,
-        message,
-        userId,
-        chatId
-      });
+    const result = await handleUserTextMessage({
+      input: message,
+      userId,
+      chatId,
+      metadata
+    });
 
-      if (handledApproval) {
-        const latencyMs = Date.now() - startedAt;
-
-        await recordRunSafely({
-          userId,
-          chatId,
-          message,
-          output: "approval decision handled",
-          status: "succeeded",
-          latencyMs,
-          error: null,
-          metadata
-        });
-        return;
-      }
-
-      if (isDailyBriefTrigger(message)) {
-        const result = await runDailyBriefWorkflow({
-          userId,
-          chatId,
-          triggerMessage: message
-        });
-        const latencyMs = Date.now() - startedAt;
-
-        await replySafely(ctx, result.output);
-        await recordRunSafely({
-          userId,
-          chatId,
-          message,
-          output: result.output,
-          status: "succeeded",
-          latencyMs,
-          error: null,
-          metadata: {
-            ...metadata,
-            workflow_id: result.workflowId
-          }
-        });
-        return;
-      }
-
-      const output = await generateReply({
-        input: message,
-        userId,
-        chatId
-      });
-      const latencyMs = Date.now() - startedAt;
-
-      await replySafely(ctx, output);
-      await recordRunSafely({
-        userId,
-        chatId,
-        message,
-        output,
-        status: "succeeded",
-        latencyMs,
-        error: null,
-        metadata
-      });
-    } catch (error) {
-      const latencyMs = Date.now() - startedAt;
-      const errorMessage = toErrorMessage(error);
-
-      console.error("Agent run failed:", error);
-      await replySafely(ctx, friendlyErrorMessage);
-      await recordRunSafely({
-        userId,
-        chatId,
-        message,
-        output: null,
-        status: "failed",
-        latencyMs,
-        error: errorMessage,
-        metadata:
-          error instanceof DailyBriefWorkflowError
-            ? {
-                ...metadata,
-                workflow_id: error.workflowId
-              }
-            : metadata
-      });
-    }
+    await replySafely(ctx, result.output);
   });
 
   bot.catch((error) => {

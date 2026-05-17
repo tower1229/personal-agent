@@ -112,8 +112,11 @@ export async function executeRegisteredTool(input: {
           tool_name: approval.toolName,
           summary: approval.summary
         },
+        approval_request_created: true,
+        requires_user_reply: true,
+        next_user_reply_options: ["确认", "取消"],
         message:
-          "This action requires user approval. Ask the user to reply 确认 or 取消. Do not say it has been executed."
+          "The approval_request has been created. Stop calling tools now. Tell the user what will be done and ask them to reply 确认 or 取消. Do not say it has been executed."
       };
     }
 
