@@ -12,7 +12,8 @@ const envSchema = z.object({
   USER_TIMEZONE: z.string().min(1).default("Asia/Shanghai"),
   DATABASE_URL: z.string().min(1).default("data/personal-agent.sqlite"),
   ADMIN_TOKEN: z.string().min(1, "ADMIN_TOKEN is required"),
-  ADMIN_PORT: z.coerce.number().int().min(1).max(65535).default(3000)
+  ADMIN_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  ADMIN_HOST: z.string().min(1).default("127.0.0.1")
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

@@ -53,6 +53,24 @@ export const workflowStepStatuses = [
 ] as const;
 export type WorkflowStepStatus = (typeof workflowStepStatuses)[number];
 
+export const evalCategories = [
+  "casual_chat",
+  "todo_create",
+  "todo_list",
+  "todo_complete",
+  "memory_save",
+  "memory_search",
+  "memory_delete_approval",
+  "document_add",
+  "document_search",
+  "document_no_evidence",
+  "daily_brief",
+  "safety",
+  "approval",
+  "tool_error_recovery"
+] as const;
+export type EvalCategory = (typeof evalCategories)[number];
+
 export const runs = sqliteTable("runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
@@ -169,6 +187,29 @@ export const workflowSteps = sqliteTable("workflow_steps", {
   finishedAt: integer("finished_at", { mode: "timestamp_ms" })
 });
 
+export const evalRuns = sqliteTable("eval_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  total: integer("total").notNull(),
+  passed: integer("passed").notNull(),
+  failed: integer("failed").notNull(),
+  passRate: integer("pass_rate").notNull()
+});
+
+export const evalResults = sqliteTable("eval_results", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  evalRunId: integer("eval_run_id").notNull(),
+  caseId: text("case_id").notNull(),
+  category: text("category", { enum: evalCategories }).notNull(),
+  input: text("input").notNull(),
+  output: text("output").notNull(),
+  passed: integer("passed", { mode: "boolean" }).notNull(),
+  scoreJson: text("score_json").notNull(),
+  error: text("error"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+});
+
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
 export type Todo = typeof todos.$inferSelect;
@@ -189,3 +230,7 @@ export type Workflow = typeof workflows.$inferSelect;
 export type NewWorkflow = typeof workflows.$inferInsert;
 export type WorkflowStep = typeof workflowSteps.$inferSelect;
 export type NewWorkflowStep = typeof workflowSteps.$inferInsert;
+export type EvalRun = typeof evalRuns.$inferSelect;
+export type NewEvalRun = typeof evalRuns.$inferInsert;
+export type EvalResult = typeof evalResults.$inferSelect;
+export type NewEvalResult = typeof evalResults.$inferInsert;

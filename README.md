@@ -1,6 +1,19 @@
 # Personal Agent
 
-一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用、长期记忆系统、简单文档 RAG，以及代码编排的 workflow。
+一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用、长期记忆系统、简单文档 RAG、代码编排的 workflow、Hono Admin API、Eval 和 Docker 部署。
+
+## 项目功能总览
+
+- Telegram Bot：接收文本消息和文本类文档上传
+- Agent tool calling：todo、memory、document RAG tools
+- Human-in-the-loop approval：高风险工具先创建 approval request
+- Memory system：保存、搜索、删除长期记忆
+- Document RAG：保存文档、chunk 切分、关键词检索
+- Workflow：`daily_brief` 多步骤工作流
+- Observability：runs、tool_calls、workflows、workflow_steps、approval_requests
+- Admin API：Hono JSON API 查看调试数据
+- Eval：固定测试集评估 Agent 行为
+- Docker：标准化容器启动
 
 ## 环境变量
 
@@ -22,6 +35,7 @@ cp .env.example .env
 | `DATABASE_URL` | SQLite 文件路径，默认 `data/personal-agent.sqlite` |
 | `ADMIN_TOKEN` | Admin API Bearer token，仅用于本地调试 |
 | `ADMIN_PORT` | Admin API 端口，默认 `3000` |
+| `ADMIN_HOST` | Admin API 监听地址，本地默认 `127.0.0.1` |
 | `NODE_ENV` | 运行环境，默认 `development` |
 
 不要把 `.env` 提交到 Git。
@@ -64,6 +78,8 @@ npm run db:migrate
 - `document_chunks`：记录文档切分后的检索片段
 - `workflows`：记录 workflow 的输入、输出和整体状态
 - `workflow_steps`：记录 workflow 每一步的状态、输入、输出和错误
+- `eval_runs`：记录每轮 eval 总体结果
+- `eval_results`：记录每条 eval case 的输出和评分
 
 ## 启动开发服务
 
@@ -91,6 +107,13 @@ npm start
 7. 发送任意文本消息，Bot 会调用模型生成回复，并把本次运行写入 SQLite 的 `runs` 表。
 
 如果模型调用失败，Bot 会返回友好的错误提示，并在 `runs.status` 中记录为 `failed`，同时写入错误信息。
+
+## Telegram Bot 配置
+
+1. 在 Telegram 中打开 BotFather。
+2. 创建 Bot 并获取 `TELEGRAM_BOT_TOKEN`。
+3. 将 token 写入 `.env`，不要提交到 Git。
+4. 启动 `npm run dev` 后，Bot 使用 polling 模式接收消息。
 
 ## Week 2 Todo 工具示例
 
@@ -286,3 +309,94 @@ GET /admin/approvals
 ```
 
 这些接口只用于开发调试，不会返回 `.env`、Telegram Bot token、OpenAI API key 或 Admin token。
+
+## Week 8 Eval
+
+Eval cases 位于 [eval/cases.json](eval/cases.json)，固定使用：
+
+```text
+userId = eval-user
+chatId = eval-chat
+```
+
+运行：
+
+```bash
+npm run eval
+```
+
+Eval runner 会：
+
+- 读取 `eval/cases.json`
+- 调用现有 Agent 或 `daily_brief` workflow
+- 捕获单条 case 错误，不中断整轮 eval
+- 检查 expected keywords、forbidden keywords、tool_calls 和 approval_requests
+- 写入 `eval_runs` 和 `eval_results`
+- 输出总数、通过数、失败数和通过率
+
+当前 tool/approval 评分使用 eval user + 最近时间窗口关联。后续把 runs 生命周期改成先创建 run 后，可以用 runId 做精准关联。
+
+清理 eval 数据可以用 SQLite 执行：
+
+```sql
+delete from eval_results;
+delete from eval_runs;
+delete from todos where user_id = 'eval-user';
+delete from memories where user_id = 'eval-user';
+delete from documents where user_id = 'eval-user';
+delete from document_chunks where user_id = 'eval-user';
+delete from tool_calls where user_id = 'eval-user';
+delete from approval_requests where user_id = 'eval-user';
+delete from workflows where user_id = 'eval-user';
+```
+
+## Docker 启动
+
+构建镜像：
+
+```bash
+docker compose build
+```
+
+首次启动前执行迁移：
+
+```bash
+docker compose run --rm personal-agent npm run db:migrate
+```
+
+启动：
+
+```bash
+docker compose up -d
+```
+
+查看日志：
+
+```bash
+docker compose logs -f personal-agent
+```
+
+停止：
+
+```bash
+docker compose down
+```
+
+Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并把 Admin API 端口绑定到宿主机 `127.0.0.1:${ADMIN_PORT}`。
+
+## 当前限制
+
+- 文档检索是关键词匹配，暂未使用 embedding 或向量数据库。
+- `tool_calls.run_id` 仍可能为空，observability 关联依赖时间窗口或 metadata。
+- Eval 是行为 smoke test，不是严格单元测试；模型输出波动可能导致部分 case 失败。
+- Telegram 文档上传只支持 2MB 以下文本类文件。
+- Approval 只有 Telegram 文本“确认/取消”，暂无 Web UI。
+- SQLite 适合本地学习和小规模部署，不适合多实例并发写入。
+
+## 下一步计划
+
+- 将 runs 生命周期改为 `running -> succeeded/failed`，并把 runId 传入工具和 workflow。
+- 为 document RAG 增加 embedding 检索和 chunk rerank。
+- 为 Admin API 增加只读 HTML dashboard。
+- 为 destructive approval 增加过期时间、审计详情和更明确的操作摘要。
+- 增加自动化测试和 CI。

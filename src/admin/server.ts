@@ -19,10 +19,10 @@ export function startAdminServer() {
   const server = serve({
     fetch: app.fetch,
     port: env.ADMIN_PORT,
-    hostname: "127.0.0.1"
+    hostname: env.ADMIN_HOST
   });
 
-  console.log(`Admin API is running on http://127.0.0.1:${env.ADMIN_PORT}/admin`);
+  console.log(`Admin API is running on http://${env.ADMIN_HOST}:${env.ADMIN_PORT}/admin`);
 
   return server;
 }

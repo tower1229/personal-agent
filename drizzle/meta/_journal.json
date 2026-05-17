@@ -50,6 +50,13 @@
       "when": 1778902259890,
       "tag": "0006_natural_sebastian_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1778929768675,
+      "tag": "0007_flippant_may_parker",
+      "breakpoints": true
     }
   ]
 }
