@@ -128,12 +128,14 @@ async function executeCase(input: {
 
     return {
       output: result.output,
+      runId: result.runId,
       error: null,
       startedAt
     };
   } catch (error) {
     return {
       output: "",
+      runId: null,
       error: toErrorMessage(error),
       startedAt
     };

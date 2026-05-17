@@ -25,7 +25,9 @@ export async function getRuns(input: {
   }
 
   if (input.status) {
-    conditions.push(eq(runs.status, input.status as "succeeded" | "failed"));
+    conditions.push(
+      eq(runs.status, input.status as "running" | "succeeded" | "failed")
+    );
   }
 
   let query = db.select().from(runs).$dynamic();
@@ -50,20 +52,37 @@ export async function getRunDetail(id: number) {
     .from(toolCalls)
     .where(eq(toolCalls.runId, id))
     .orderBy(desc(toolCalls.createdAt));
+  const relatedApprovals = await db
+    .select()
+    .from(approvalRequests)
+    .where(eq(approvalRequests.runId, id))
+    .orderBy(desc(approvalRequests.createdAt));
+  const relatedWorkflows = await db
+    .select()
+    .from(workflows)
+    .where(eq(workflows.runId, id))
+    .orderBy(desc(workflows.createdAt));
 
   return {
     run,
-    toolCalls: relatedToolCalls
+    toolCalls: relatedToolCalls,
+    approvalRequests: relatedApprovals,
+    workflows: relatedWorkflows
   };
 }
 
 export async function getToolCalls(input: {
+  runId?: number;
   userId?: string;
   toolName?: string;
   status?: string;
   limit: number;
 }) {
   const conditions = [];
+
+  if (input.runId) {
+    conditions.push(eq(toolCalls.runId, input.runId));
+  }
 
   if (input.userId) {
     conditions.push(eq(toolCalls.userId, input.userId));
@@ -91,12 +110,17 @@ export async function getToolCalls(input: {
 }
 
 export async function getWorkflows(input: {
+  runId?: number;
   userId?: string;
   status?: string;
   type?: string;
   limit: number;
 }) {
   const conditions = [];
+
+  if (input.runId) {
+    conditions.push(eq(workflows.runId, input.runId));
+  }
 
   if (input.userId) {
     conditions.push(eq(workflows.userId, input.userId));
@@ -179,11 +203,16 @@ export async function getMemories(input: {
 }
 
 export async function getApprovalRequests(input: {
+  runId?: number;
   userId?: string;
   status?: string;
   limit: number;
 }) {
   const conditions = [];
+
+  if (input.runId) {
+    conditions.push(eq(approvalRequests.runId, input.runId));
+  }
 
   if (input.userId) {
     conditions.push(eq(approvalRequests.userId, input.userId));

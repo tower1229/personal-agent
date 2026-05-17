@@ -42,6 +42,7 @@ export interface EvalCase {
 
 export interface EvalExecutionResult {
   output: string;
+  runId: number | null;
   error: string | null;
   startedAt: Date;
 }

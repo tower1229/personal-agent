@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const runStatuses = ["succeeded", "failed"] as const;
+export const runStatuses = ["running", "succeeded", "failed"] as const;
 export type RunStatus = (typeof runStatuses)[number];
 
 export const todoStatuses = ["open", "completed"] as const;
@@ -167,6 +167,7 @@ export const documentChunks = sqliteTable("document_chunks", {
 export const workflows = sqliteTable("workflows", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
+  runId: integer("run_id"),
   type: text("type", { enum: workflowTypes }).notNull(),
   status: text("status", { enum: workflowStatuses }).notNull(),
   inputJson: text("input_json").notNull(),

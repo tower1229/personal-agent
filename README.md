@@ -133,7 +133,7 @@ npm start
 
 Agent 会让模型决定是否调用 todo 工具。工具参数会先经过 Zod 校验，执行结果会写入 `tool_calls` 表，最终再由模型生成自然语言回复。
 
-当前 `tool_calls.run_id` 仍允许为空。后续做 observability 时，建议把 `runs` 生命周期改成先创建 `running` run，再把 run id 传入 Agent，最后更新 run 的最终状态。
+用户消息会先创建 `running` run，再把系统生成的 `runId` 传入 Agent 和工具执行上下文，结束后更新为 `succeeded` 或 `failed`。因此正常用户消息触发的 `tool_calls.run_id` 可以精确关联到对应 run。
 
 ## Week 3 Memory 使用示例
 
@@ -301,12 +301,14 @@ curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/runs/1
 其他接口：
 
 ```text
-GET /admin/tool-calls
-GET /admin/workflows
+GET /admin/tool-calls?runId=1
+GET /admin/workflows?runId=1
 GET /admin/workflows/:id
 GET /admin/memories
-GET /admin/approvals
+GET /admin/approvals?runId=1
 ```
+
+`GET /admin/runs/:id` 会返回该 run、精确关联的 tool calls、approval requests、workflow 和 workflow steps。Workflow 既通过 `workflows.run_id` 关联，也会继续在 `runs.metadata_json.workflow_id` 中保留反查信息。
 
 这些接口只用于开发调试，不会返回 `.env`、Telegram Bot token、OpenAI API key 或 Admin token。
 
@@ -331,12 +333,12 @@ Eval runner 会：
 - 调用统一 `handleUserTextMessage` 服务，和 Telegram 文本消息走同一条 approval、workflow、Agent 路由
 - 在每条 case 前执行独立 setup，例如创建待办、保存记忆、导入文档或创建 pending approval
 - 捕获单条 case 错误，不中断整轮 eval
-- 检查 expected keywords、forbidden keywords、tool_calls 和 approval_requests
+- 检查 expected keywords、expectedAnyKeywords、forbidden keywords、tool_calls 和 approval_requests
 - 输出 `keywordPassed`、`forbiddenPassed`、`expectedToolsPassed`、`approvalPassed`、`failureReasons`
 - 写入 `eval_runs` 和 `eval_results`
 - 输出总数、通过数、失败数和通过率
 
-当前 tool/approval 评分使用 eval user + 最近时间窗口关联。后续把 runs 生命周期改成先创建 run 后，可以用 runId 做精准关联。
+Eval 主链路通过 `handleUserTextMessage` 创建 `running` run，并在 scoring 中优先使用 `runId` 精确查询 `tool_calls`、`approval_requests` 和 workflow。只有 case 在 run 创建前失败时，才会 fallback 到 eval user + 最近时间窗口；eval setup 产生的工具调用不属于用户消息 run，因此允许 `tool_calls.run_id` 为 `null`。
 
 清理 eval 数据可以用 SQLite 执行：
 
@@ -404,7 +406,7 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 ## 当前限制
 
 - 文档检索是关键词匹配，暂未使用 embedding 或向量数据库。
-- `tool_calls.run_id` 仍可能为空，observability 关联依赖时间窗口或 metadata。
+- 正常 Telegram 文本消息、文档上传、approval 确认和 daily brief 都使用 `running -> succeeded/failed` run 生命周期；eval setup 等非用户消息准备步骤仍可能产生 `run_id = null` 的工具日志。
 - Eval 是行为 smoke test，不是严格单元测试；模型输出波动可能导致部分 case 失败。
 - Telegram 文档上传只支持 2MB 以下文本类文件。
 - Approval 只有 Telegram 文本“确认/取消”，暂无 Web UI。
@@ -412,7 +414,6 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 
 ## 下一步计划
 
-- 将 runs 生命周期改为 `running -> succeeded/failed`，并把 runId 传入工具和 workflow。
 - 为 document RAG 增加 embedding 检索和 chunk rerank。
 - 为 Admin API 增加只读 HTML dashboard。
 - 为 destructive approval 增加过期时间、审计详情和更明确的操作摘要。

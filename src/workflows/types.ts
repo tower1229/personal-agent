@@ -7,4 +7,5 @@ export interface DailyBriefWorkflowInput {
   userId: string;
   chatId: string;
   triggerMessage: string;
+  runId: number;
 }

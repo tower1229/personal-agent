@@ -1,7 +1,10 @@
 import { type Context, Telegraf } from "telegraf";
 import { env } from "../config/env.js";
-import { createRun } from "../db/runs.js";
-import { type RunStatus } from "../db/schema.js";
+import {
+  createRunningRun,
+  markRunFailed,
+  markRunSucceeded
+} from "../db/runs.js";
 import { ingestDocument } from "../services/documentIngestion.js";
 import { handleUserTextMessage } from "../services/messageHandler.js";
 
@@ -66,34 +69,6 @@ async function replySafely(ctx: Context, text: string): Promise<void> {
   }
 }
 
-async function recordRunSafely(input: {
-  userId: string;
-  chatId: string;
-  message: string;
-  output: string | null;
-  status: RunStatus;
-  latencyMs: number;
-  error: string | null;
-  metadata: Record<string, unknown>;
-}): Promise<void> {
-  try {
-    await createRun({
-      userId: input.userId,
-      chatId: input.chatId,
-      model: env.OPENAI_MODEL,
-      input: input.message,
-      output: input.output,
-      status: input.status,
-      latencyMs: input.latencyMs,
-      error: input.error,
-      metadataJson: JSON.stringify(input.metadata),
-      createdAt: new Date()
-    });
-  } catch (error) {
-    console.error("Failed to record run:", error);
-  }
-}
-
 export function createTelegramBot(): Telegraf {
   const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
 
@@ -118,6 +93,14 @@ export function createTelegramBot(): Telegraf {
       fileSize,
       telegramFileId: fileId
     };
+    const run = await createRunningRun({
+      userId,
+      chatId,
+      model: env.OPENAI_MODEL,
+      input: `[document_upload] ${fileName}`,
+      metadata,
+      createdAt: new Date(startedAt)
+    });
 
     try {
       const extension = getFileExtension(fileName);
@@ -128,14 +111,11 @@ export function createTelegramBot(): Telegraf {
         const latencyMs = Date.now() - startedAt;
 
         await replySafely(ctx, output);
-        await recordRunSafely({
-          userId,
-          chatId,
-          message: `[document_upload] ${fileName}`,
-          output,
-          status: "failed",
-          latencyMs,
+        await markRunFailed({
+          id: run.id,
           error: "Unsupported document file type",
+          latencyMs,
+          output,
           metadata
         });
         return;
@@ -146,14 +126,11 @@ export function createTelegramBot(): Telegraf {
         const latencyMs = Date.now() - startedAt;
 
         await replySafely(ctx, output);
-        await recordRunSafely({
-          userId,
-          chatId,
-          message: `[document_upload] ${fileName}`,
-          output,
-          status: "failed",
-          latencyMs,
+        await markRunFailed({
+          id: run.id,
           error: "Document file too large",
+          latencyMs,
+          output,
           metadata
         });
         return;
@@ -169,14 +146,11 @@ export function createTelegramBot(): Telegraf {
         const latencyMs = Date.now() - startedAt;
 
         await replySafely(ctx, output);
-        await recordRunSafely({
-          userId,
-          chatId,
-          message: `[document_upload] ${fileName}`,
-          output,
-          status: "failed",
-          latencyMs,
+        await markRunFailed({
+          id: run.id,
           error: "Document content is empty",
+          latencyMs,
+          output,
           metadata
         });
         return;
@@ -199,14 +173,10 @@ export function createTelegramBot(): Telegraf {
       const latencyMs = Date.now() - startedAt;
 
       await replySafely(ctx, output);
-      await recordRunSafely({
-        userId,
-        chatId,
-        message: `[document_upload] ${fileName}`,
+      await markRunSucceeded({
+        id: run.id,
         output,
-        status: "succeeded",
         latencyMs,
-        error: null,
         metadata
       });
     } catch (error) {
@@ -215,14 +185,11 @@ export function createTelegramBot(): Telegraf {
 
       console.error("Document import failed:", error);
       await replySafely(ctx, documentImportErrorMessage);
-      await recordRunSafely({
-        userId,
-        chatId,
-        message: `[document_upload] ${fileName}`,
-        output: null,
-        status: "failed",
-        latencyMs,
+      await markRunFailed({
+        id: run.id,
         error: errorMessage,
+        latencyMs,
+        output: null,
         metadata
       });
     }

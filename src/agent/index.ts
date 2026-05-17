@@ -19,6 +19,7 @@ export interface GenerateReplyInput {
   input: string;
   userId: string;
   chatId: string;
+  runId: number;
 }
 
 function getCurrentLocalTime(): string {
@@ -60,7 +61,8 @@ async function buildMemoryContext(userId: string): Promise<string> {
 export async function generateReply({
   input,
   userId,
-  chatId
+  chatId,
+  runId
 }: GenerateReplyInput): Promise<string> {
   const memoryContext = await buildMemoryContext(userId);
   const messages: ChatCompletionMessageParam[] = [
@@ -75,6 +77,7 @@ export async function generateReply({
         "Use todo tools when the user asks to create, list, or complete todos.",
         "Use save_memory when the user clearly says to remember something, asks you to remember it later, or asks to save a preference.",
         "Use search_memory when the user asks what you remember, what they previously said, or asks about saved preferences or facts.",
+        "For memory questions, always call search_memory before answering, even if relevant memories are already present in the injected context.",
         "For memory deletion, do not simulate confirmation in natural language. Destructive deletion must call delete_memory so the tool runtime can create an approval_request.",
         "When the user asks to delete a saved memory, search_memory first unless the user provides an exact numeric memory id. The injected memory context is not sufficient for deletion matching.",
         "If the user provides an exact numeric memory id to delete, call delete_memory with that id so the runtime creates an approval_request, even if the id may not exist.",
@@ -145,10 +148,7 @@ export async function generateReply({
           context: {
             userId,
             chatId,
-            // TODO: Create runs before Agent execution and pass the real run id
-            // here, then update the run after completion. That will let
-            // tool_calls.run_id support observability without nullable joins.
-            runId: null
+            runId
           }
         });
 

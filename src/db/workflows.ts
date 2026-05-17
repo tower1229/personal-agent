@@ -11,6 +11,7 @@ import {
 
 export async function createWorkflow(input: {
   userId: string;
+  runId: number;
   type: WorkflowType;
   inputJson: string;
 }): Promise<Workflow> {
@@ -19,6 +20,7 @@ export async function createWorkflow(input: {
     .insert(workflows)
     .values({
       userId: input.userId,
+      runId: input.runId,
       type: input.type,
       status: "running",
       inputJson: input.inputJson,

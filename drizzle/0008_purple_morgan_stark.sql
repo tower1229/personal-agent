@@ -1,0 +1,1 @@
+ALTER TABLE `workflows` ADD `run_id` integer;

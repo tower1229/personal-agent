@@ -6,8 +6,11 @@ import {
   markApprovalExecuted,
   rejectRequest
 } from "../db/approvals.js";
-import { createRun } from "../db/runs.js";
-import { type RunStatus } from "../db/schema.js";
+import {
+  createRunningRun,
+  markRunFailed,
+  markRunSucceeded
+} from "../db/runs.js";
 import { executeRegisteredTool } from "../tools/registry.js";
 import { sanitizeTelegramText } from "../utils/sanitizeTelegramText.js";
 import {
@@ -28,6 +31,7 @@ export interface HandleUserTextMessageInput {
 
 export interface HandleUserTextMessageResult {
   output: string;
+  runId: number;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -48,44 +52,22 @@ function isDailyBriefTrigger(message: string): boolean {
   );
 }
 
-async function recordRunSafely(input: {
-  userId: string;
-  chatId: string;
-  message: string;
-  output: string | null;
-  status: RunStatus;
-  latencyMs: number;
-  error: string | null;
-  metadata: Record<string, unknown>;
-}): Promise<void> {
-  try {
-    await createRun({
-      userId: input.userId,
-      chatId: input.chatId,
-      model: env.OPENAI_MODEL,
-      input: input.message,
-      output: input.output,
-      status: input.status,
-      latencyMs: input.latencyMs,
-      error: input.error,
-      metadataJson: JSON.stringify(input.metadata),
-      createdAt: new Date()
-    });
-  } catch (error) {
-    console.error("Failed to record run:", error);
-  }
-}
-
 function formatApprovalExecutionReply(result: unknown): string {
   if (
     result &&
     typeof result === "object" &&
-    "deletedMemory" in result &&
-    result.deletedMemory &&
-    typeof result.deletedMemory === "object" &&
-    "content" in result.deletedMemory
+    "deletedMemories" in result &&
+    Array.isArray(result.deletedMemories) &&
+    result.deletedMemories.length > 0
   ) {
-    return `已删除记忆：${String(result.deletedMemory.content)}`;
+    return `已删除记忆：${result.deletedMemories
+      .map((memory) =>
+        memory && typeof memory === "object" && "content" in memory
+          ? String(memory.content)
+          : ""
+      )
+      .filter(Boolean)
+      .join("；")}`;
   }
 
   return "已执行确认的操作。";
@@ -95,6 +77,7 @@ async function handleApprovalDecision(input: {
   message: string;
   userId: string;
   chatId: string;
+  runId: number;
 }): Promise<string | null> {
   const normalizedMessage = input.message.trim();
 
@@ -136,7 +119,7 @@ async function handleApprovalDecision(input: {
     context: {
       userId: input.userId,
       chatId: input.chatId,
-      runId: approved.runId
+      runId: input.runId
     },
     allowHighRiskExecution: true
   });
@@ -154,31 +137,37 @@ export async function handleUserTextMessage(
   input: HandleUserTextMessageInput
 ): Promise<HandleUserTextMessageResult> {
   const startedAt = Date.now();
+  const initialMetadata = input.metadata;
+  const run = await createRunningRun({
+    userId: input.userId,
+    chatId: input.chatId,
+    model: env.OPENAI_MODEL,
+    input: input.input,
+    metadata: initialMetadata,
+    createdAt: new Date(startedAt)
+  });
 
   try {
     const approvalOutput = await handleApprovalDecision({
       message: input.input,
       userId: input.userId,
-      chatId: input.chatId
+      chatId: input.chatId,
+      runId: run.id
     });
 
     if (approvalOutput !== null) {
       const output = sanitizeTelegramText(approvalOutput);
       const latencyMs = Date.now() - startedAt;
 
-      await recordRunSafely({
-        userId: input.userId,
-        chatId: input.chatId,
-        message: input.input,
+      await markRunSucceeded({
+        id: run.id,
         output,
-        status: "succeeded",
-        latencyMs,
-        error: null,
-        metadata: input.metadata
+        latencyMs
       });
 
       return {
-        output
+        output,
+        runId: run.id
       };
     }
 
@@ -186,51 +175,47 @@ export async function handleUserTextMessage(
       const result = await runDailyBriefWorkflow({
         userId: input.userId,
         chatId: input.chatId,
-        triggerMessage: input.input
+        triggerMessage: input.input,
+        runId: run.id
       });
       const output = sanitizeTelegramText(result.output);
       const latencyMs = Date.now() - startedAt;
+      const metadata = {
+        ...initialMetadata,
+        workflow_id: result.workflowId
+      };
 
-      await recordRunSafely({
-        userId: input.userId,
-        chatId: input.chatId,
-        message: input.input,
+      await markRunSucceeded({
+        id: run.id,
         output,
-        status: "succeeded",
         latencyMs,
-        error: null,
-        metadata: {
-          ...input.metadata,
-          workflow_id: result.workflowId
-        }
+        metadata
       });
 
       return {
-        output
+        output,
+        runId: run.id
       };
     }
 
     const generatedOutput = await generateReply({
       input: input.input,
       userId: input.userId,
-      chatId: input.chatId
+      chatId: input.chatId,
+      runId: run.id
     });
     const output = sanitizeTelegramText(generatedOutput);
     const latencyMs = Date.now() - startedAt;
 
-    await recordRunSafely({
-      userId: input.userId,
-      chatId: input.chatId,
-      message: input.input,
+    await markRunSucceeded({
+      id: run.id,
       output,
-      status: "succeeded",
-      latencyMs,
-      error: null,
-      metadata: input.metadata
+      latencyMs
     });
 
     return {
-      output
+      output,
+      runId: run.id
     };
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
@@ -238,25 +223,23 @@ export async function handleUserTextMessage(
     const output = sanitizeTelegramText(friendlyErrorMessage);
 
     console.error("Message handling failed:", error);
-    await recordRunSafely({
-      userId: input.userId,
-      chatId: input.chatId,
-      message: input.input,
-      output: null,
-      status: "failed",
-      latencyMs,
+    await markRunFailed({
+      id: run.id,
       error: errorMessage,
+      latencyMs,
+      output: null,
       metadata:
         error instanceof DailyBriefWorkflowError
           ? {
-              ...input.metadata,
+              ...initialMetadata,
               workflow_id: error.workflowId
             }
-          : input.metadata
+          : initialMetadata
     });
 
     return {
-      output
+      output,
+      runId: run.id
     };
   }
 }

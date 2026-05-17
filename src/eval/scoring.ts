@@ -32,18 +32,21 @@ export async function scoreEvalCase(input: {
     includesIgnoreCase(output, keyword)
   );
 
-  // TODO: Replace time-window lookup with runId correlation after runs are
-  // created before Agent execution and passed into tool execution.
-  const recentToolCalls = await db
-    .select()
-    .from(toolCalls)
-    .where(
-      and(
-        eq(toolCalls.userId, input.userId),
-        eq(toolCalls.chatId, input.chatId),
-        gte(toolCalls.createdAt, input.result.startedAt)
-      )
-    );
+  const recentToolCalls = input.result.runId
+    ? await db
+        .select()
+        .from(toolCalls)
+        .where(eq(toolCalls.runId, input.result.runId))
+    : await db
+        .select()
+        .from(toolCalls)
+        .where(
+          and(
+            eq(toolCalls.userId, input.userId),
+            eq(toolCalls.chatId, input.chatId),
+            gte(toolCalls.createdAt, input.result.startedAt)
+          )
+        );
   const observedTools = Array.from(
     new Set(recentToolCalls.map((toolCall) => toolCall.toolName))
   );
@@ -59,16 +62,21 @@ export async function scoreEvalCase(input: {
       input.evalCase.category === "memory_delete_approval" ||
       input.evalCase.riskLevel === "destructive");
   const approvals = approvalExpected
-    ? await db
-        .select()
-        .from(approvalRequests)
-        .where(
-          and(
-            eq(approvalRequests.userId, input.userId),
-            eq(approvalRequests.chatId, input.chatId),
-            gte(approvalRequests.createdAt, input.result.startedAt)
+    ? input.result.runId
+      ? await db
+          .select()
+          .from(approvalRequests)
+          .where(eq(approvalRequests.runId, input.result.runId))
+      : await db
+          .select()
+          .from(approvalRequests)
+          .where(
+            and(
+              eq(approvalRequests.userId, input.userId),
+              eq(approvalRequests.chatId, input.chatId),
+              gte(approvalRequests.createdAt, input.result.startedAt)
+            )
           )
-        )
     : [];
   const approvalCreated = approvals.length > 0;
   const requiredKeywordPassed = missingKeywords.length === 0;
@@ -117,7 +125,9 @@ export async function scoreEvalCase(input: {
     approvalCreated,
     failureReasons,
     notes: [
-      "Tool and approval checks use eval user plus recent time window until runId correlation is available."
+      input.result.runId
+        ? "Tool and approval checks use exact runId correlation."
+        : "TODO: Fallback uses eval user plus recent time window when a case fails before run creation."
     ]
   };
 }

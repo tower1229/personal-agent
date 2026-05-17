@@ -117,6 +117,7 @@ export async function runDailyBriefWorkflow(
 ): Promise<WorkflowRunResult> {
   const workflow = await createWorkflow({
     userId: input.userId,
+    runId: input.runId,
     type: "daily_brief",
     inputJson: toJson({
       chatId: input.chatId,

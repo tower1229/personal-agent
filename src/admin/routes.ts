@@ -42,6 +42,14 @@ function parseId(value: string): number | null {
   return parsed;
 }
 
+function parseOptionalId(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return parseId(value) ?? undefined;
+}
+
 function getWorkflowIdFromRun(run: ReturnType<typeof serializeRun>): number | null {
   const metadata = run.metadataJson;
 
@@ -86,15 +94,17 @@ adminRoutes.get("/runs/:id", async (c) => {
   }
 
   const run = serializeRun(detail.run);
-  const workflowId = getWorkflowIdFromRun(run);
-  const workflowDetail = workflowId
-    ? await getWorkflowDetail(workflowId)
-    : null;
+  const workflowByRun = detail.workflows[0] ?? null;
+  const workflowId = workflowByRun ? workflowByRun.id : getWorkflowIdFromRun(run);
+  const workflowDetail = workflowId ? await getWorkflowDetail(workflowId) : null;
 
   return c.json({
     run,
     toolCalls: detail.toolCalls.map((toolCall) =>
       serializeToolCall(toolCall)
+    ),
+    approvalRequests: detail.approvalRequests.map((approval) =>
+      serializeApprovalRequest(approval)
     ),
     workflow: workflowDetail
       ? serializeWorkflow(workflowDetail.workflow)
@@ -107,6 +117,7 @@ adminRoutes.get("/runs/:id", async (c) => {
 
 adminRoutes.get("/tool-calls", async (c) => {
   const toolCalls = await getToolCalls({
+    runId: parseOptionalId(c.req.query("runId")),
     userId: c.req.query("userId"),
     toolName: c.req.query("toolName"),
     status: c.req.query("status"),
@@ -120,6 +131,7 @@ adminRoutes.get("/tool-calls", async (c) => {
 
 adminRoutes.get("/workflows", async (c) => {
   const workflows = await getWorkflows({
+    runId: parseOptionalId(c.req.query("runId")),
     userId: c.req.query("userId"),
     status: c.req.query("status"),
     type: c.req.query("type"),
@@ -164,6 +176,7 @@ adminRoutes.get("/memories", async (c) => {
 
 adminRoutes.get("/approvals", async (c) => {
   const approvals = await getApprovalRequests({
+    runId: parseOptionalId(c.req.query("runId")),
     userId: c.req.query("userId"),
     status: c.req.query("status"),
     limit: parseLimit(c.req.query("limit"), 50)
