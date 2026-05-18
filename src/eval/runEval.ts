@@ -84,6 +84,20 @@ async function runSetupAction(input: {
         context
       });
       return;
+    case "add_document_for_other_user":
+      await executeRegisteredTool({
+        toolName: "add_document",
+        argsJson: JSON.stringify({
+          title: input.action.title,
+          content: input.action.content,
+          sourceType: input.action.sourceType ?? "text"
+        }),
+        context: {
+          ...context,
+          userId: `${input.userId}-other`
+        }
+      });
+      return;
     case "create_pending_approval":
       await executeRegisteredTool({
         toolName: input.action.toolName,

@@ -164,6 +164,17 @@ export const documentChunks = sqliteTable("document_chunks", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
+export const documentChunkEmbeddings = sqliteTable("document_chunk_embeddings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  documentChunkId: integer("document_chunk_id").notNull(),
+  userId: text("user_id").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  embeddingJson: text("embedding_json").notNull(),
+  dimensions: integer("dimensions").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+});
+
 export const workflows = sqliteTable("workflows", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull(),
@@ -227,6 +238,8 @@ export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
 export type DocumentChunk = typeof documentChunks.$inferSelect;
 export type NewDocumentChunk = typeof documentChunks.$inferInsert;
+export type DocumentChunkEmbedding = typeof documentChunkEmbeddings.$inferSelect;
+export type NewDocumentChunkEmbedding = typeof documentChunkEmbeddings.$inferInsert;
 export type Workflow = typeof workflows.$inferSelect;
 export type NewWorkflow = typeof workflows.$inferInsert;
 export type WorkflowStep = typeof workflowSteps.$inferSelect;

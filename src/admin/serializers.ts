@@ -47,3 +47,14 @@ export function serializeApprovalRequest(approval: Record<string, unknown>) {
     toolArgsJson: parseJson(approval.toolArgsJson as string | null)
   };
 }
+
+export function serializeDocument(document: Record<string, unknown>) {
+  return document;
+}
+
+export function serializeDocumentChunk(chunk: Record<string, unknown>) {
+  return {
+    ...chunk,
+    metadataJson: parseJson(chunk.metadataJson as string | null)
+  };
+}

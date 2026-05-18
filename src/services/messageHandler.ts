@@ -95,7 +95,7 @@ async function handleApprovalDecision(input: {
   });
 
   if (!pendingApproval) {
-    return null;
+    return "当前没有待确认的操作。";
   }
 
   if (normalizedMessage === "取消") {

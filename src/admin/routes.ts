@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import {
   getApprovalRequests,
+  getDocumentChunks,
+  getDocuments,
   getMemories,
   getRunDetail,
   getRuns,
@@ -10,6 +12,8 @@ import {
 } from "../db/admin.js";
 import {
   serializeApprovalRequest,
+  serializeDocument,
+  serializeDocumentChunk,
   serializeRun,
   serializeToolCall,
   serializeWorkflow,
@@ -159,6 +163,34 @@ adminRoutes.get("/workflows/:id", async (c) => {
   return c.json({
     workflow: serializeWorkflow(detail.workflow),
     steps: detail.steps.map((step) => serializeWorkflowStep(step))
+  });
+});
+
+adminRoutes.get("/documents", async (c) => {
+  const documents = await getDocuments({
+    userId: c.req.query("userId"),
+    limit: parseLimit(c.req.query("limit"), 50)
+  });
+
+  return c.json({
+    documents: documents.map((document) => serializeDocument(document))
+  });
+});
+
+adminRoutes.get("/documents/:id/chunks", async (c) => {
+  const id = parseId(c.req.param("id"));
+
+  if (!id) {
+    return c.json({ error: "Invalid document id" }, 400);
+  }
+
+  const chunks = await getDocumentChunks({
+    documentId: id,
+    userId: c.req.query("userId")
+  });
+
+  return c.json({
+    chunks: chunks.map((chunk) => serializeDocumentChunk(chunk))
   });
 });
 

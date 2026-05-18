@@ -22,6 +22,12 @@ export type EvalSetupAction =
       sourceType?: "text" | "markdown";
     }
   | {
+      type: "add_document_for_other_user";
+      title: string;
+      content: string;
+      sourceType?: "text" | "markdown";
+    }
+  | {
       type: "create_pending_approval";
       toolName: string;
       args: Record<string, unknown>;
@@ -52,6 +58,7 @@ export interface EvalScore {
   forbiddenPassed: boolean;
   expectedToolsPassed: boolean;
   approvalPassed: boolean;
+  retrievalModePassed: boolean;
   passed: boolean;
   matchedKeywords: string[];
   missingKeywords: string[];
@@ -63,6 +70,7 @@ export interface EvalScore {
   missingTools: string[];
   approvalExpected: boolean;
   approvalCreated: boolean;
+  observedRetrievalModes: string[];
   failureReasons: string[];
   notes: string[];
 }

@@ -1,6 +1,6 @@
 # Personal Agent
 
-一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用、长期记忆系统、简单文档 RAG、代码编排的 workflow、Hono Admin API、Eval 和 Docker 部署。
+一个用于学习的小型个人 Agent 运行系统。当前已实现 Telegram Bot、OpenAI-compatible 模型调用、SQLite + Drizzle 运行记录、todo 工具调用、长期记忆系统、hybrid 文档 RAG、代码编排的 workflow、Hono Admin API、Eval 和 Docker 部署。
 
 ## 项目功能总览
 
@@ -8,7 +8,7 @@
 - Agent tool calling：todo、memory、document RAG tools
 - Human-in-the-loop approval：高风险工具先创建 approval request
 - Memory system：保存、搜索、删除长期记忆
-- Document RAG：保存文档、chunk 切分、关键词检索
+- Document RAG：保存文档、chunk 切分、keyword + embedding 混合检索
 - Workflow：`daily_brief` 多步骤工作流
 - Observability：runs、tool_calls、workflows、workflow_steps、approval_requests
 - Admin API：Hono JSON API 查看调试数据
@@ -31,6 +31,8 @@ cp .env.example .env
 | `OPENAI_API_KEY` | OpenAI-compatible provider API Key，例如 DeepSeek API Key |
 | `OPENAI_BASE_URL` | OpenAI-compatible API 地址，DeepSeek 使用 `https://api.deepseek.com` |
 | `OPENAI_MODEL` | 使用的模型名称，例如 `deepseek-v4-pro` 或 `deepseek-v4-flash` |
+| `EMBEDDING_PROVIDER` | Embedding provider 标识，默认 `openai-compatible` |
+| `EMBEDDING_MODEL` | Embedding 模型名称，默认 `text-embedding-3-small` |
 | `USER_TIMEZONE` | 用户默认时区，用于解析“明天”“今晚”等相对时间，默认 `Asia/Shanghai` |
 | `DATABASE_URL` | SQLite 文件路径，默认 `data/personal-agent.sqlite` |
 | `ADMIN_TOKEN` | Admin API Bearer token，仅用于本地调试 |
@@ -76,6 +78,7 @@ npm run db:migrate
 - `approval_requests`：记录高风险工具执行前的用户确认请求
 - `documents`：记录用户保存的文档
 - `document_chunks`：记录文档切分后的检索片段
+- `document_chunk_embeddings`：记录 chunk embedding JSON、模型、provider 和维度
 - `workflows`：记录 workflow 的输入、输出和整体状态
 - `workflow_steps`：记录 workflow 每一步的状态、输入、输出和错误
 - `eval_runs`：记录每轮 eval 总体结果
@@ -209,7 +212,7 @@ Telegram Bot 支持直接上传文本类文档并自动导入知识库。
 
 当前文件大小限制为 2MB。暂不支持 PDF、DOCX、XLSX、图片 OCR。
 
-上传后，Bot 会下载文件内容，按 UTF-8 当作纯文本解析，调用统一的文档入库逻辑，写入 `documents` 和 `document_chunks`。JSON / CSV 暂时也按纯文本导入，不做结构化解析。
+上传后，Bot 会下载文件内容，按 UTF-8 当作纯文本解析，调用统一的文档入库逻辑，写入 `documents`、`document_chunks`，并尽力为每个 chunk 写入 `document_chunk_embeddings`。JSON / CSV 暂时也按纯文本导入，不做结构化解析。
 
 测试步骤：
 
@@ -230,6 +233,25 @@ Telegram Bot 支持直接上传文本类文档并自动导入知识库。
 ```
 
 如果重复上传相同内容，Bot 会回复已跳过重复导入。
+
+## v0.3 Hybrid Document RAG
+
+文档检索已从纯关键词升级为 keyword + embedding 混合检索：
+
+- 入库时每个 chunk 会尝试生成 embedding，并以 JSON 存到 SQLite。
+- 查询时先生成 query embedding，再计算 cosine similarity。
+- 最终分数：`keywordScore * 0.4 + vectorScore * 0.6`。
+- 如果 embedding 生成失败、查询 embedding 失败，或当前 chunk 没有 embedding，会自动 fallback 到关键词检索。
+- `search_documents` tool 的结果会包含 `retrievalMode`、`score`、`keywordScore`、`vectorScore`、`sourceTitle` 和 `chunkIndex`。
+
+Embedding 复用现有 OpenAI-compatible SDK 配置：
+
+```env
+EMBEDDING_PROVIDER=openai-compatible
+EMBEDDING_MODEL=text-embedding-3-small
+```
+
+如果你的 `OPENAI_BASE_URL` 对应服务不支持 embeddings，文档仍会正常导入，chunk metadata 会标记 `embedding_failed`，检索会使用 `retrievalMode = keyword_fallback`。
 
 ## Week 6 Workflow 示例
 
@@ -304,6 +326,8 @@ curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/runs/1
 GET /admin/tool-calls?runId=1
 GET /admin/workflows?runId=1
 GET /admin/workflows/:id
+GET /admin/documents
+GET /admin/documents/:id/chunks
 GET /admin/memories
 GET /admin/approvals?runId=1
 ```
@@ -333,8 +357,8 @@ Eval runner 会：
 - 调用统一 `handleUserTextMessage` 服务，和 Telegram 文本消息走同一条 approval、workflow、Agent 路由
 - 在每条 case 前执行独立 setup，例如创建待办、保存记忆、导入文档或创建 pending approval
 - 捕获单条 case 错误，不中断整轮 eval
-- 检查 expected keywords、expectedAnyKeywords、forbidden keywords、tool_calls 和 approval_requests
-- 输出 `keywordPassed`、`forbiddenPassed`、`expectedToolsPassed`、`approvalPassed`、`failureReasons`
+- 检查 expected keywords、expectedAnyKeywords、forbidden keywords、tool_calls、approval_requests 和 RAG retrievalMode
+- 输出 `keywordPassed`、`forbiddenPassed`、`expectedToolsPassed`、`approvalPassed`、`retrievalModePassed`、`failureReasons`
 - 写入 `eval_runs` 和 `eval_results`
 - 输出总数、通过数、失败数和通过率
 
@@ -405,7 +429,7 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 
 ## 当前限制
 
-- 文档检索是关键词匹配，暂未使用 embedding 或向量数据库。
+- 文档检索已支持 SQLite JSON embedding + TypeScript cosine similarity，但暂未使用专用向量数据库或 rerank 模型。
 - 正常 Telegram 文本消息、文档上传、approval 确认和 daily brief 都使用 `running -> succeeded/failed` run 生命周期；eval setup 等非用户消息准备步骤仍可能产生 `run_id = null` 的工具日志。
 - Eval 是行为 smoke test，不是严格单元测试；模型输出波动可能导致部分 case 失败。
 - Telegram 文档上传只支持 2MB 以下文本类文件。
@@ -414,7 +438,7 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 
 ## 下一步计划
 
-- 为 document RAG 增加 embedding 检索和 chunk rerank。
+- 为 document RAG 增加 chunk rerank 和更稳定的中文分词。
 - 为 Admin API 增加只读 HTML dashboard。
 - 为 destructive approval 增加过期时间、审计详情和更明确的操作摘要。
 - 增加自动化测试和 CI。

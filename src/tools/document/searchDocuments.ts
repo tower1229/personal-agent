@@ -18,7 +18,7 @@ export const searchDocumentsTool: AgentTool<
 > = {
   name: "search_documents",
   description:
-    "Search saved document chunks for the current user using keyword matching. Use this before answering questions that must be based on saved documents.",
+    "Search saved document chunks for the current user using hybrid keyword and embedding retrieval. Use this before answering questions that must be based on saved documents.",
   inputSchema: searchDocumentsInputSchema,
   riskLevel: "read",
   async execute(args, context) {
@@ -29,6 +29,7 @@ export const searchDocumentsTool: AgentTool<
     });
 
     return {
+      retrievalMode: chunks[0]?.retrievalMode ?? "keyword_fallback",
       chunks
     };
   }

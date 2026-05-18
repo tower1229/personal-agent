@@ -9,6 +9,8 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
   OPENAI_BASE_URL: z.string().url().optional(),
   OPENAI_MODEL: z.string().min(1).default("deepseek-v4-pro"),
+  EMBEDDING_PROVIDER: z.string().min(1).default("openai-compatible"),
+  EMBEDDING_MODEL: z.string().min(1).default("text-embedding-3-small"),
   USER_TIMEZONE: z.string().min(1).default("Asia/Shanghai"),
   DATABASE_URL: z.string().min(1).default("data/personal-agent.sqlite"),
   ADMIN_TOKEN: z.string().min(1, "ADMIN_TOKEN is required"),

@@ -2,6 +2,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "./client.js";
 import {
   approvalRequests,
+  documentChunks,
+  documents,
   memories,
   runs,
   toolCalls,
@@ -200,6 +202,44 @@ export async function getMemories(input: {
   return query
     .orderBy(desc(memories.updatedAt))
     .limit(clampLimit(input.limit, 100));
+}
+
+export async function getDocuments(input: {
+  userId?: string;
+  limit: number;
+}) {
+  const conditions = [];
+
+  if (input.userId) {
+    conditions.push(eq(documents.userId, input.userId));
+  }
+
+  let query = db.select().from(documents).$dynamic();
+
+  if (conditions.length) {
+    query = query.where(and(...conditions));
+  }
+
+  return query
+    .orderBy(desc(documents.createdAt))
+    .limit(clampLimit(input.limit, 100));
+}
+
+export async function getDocumentChunks(input: {
+  documentId: number;
+  userId?: string;
+}) {
+  const conditions = [eq(documentChunks.documentId, input.documentId)];
+
+  if (input.userId) {
+    conditions.push(eq(documentChunks.userId, input.userId));
+  }
+
+  return db
+    .select()
+    .from(documentChunks)
+    .where(and(...conditions))
+    .orderBy(documentChunks.chunkIndex);
 }
 
 export async function getApprovalRequests(input: {

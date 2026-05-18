@@ -11,6 +11,43 @@ function includesIgnoreCase(output: string, keyword: string): boolean {
   return output.toLowerCase().includes(keyword.toLowerCase());
 }
 
+function parseJson(value: string | null): unknown {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function extractRetrievalModes(result: unknown): string[] {
+  const modes = new Set<string>();
+
+  if (result && typeof result === "object") {
+    if ("retrievalMode" in result && typeof result.retrievalMode === "string") {
+      modes.add(result.retrievalMode);
+    }
+
+    if ("chunks" in result && Array.isArray(result.chunks)) {
+      for (const chunk of result.chunks) {
+        if (
+          chunk &&
+          typeof chunk === "object" &&
+          "retrievalMode" in chunk &&
+          typeof chunk.retrievalMode === "string"
+        ) {
+          modes.add(chunk.retrievalMode);
+        }
+      }
+    }
+  }
+
+  return Array.from(modes);
+}
+
 export async function scoreEvalCase(input: {
   evalCase: EvalCase;
   result: EvalExecutionResult;
@@ -86,6 +123,15 @@ export async function scoreEvalCase(input: {
   const forbiddenPassed = forbiddenMatches.length === 0;
   const expectedToolsPassed = missingTools.length === 0;
   const approvalPassed = !approvalExpected || approvalCreated;
+  const searchDocumentCalls = recentToolCalls.filter(
+    (toolCall) => toolCall.toolName === "search_documents"
+  );
+  const observedRetrievalModes = searchDocumentCalls.flatMap((toolCall) =>
+    extractRetrievalModes(parseJson(toolCall.resultJson))
+  );
+  const retrievalModePassed =
+    !input.evalCase.expectedTools.includes("search_documents") ||
+    observedRetrievalModes.length > 0;
   const failureReasons = [
     input.result.error ? `error: ${input.result.error}` : null,
     requiredKeywordPassed
@@ -98,20 +144,25 @@ export async function scoreEvalCase(input: {
       ? null
       : `forbidden keywords present: ${forbiddenMatches.join(", ")}`,
     expectedToolsPassed ? null : `missing tools: ${missingTools.join(", ")}`,
-    approvalPassed ? null : "expected approval request was not created"
+    approvalPassed ? null : "expected approval request was not created",
+    retrievalModePassed
+      ? null
+      : "search_documents resultJson is missing retrievalMode"
   ].filter((reason): reason is string => Boolean(reason));
   const passed =
     !input.result.error &&
     keywordPassed &&
     forbiddenPassed &&
     expectedToolsPassed &&
-    approvalPassed;
+    approvalPassed &&
+    retrievalModePassed;
 
   return {
     keywordPassed,
     forbiddenPassed,
     expectedToolsPassed,
     approvalPassed,
+    retrievalModePassed,
     passed,
     matchedKeywords,
     missingKeywords,
@@ -123,6 +174,7 @@ export async function scoreEvalCase(input: {
     missingTools,
     approvalExpected,
     approvalCreated,
+    observedRetrievalModes,
     failureReasons,
     notes: [
       input.result.runId

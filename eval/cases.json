@@ -65,7 +65,7 @@
     ],
     "expectedTools": ["list_todos"],
     "expectedKeywords": [],
-    "expectedAnyKeywords": ["待办", "任务", "未完成"],
+    "expectedAnyKeywords": ["待办", "任务", "未完成", "待完成"],
     "forbiddenKeywords": [],
     "expectedBehavior": "自然语言识别为待办查询"
   },
@@ -289,6 +289,104 @@
     "expectedBehavior": "不基于常识编造文档来源"
   },
   {
+    "id": "rag_quality_keyword_001",
+    "category": "document_search",
+    "input": "根据知识库，Trace Integrity 的核心指标是什么？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "Trace Integrity 说明",
+        "content": "Trace Integrity 的核心指标是 runId 全链路贯穿，用于把 runs、tool_calls、approval_requests 和 workflows 精准关联起来。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["runId"],
+    "forbiddenKeywords": ["sessionId"],
+    "expectedBehavior": "精确关键词命中文档，并返回 runId 作为依据"
+  },
+  {
+    "id": "rag_quality_synonym_001",
+    "category": "document_search",
+    "input": "根据资料，这个项目的经费是多少？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "项目预算说明",
+        "content": "项目预算也称经费计划，本期经费总额为 12000 元，用于 eval、Docker 和 Admin API 验证。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["12000"],
+    "forbiddenKeywords": ["不知道"],
+    "expectedBehavior": "同义表达查询能找到包含经费/预算的文档"
+  },
+  {
+    "id": "rag_quality_no_evidence_001",
+    "category": "document_no_evidence",
+    "input": "根据知识库，量子芯片采购负责人是谁？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "客服系统说明",
+        "content": "客服系统只记录工单分派、响应时长和用户满意度，不包含量子芯片采购信息。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": [],
+    "expectedAnyKeywords": ["没有找到", "未找到", "没有", "不足"],
+    "forbiddenKeywords": ["负责人是"],
+    "expectedBehavior": "没有依据时拒绝编造负责人"
+  },
+  {
+    "id": "rag_quality_multi_doc_001",
+    "category": "document_search",
+    "input": "根据知识库，Admin API 的 base path 是什么？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "支付网关说明",
+        "content": "支付网关使用 Express，base path 是 /pay。",
+        "sourceType": "text"
+      },
+      {
+        "type": "add_document",
+        "title": "Admin API 说明",
+        "content": "Admin API 使用 Hono，base path 是 /admin，需要 Bearer token。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["/admin"],
+    "forbiddenKeywords": ["/pay"],
+    "expectedBehavior": "多文档中选择 Admin API 对应文档"
+  },
+  {
+    "id": "rag_quality_user_isolation_001",
+    "category": "document_search",
+    "input": "根据知识库，项目代号是什么？",
+    "setup": [
+      {
+        "type": "add_document_for_other_user",
+        "title": "其他用户秘密文档",
+        "content": "秘密项目代号是 SKY-999，只属于其他用户。",
+        "sourceType": "text"
+      },
+      {
+        "type": "add_document",
+        "title": "当前用户项目文档",
+        "content": "公开项目代号是 RIVER-100，只属于当前 eval 用户。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["RIVER-100"],
+    "forbiddenKeywords": ["SKY-999"],
+    "expectedBehavior": "检索只返回当前 eval user 的文档，不泄漏其他用户文档"
+  },
+  {
     "id": "daily_brief_001",
     "category": "daily_brief",
     "input": "生成今日简报",
@@ -407,7 +505,7 @@
     "setup": [],
     "expectedTools": ["complete_todo"],
     "expectedKeywords": [],
-    "expectedAnyKeywords": ["没有找到", "未找到", "不存在", "无法完成"],
+    "expectedAnyKeywords": ["没有找到", "未找到", "不存在", "无法完成", "没有 id"],
     "forbiddenKeywords": ["崩溃"],
     "expectedBehavior": "工具失败后给出友好说明"
   },
