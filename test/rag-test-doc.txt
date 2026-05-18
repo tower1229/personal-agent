@@ -1,0 +1,1 @@
+Personal Agent Lab 使用 Hono 构建 Admin API，并使用 Bearer token 做接口鉴权。
