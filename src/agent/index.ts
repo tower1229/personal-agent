@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import {
+  type ChatCompletion,
+  type ChatCompletionCreateParamsNonStreaming,
   type ChatCompletionMessageParam,
   type ChatCompletionToolMessageParam
 } from "openai/resources/chat/completions";
@@ -14,6 +16,7 @@ const openai = new OpenAI({
 
 const timeoutMs = 30_000;
 const maxToolRounds = 8;
+const maxModelRetries = 2;
 
 export interface GenerateReplyInput {
   input: string;
@@ -56,6 +59,50 @@ async function buildMemoryContext(userId: string): Promise<string> {
       ].join(" | ")
     )
     .join("\n");
+}
+
+function isRetryableModelError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("connection error") ||
+    message.includes("econnreset") ||
+    message.includes("premature close") ||
+    message.includes("socket disconnected")
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function createChatCompletionWithRetry(
+  input: ChatCompletionCreateParamsNonStreaming
+): Promise<ChatCompletion> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= maxModelRetries; attempt += 1) {
+    try {
+      return await openai.chat.completions.create(input, {
+        timeout: timeoutMs
+      });
+    } catch (error) {
+      lastError = error;
+
+      if (attempt >= maxModelRetries || !isRetryableModelError(error)) {
+        throw error;
+      }
+
+      await sleep(500 * (attempt + 1));
+    }
+  }
+
+  throw lastError;
 }
 
 export async function generateReply({
@@ -111,14 +158,12 @@ export async function generateReply({
   ];
 
   for (let round = 0; round < maxToolRounds; round += 1) {
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletionWithRetry({
       model: env.OPENAI_MODEL,
       messages,
       tools: getOpenAITools(),
       tool_choice: "auto",
       stream: false
-    }, {
-      timeout: timeoutMs
     });
 
     const message = completion.choices[0]?.message;
