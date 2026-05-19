@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { createApprovalRequest } from "../db/approvals.js";
 import { createEvalResult, createEvalRun, finishEvalRun } from "../db/evals.js";
 import { handleUserTextMessage } from "../services/messageHandler.js";
 import { executeRegisteredTool } from "../tools/registry.js";
@@ -99,10 +100,27 @@ async function runSetupAction(input: {
       });
       return;
     case "create_pending_approval":
-      await executeRegisteredTool({
+      await createApprovalRequest({
+        userId: input.userId,
+        chatId: input.chatId,
+        runId: null,
         toolName: input.action.toolName,
-        argsJson: JSON.stringify(input.action.args),
-        context
+        toolArgsJson: JSON.stringify(input.action.args),
+        summary: `eval pending approval setup for ${input.action.toolName}`,
+        riskLevel: "destructive",
+        expiresAt:
+          typeof input.action.expiresAtOffsetMs === "number"
+            ? new Date(Date.now() + input.action.expiresAtOffsetMs)
+            : null,
+        operationSummaryJson: JSON.stringify({
+          summary: `eval pending approval setup for ${input.action.toolName}`,
+          operationPreview: {
+            operation: input.action.toolName,
+            args: input.action.args
+          }
+        }),
+        approvalCode: input.action.approvalCode ?? null,
+        executedToolCallId: null
       });
       return;
   }

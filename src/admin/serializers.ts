@@ -44,7 +44,10 @@ export function serializeWorkflowStep(step: Record<string, unknown>) {
 export function serializeApprovalRequest(approval: Record<string, unknown>) {
   return {
     ...approval,
-    toolArgsJson: parseJson(approval.toolArgsJson as string | null)
+    toolArgsJson: parseJson(approval.toolArgsJson as string | null),
+    operationSummary: parseJson(
+      approval.operationSummaryJson as string | null
+    )
   };
 }
 

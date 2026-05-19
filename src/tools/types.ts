@@ -13,10 +13,19 @@ export interface ToolExecutionContext {
   runId?: number | null;
 }
 
+export interface ToolOperationSummary {
+  summary: string;
+  operationPreview: unknown;
+}
+
 export interface AgentTool<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
   name: string;
   description: string;
   inputSchema: TSchema;
   riskLevel: ToolRiskLevel;
   execute(args: z.infer<TSchema>, context: ToolExecutionContext): Promise<unknown>;
+  buildOperationSummary?(
+    args: z.infer<TSchema>,
+    context: ToolExecutionContext
+  ): Promise<ToolOperationSummary>;
 }

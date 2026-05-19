@@ -31,6 +31,8 @@ export type EvalSetupAction =
       type: "create_pending_approval";
       toolName: string;
       args: Record<string, unknown>;
+      approvalCode?: string | null;
+      expiresAtOffsetMs?: number | null;
     };
 
 export interface EvalCase {
@@ -44,6 +46,8 @@ export interface EvalCase {
   forbiddenKeywords: string[];
   expectedBehavior: string;
   riskLevel?: ToolRiskLevel;
+  expectedApprovalStatus?: "pending" | "rejected" | "executed" | "expired";
+  expectedApprovalCodeRequired?: boolean;
 }
 
 export interface EvalExecutionResult {
@@ -70,6 +74,10 @@ export interface EvalScore {
   missingTools: string[];
   approvalExpected: boolean;
   approvalCreated: boolean;
+  approvalStatusPassed: boolean;
+  approvalCodeRequiredPassed: boolean;
+  observedApprovalStatuses: string[];
+  observedApprovalCodeRequired: boolean[];
   observedRetrievalModes: string[];
   failureReasons: string[];
   notes: string[];

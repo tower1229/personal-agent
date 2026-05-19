@@ -52,11 +52,27 @@ function requiresApproval(riskLevel: ToolRiskLevel): boolean {
   );
 }
 
-function buildApprovalSummary(input: {
+async function buildApprovalOperation(input: {
   tool: AgentTool;
+  args: unknown;
   argsJson: string;
-}): string {
-  return `即将执行高风险工具 ${input.tool.name}。参数：${input.argsJson}`;
+  context: ToolExecutionContext;
+}) {
+  const customSummary = input.tool.buildOperationSummary
+    ? await input.tool.buildOperationSummary(input.args, input.context)
+    : null;
+
+  if (customSummary) {
+    return customSummary;
+  }
+
+  return {
+    summary: `即将执行高风险工具 ${input.tool.name}。参数：${input.argsJson}`,
+    operationPreview: {
+      operation: input.tool.name,
+      args: input.args
+    }
+  };
 }
 
 export function getOpenAITools() {
@@ -77,6 +93,7 @@ export async function executeRegisteredTool(input: {
   argsJson: string;
   context: ToolExecutionContext;
   allowHighRiskExecution?: boolean;
+  onToolCallCreated?: (toolCallId: number) => void;
 }): Promise<unknown> {
   const startedAt = Date.now();
   const tool = toolByName.get(input.toolName);
@@ -92,9 +109,11 @@ export async function executeRegisteredTool(input: {
     const normalizedArgsJson = JSON.stringify(args);
 
     if (requiresApproval(tool.riskLevel) && !input.allowHighRiskExecution) {
-      const summary = buildApprovalSummary({
+      const operation = await buildApprovalOperation({
         tool,
-        argsJson: normalizedArgsJson
+        args,
+        argsJson: normalizedArgsJson,
+        context: input.context
       });
       const approval = await createApprovalRequest({
         userId: input.context.userId,
@@ -102,28 +121,37 @@ export async function executeRegisteredTool(input: {
         runId: input.context.runId ?? null,
         toolName: input.toolName,
         toolArgsJson: normalizedArgsJson,
-        summary
+        summary: operation.summary,
+        riskLevel: tool.riskLevel,
+        operationSummaryJson: JSON.stringify({
+          summary: operation.summary,
+          operationPreview: operation.operationPreview
+        })
       });
 
       return {
-        approval: {
-          id: approval.id,
-          status: approval.status,
-          tool_name: approval.toolName,
-          summary: approval.summary
-        },
-        approval_request_created: true,
-        requires_user_reply: true,
-        next_user_reply_options: ["确认", "取消"],
-        message:
-          "The approval_request has been created. Stop calling tools now. Tell the user what will be done and ask them to reply 确认 or 取消. Do not say it has been executed."
+        approvalRequestId: approval.id,
+        riskLevel: approval.riskLevel,
+        expiresAt: approval.expiresAt?.toISOString() ?? null,
+        approvalCodeRequired: Boolean(approval.approvalCode),
+        approvalCode: approval.approvalCode,
+        summary: approval.summary,
+        operationPreview: operation.operationPreview,
+        approvalRequestCreated: true,
+        requiresUserReply: true,
+        nextUserReplyOptions: approval.approvalCode
+          ? [`确认 ${approval.approvalCode}`, "取消"]
+          : ["确认", "取消"],
+        message: approval.approvalCode
+          ? "The approval_request has been created. Stop calling tools now. Tell the user this is a high-risk/destructive operation, what will be done, the expiration time, and the exact reply format: 确认 <approval_code>. Also say 回复 取消 可放弃. Do not say it has been executed."
+          : "The approval_request has been created. Stop calling tools now. Tell the user what will be done and ask them to reply 确认 or 取消. Do not say it has been executed."
       };
     }
 
     const result = await tool.execute(args, input.context);
     const latencyMs = Date.now() - startedAt;
 
-    await createToolCall({
+    const toolCall = await createToolCall({
       runId: input.context.runId ?? null,
       userId: input.context.userId,
       chatId: input.context.chatId,
@@ -135,6 +163,7 @@ export async function executeRegisteredTool(input: {
       latencyMs,
       createdAt: new Date()
     });
+    input.onToolCallCreated?.(toolCall.id);
 
     return result;
   } catch (error) {

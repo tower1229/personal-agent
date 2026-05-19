@@ -29,16 +29,34 @@ export const searchMemoryTool: AgentTool<typeof searchMemoryInputSchema> = {
   inputSchema: searchMemoryInputSchema,
   riskLevel: "read",
   async execute(args, context) {
+    const keyword = args.keyword.trim();
     const memories = await searchMemories({
       userId: context.userId,
-      keyword: args.keyword,
+      keyword,
       limit: args.limit,
       sourceRunId: context.runId ?? null,
       reason: args.reason ?? null
     });
+    const terms = keyword
+      .split(/[\s,，。；;、]+/)
+      .map((term) => term.trim())
+      .filter((term) => term.length >= 2);
+    const matchedTerms = terms.filter((term) =>
+      memories.some((memory) => memory.content.includes(term))
+    );
+    const exactKeywordMatched = keyword
+      ? memories.some((memory) => memory.content.includes(keyword))
+      : true;
 
     return {
-      memories
+      memories,
+      query: keyword,
+      exactKeywordMatched,
+      matchedTerms,
+      note:
+        keyword && memories.length > 0 && !exactKeywordMatched && !matchedTerms.length
+          ? "No exact keyword match was found. These are fallback important memories for context; do not treat them as exact matches for deletion."
+          : null
     };
   }
 };

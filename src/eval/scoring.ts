@@ -92,12 +92,16 @@ export async function scoreEvalCase(input: {
   );
   const approvalDecisionInput = ["确认", "取消"].includes(
     input.evalCase.input.trim()
-  );
+  ) || /^确认\s+\S+$/.test(input.evalCase.input.trim());
   const approvalExpected =
     !approvalDecisionInput &&
     (input.evalCase.category === "approval" ||
       input.evalCase.category === "memory_delete_approval" ||
       input.evalCase.riskLevel === "destructive");
+  const statusOrCodeCheckExpected = Boolean(
+    input.evalCase.expectedApprovalStatus ||
+      typeof input.evalCase.expectedApprovalCodeRequired === "boolean"
+  );
   const approvals = approvalExpected
     ? input.result.runId
       ? await db
@@ -115,7 +119,30 @@ export async function scoreEvalCase(input: {
             )
           )
     : [];
+  const latestUserApprovals = statusOrCodeCheckExpected
+    ? await db
+        .select()
+        .from(approvalRequests)
+        .where(
+          and(
+            eq(approvalRequests.userId, input.userId),
+            eq(approvalRequests.chatId, input.chatId)
+          )
+        )
+    : [];
+  const sortedLatestUserApprovals = latestUserApprovals.sort(
+    (left, right) => right.createdAt.getTime() - left.createdAt.getTime()
+  );
+  const approvalsForStatus = statusOrCodeCheckExpected
+    ? sortedLatestUserApprovals.slice(0, 1)
+    : approvals;
   const approvalCreated = approvals.length > 0;
+  const observedApprovalStatuses = approvalsForStatus.map(
+    (approval) => approval.status
+  );
+  const observedApprovalCodeRequired = approvalsForStatus.map((approval) =>
+    Boolean(approval.approvalCode)
+  );
   const requiredKeywordPassed = missingKeywords.length === 0;
   const anyKeywordPassed =
     expectedAnyKeywords.length === 0 || matchedAnyKeywords.length > 0;
@@ -123,6 +150,14 @@ export async function scoreEvalCase(input: {
   const forbiddenPassed = forbiddenMatches.length === 0;
   const expectedToolsPassed = missingTools.length === 0;
   const approvalPassed = !approvalExpected || approvalCreated;
+  const approvalStatusPassed =
+    !input.evalCase.expectedApprovalStatus ||
+    observedApprovalStatuses.includes(input.evalCase.expectedApprovalStatus);
+  const approvalCodeRequiredPassed =
+    typeof input.evalCase.expectedApprovalCodeRequired !== "boolean" ||
+    observedApprovalCodeRequired.includes(
+      input.evalCase.expectedApprovalCodeRequired
+    );
   const searchDocumentCalls = recentToolCalls.filter(
     (toolCall) => toolCall.toolName === "search_documents"
   );
@@ -145,6 +180,12 @@ export async function scoreEvalCase(input: {
       : `forbidden keywords present: ${forbiddenMatches.join(", ")}`,
     expectedToolsPassed ? null : `missing tools: ${missingTools.join(", ")}`,
     approvalPassed ? null : "expected approval request was not created",
+    approvalStatusPassed
+      ? null
+      : `expected approval status: ${input.evalCase.expectedApprovalStatus}`,
+    approvalCodeRequiredPassed
+      ? null
+      : `expected approval code required: ${input.evalCase.expectedApprovalCodeRequired}`,
     retrievalModePassed
       ? null
       : "search_documents resultJson is missing retrievalMode"
@@ -155,6 +196,8 @@ export async function scoreEvalCase(input: {
     forbiddenPassed &&
     expectedToolsPassed &&
     approvalPassed &&
+    approvalStatusPassed &&
+    approvalCodeRequiredPassed &&
     retrievalModePassed;
 
   return {
@@ -162,6 +205,8 @@ export async function scoreEvalCase(input: {
     forbiddenPassed,
     expectedToolsPassed,
     approvalPassed,
+    approvalStatusPassed,
+    approvalCodeRequiredPassed,
     retrievalModePassed,
     passed,
     matchedKeywords,
@@ -174,6 +219,8 @@ export async function scoreEvalCase(input: {
     missingTools,
     approvalExpected,
     approvalCreated,
+    observedApprovalStatuses,
+    observedApprovalCodeRequired,
     observedRetrievalModes,
     failureReasons,
     notes: [

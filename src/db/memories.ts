@@ -1,4 +1,4 @@
-import { and, desc, eq, like } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or } from "drizzle-orm";
 import { db } from "./client.js";
 import {
   memories,
@@ -51,6 +51,65 @@ export async function saveMemory(input: {
 }
 
 export async function searchMemories(input: {
+  userId: string;
+  keyword: string;
+  limit: number;
+  sourceRunId: number | null;
+  reason: string | null;
+}): Promise<Memory[]> {
+  const keyword = input.keyword.trim();
+  const baseQuery = () =>
+    db
+      .select()
+      .from(memories)
+      .orderBy(desc(memories.importance), desc(memories.updatedAt))
+      .limit(input.limit);
+  let results: Memory[] = [];
+
+  if (!keyword) {
+    results = await baseQuery().where(eq(memories.userId, input.userId));
+  } else {
+    results = await baseQuery().where(
+      and(eq(memories.userId, input.userId), like(memories.content, `%${keyword}%`))
+    );
+  }
+
+  const terms = keyword
+    .split(/[\s,，。；;、]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2);
+
+  if (keyword && results.length === 0 && terms.length > 1) {
+    results = await baseQuery().where(
+      and(
+        eq(memories.userId, input.userId),
+        or(...terms.map((term) => like(memories.content, `%${term}%`)))
+      )
+    );
+  }
+
+  if (keyword && results.length === 0) {
+    results = await db
+      .select()
+      .from(memories)
+      .where(eq(memories.userId, input.userId))
+      .orderBy(desc(memories.importance), desc(memories.updatedAt))
+      .limit(Math.min(input.limit, 5));
+  }
+
+  await db.insert(memoryEvents).values({
+    memoryId: null,
+    userId: input.userId,
+    eventType: "searched",
+    sourceRunId: input.sourceRunId,
+    reason: input.reason ?? (keyword ? `keyword: ${keyword}` : "list memories"),
+    createdAt: new Date()
+  });
+
+  return results;
+}
+
+export async function searchMemoriesStrict(input: {
   userId: string;
   keyword: string;
   limit: number;
@@ -113,6 +172,22 @@ export async function deleteMemory(input: {
   });
 
   return memory;
+}
+
+export async function getMemoriesByIds(input: {
+  userId: string;
+  ids: number[];
+}): Promise<Memory[]> {
+  if (!input.ids.length) {
+    return [];
+  }
+
+  return db
+    .select()
+    .from(memories)
+    .where(
+      and(eq(memories.userId, input.userId), inArray(memories.id, input.ids))
+    );
 }
 
 export async function listImportantMemories(input: {

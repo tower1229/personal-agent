@@ -6,7 +6,7 @@
 
 - Telegram Bot：接收文本消息和文本类文档上传
 - Agent tool calling：todo、memory、document RAG tools
-- Human-in-the-loop approval：高风险工具先创建 approval request
+- Human-in-the-loop approval：高风险工具先创建带确认码、过期时间和审计摘要的 approval request
 - Memory system：保存、搜索、删除长期记忆
 - Document RAG：保存文档、chunk 切分、keyword + embedding 混合检索
 - Workflow：`daily_brief` 多步骤工作流
@@ -75,7 +75,7 @@ npm run db:migrate
 - `tool_calls`：记录每次工具调用的参数、结果、状态、耗时和错误信息
 - `memories`：记录用户长期记忆
 - `memory_events`：记录记忆创建、搜索、删除等事件
-- `approval_requests`：记录高风险工具执行前的用户确认请求
+- `approval_requests`：记录高风险工具执行前的用户确认请求、risk level、过期时间、确认码、结构化操作摘要和执行后的 tool call 关联
 - `documents`：记录用户保存的文档
 - `document_chunks`：记录文档切分后的检索片段
 - `document_chunk_embeddings`：记录 chunk embedding JSON、模型、provider 和维度
@@ -156,16 +156,24 @@ Agent 会让模型决定是否调用 todo 工具。工具参数会先经过 Zod 
 
 Agent 会在用户明确要求“记住”“以后请记得”“保存这个偏好”时调用 `save_memory`。当用户询问之前说过什么或偏好时，会调用 `search_memory`。每次回复前，Agent 还会自动加载当前用户最多 10 条重要记忆作为上下文，但不会把所有历史聊天塞进 prompt。
 
-## Week 4 Approval 使用示例
+## Week 4 / v0.4 Approval Hardening 使用示例
 
-高风险工具不会被 Agent 直接执行，会先创建 approval request。
+高风险工具不会被 Agent 直接执行，会先创建 approval request。v0.4.0 起，`write_high`、`external_send`、`destructive` 风险级别的工具会写入结构化审批记录，默认 10 分钟过期。破坏性操作必须使用确认码，不能只回复“确认”。
 
 ```text
 用户：删除关于 TypeScript 的那条记忆
-Agent：即将删除关于 TypeScript 的记忆。请回复“确认”或“取消”
-用户：确认
+Agent：这是破坏性操作。将删除 1 条记忆：id=12，content=用户更喜欢 TypeScript。请在 10 分钟内回复：确认 4821。回复 取消 可放弃。
+用户：确认 4821
 Agent：已删除
 ```
+
+如果用户只回复：
+
+```text
+确认
+```
+
+Bot 会提示需要确认码，不会执行工具。如果用户回复错误确认码，Bot 会返回“确认码不正确”，并保持 approval 为 pending。
 
 如果用户回复：
 
@@ -174,6 +182,8 @@ Agent：已删除
 ```
 
 Bot 会拒绝当前 pending approval，不会执行对应工具。
+
+如果 approval 超过 `expires_at`，Bot 会在处理确认/取消前先把它标记为 `expired`，并提示用户重新发起。
 
 ## Week 5 Document RAG 示例
 
@@ -334,6 +344,8 @@ GET /admin/approvals?runId=1
 
 `GET /admin/runs/:id` 会返回该 run、精确关联的 tool calls、approval requests、workflow 和 workflow steps。Workflow 既通过 `workflows.run_id` 关联，也会继续在 `runs.metadata_json.workflow_id` 中保留反查信息。
 
+`GET /admin/approvals` 会返回 approval 审计详情，包括 `riskLevel`、`expiresAt`、`operationSummary`、`status`、`approvalCode` 和 `executedToolCallId`。Admin API 是开发者调试接口，必须使用 Bearer token 鉴权，不要暴露到公网。
+
 这些接口只用于开发调试，不会返回 `.env`、Telegram Bot token、OpenAI API key 或 Admin token。
 
 ## Week 8 Eval
@@ -357,7 +369,7 @@ Eval runner 会：
 - 调用统一 `handleUserTextMessage` 服务，和 Telegram 文本消息走同一条 approval、workflow、Agent 路由
 - 在每条 case 前执行独立 setup，例如创建待办、保存记忆、导入文档或创建 pending approval
 - 捕获单条 case 错误，不中断整轮 eval
-- 检查 expected keywords、expectedAnyKeywords、forbidden keywords、tool_calls、approval_requests 和 RAG retrievalMode
+- 检查 expected keywords、expectedAnyKeywords、forbidden keywords、tool_calls、approval_requests、approval status、approval code requirement 和 RAG retrievalMode
 - 输出 `keywordPassed`、`forbiddenPassed`、`expectedToolsPassed`、`approvalPassed`、`retrievalModePassed`、`failureReasons`
 - 写入 `eval_runs` 和 `eval_results`
 - 输出总数、通过数、失败数和通过率
@@ -433,12 +445,11 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 - 正常 Telegram 文本消息、文档上传、approval 确认和 daily brief 都使用 `running -> succeeded/failed` run 生命周期；eval setup 等非用户消息准备步骤仍可能产生 `run_id = null` 的工具日志。
 - Eval 是行为 smoke test，不是严格单元测试；模型输出波动可能导致部分 case 失败。
 - Telegram 文档上传只支持 2MB 以下文本类文件。
-- Approval 只有 Telegram 文本“确认/取消”，暂无 Web UI。
+- Approval 目前只有 Telegram 文本确认流程，暂无 Web UI；破坏性操作需要 `确认 <code>`。
 - SQLite 适合本地学习和小规模部署，不适合多实例并发写入。
 
 ## 下一步计划
 
 - 为 document RAG 增加 chunk rerank 和更稳定的中文分词。
 - 为 Admin API 增加只读 HTML dashboard。
-- 为 destructive approval 增加过期时间、审计详情和更明确的操作摘要。
 - 增加自动化测试和 CI。

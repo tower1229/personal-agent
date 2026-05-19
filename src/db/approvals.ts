@@ -1,4 +1,5 @@
-import { and, desc, eq, lt } from "drizzle-orm";
+import { randomInt } from "node:crypto";
+import { and, desc, eq, lte } from "drizzle-orm";
 import { db } from "./client.js";
 import {
   approvalRequests,
@@ -6,17 +7,32 @@ import {
   type NewApprovalRequest
 } from "./schema.js";
 
+const defaultApprovalTtlMs = 10 * 60 * 1000;
+
+export function generateApprovalCode(): string {
+  return randomInt(0, 10_000).toString().padStart(4, "0");
+}
+
 export async function createApprovalRequest(
-  request: Omit<NewApprovalRequest, "status" | "createdAt">
+  request: Omit<
+    NewApprovalRequest,
+    "status" | "createdAt" | "decidedAt" | "executedAt"
+  >
 ): Promise<ApprovalRequest> {
+  const now = new Date();
+
   const created = await db
     .insert(approvalRequests)
     .values({
       ...request,
+      expiresAt:
+        request.expiresAt ?? new Date(now.getTime() + defaultApprovalTtlMs),
+      approvalCode: request.approvalCode ?? generateApprovalCode(),
       status: "pending",
-      createdAt: new Date(),
+      createdAt: now,
       decidedAt: null,
-      executedAt: null
+      executedAt: null,
+      executedToolCallId: request.executedToolCallId ?? null
     })
     .returning();
 
@@ -41,6 +57,25 @@ export async function getLatestPendingApprovalForUser(input: {
         eq(approvalRequests.userId, input.userId),
         eq(approvalRequests.chatId, input.chatId),
         eq(approvalRequests.status, "pending")
+      )
+    )
+    .orderBy(desc(approvalRequests.createdAt), desc(approvalRequests.id))
+    .limit(1);
+
+  return approvals[0] ?? null;
+}
+
+export async function getLatestApprovalForUser(input: {
+  userId: string;
+  chatId: string;
+}): Promise<ApprovalRequest | null> {
+  const approvals = await db
+    .select()
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.userId, input.userId),
+        eq(approvalRequests.chatId, input.chatId)
       )
     )
     .orderBy(desc(approvalRequests.createdAt), desc(approvalRequests.id))
@@ -113,12 +148,14 @@ export async function markApprovalExecuted(input: {
   id: number;
   userId: string;
   chatId: string;
+  executedToolCallId?: number | null;
 }): Promise<ApprovalRequest> {
   const updated = await db
     .update(approvalRequests)
     .set({
       status: "executed",
-      executedAt: new Date()
+      executedAt: new Date(),
+      executedToolCallId: input.executedToolCallId ?? null
     })
     .where(
       and(
@@ -139,11 +176,7 @@ export async function markApprovalExecuted(input: {
   return approval;
 }
 
-export async function expireOldApprovals(input: {
-  olderThanMs: number;
-}): Promise<void> {
-  const cutoff = new Date(Date.now() - input.olderThanMs);
-
+export async function expireOldApprovals(): Promise<void> {
   await db
     .update(approvalRequests)
     .set({
@@ -153,7 +186,7 @@ export async function expireOldApprovals(input: {
     .where(
       and(
         eq(approvalRequests.status, "pending"),
-        lt(approvalRequests.createdAt, cutoff)
+        lte(approvalRequests.expiresAt, new Date())
       )
     );
 }

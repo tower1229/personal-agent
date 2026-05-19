@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { deleteMemory } from "../../db/memories.js";
+import { deleteMemory, getMemoriesByIds } from "../../db/memories.js";
 import { type AgentTool } from "../types.js";
 
 const deleteMemoryInputSchema = z.object({
@@ -30,6 +30,59 @@ export const deleteMemoryTool: AgentTool<typeof deleteMemoryInputSchema> = {
     "Delete long-term memories for the current user. Use one id for normal deletion. Use ids only when the user explicitly asks to delete all related matching memories. If multiple memories match a vague request, ask the user to choose a specific id instead of deleting them all.",
   inputSchema: deleteMemoryInputSchema,
   riskLevel: "destructive",
+  async buildOperationSummary(args, context) {
+    const ids = args.ids ?? (args.id ? [args.id] : []);
+    const memories = await getMemoriesByIds({
+      userId: context.userId,
+      ids
+    });
+    const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
+    const missingIds = ids.filter((id) => !memoryById.has(id));
+    const preview = ids.slice(0, 10).map((id) => {
+      const memory = memoryById.get(id);
+
+      return {
+        id,
+        exists: Boolean(memory),
+        content: memory?.content ?? null,
+        type: memory?.type ?? null
+      };
+    });
+
+    if (ids.length === 1) {
+      const id = ids[0] as number;
+      const memory = memoryById.get(id);
+
+      return {
+        summary: memory
+          ? `将删除 1 条记忆：id=${id}，content=${memory.content}`
+          : `将尝试删除 1 条记忆：id=${id}，但当前目标可能不存在。`,
+        operationPreview: {
+          operation: "delete_memory",
+          mode: "single",
+          id,
+          exists: Boolean(memory),
+          content: memory?.content ?? null,
+          reason: args.reason ?? null
+        }
+      };
+    }
+
+    return {
+      summary: `将删除 ${ids.length} 条记忆。预览前 ${Math.min(
+        ids.length,
+        10
+      )} 条；其中 ${missingIds.length} 条当前可能不存在。`,
+      operationPreview: {
+        operation: "delete_memory",
+        mode: "batch",
+        count: ids.length,
+        preview,
+        missingIds,
+        reason: args.reason ?? null
+      }
+    };
+  },
   async execute(args, context) {
     const ids = args.ids ?? [args.id];
     const deletedMemories = [];

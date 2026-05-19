@@ -2,6 +2,7 @@ import { generateReply } from "../agent/index.js";
 import {
   approveRequest,
   expireOldApprovals,
+  getLatestApprovalForUser,
   getLatestPendingApprovalForUser,
   markApprovalExecuted,
   rejectRequest
@@ -73,32 +74,65 @@ function formatApprovalExecutionReply(result: unknown): string {
   return "已执行确认的操作。";
 }
 
+function parseApprovalDecision(message: string):
+  | { type: "approve"; code: string | null }
+  | { type: "reject" }
+  | null {
+  const trimmed = message.trim();
+
+  if (trimmed === "取消") {
+    return { type: "reject" };
+  }
+
+  const match = /^确认(?:\s+(\S+))?$/.exec(trimmed);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    type: "approve",
+    code: match[1] ?? null
+  };
+}
+
 async function handleApprovalDecision(input: {
   message: string;
   userId: string;
   chatId: string;
   runId: number;
 }): Promise<string | null> {
-  const normalizedMessage = input.message.trim();
+  const decision = parseApprovalDecision(input.message);
 
-  if (normalizedMessage !== "确认" && normalizedMessage !== "取消") {
+  if (!decision) {
     return null;
   }
 
-  await expireOldApprovals({
-    olderThanMs: 24 * 60 * 60 * 1000
+  await expireOldApprovals();
+
+  const latestApproval = await getLatestApprovalForUser({
+    userId: input.userId,
+    chatId: input.chatId
   });
+
+  if (latestApproval?.status === "expired") {
+    return "待确认操作已过期，请重新发起。";
+  }
+
+  if (latestApproval?.status !== "pending") {
+    return "当前没有待确认的操作。";
+  }
 
   const pendingApproval = await getLatestPendingApprovalForUser({
     userId: input.userId,
     chatId: input.chatId
   });
 
-  if (!pendingApproval) {
+  if (!pendingApproval || pendingApproval.id !== latestApproval.id) {
     return "当前没有待确认的操作。";
   }
 
-  if (normalizedMessage === "取消") {
+  if (decision.type === "reject") {
     await rejectRequest({
       id: pendingApproval.id,
       userId: input.userId,
@@ -107,11 +141,23 @@ async function handleApprovalDecision(input: {
     return "已取消这次操作。";
   }
 
+  if (pendingApproval.approvalCode && !decision.code) {
+    return "这次操作需要确认码。请回复：确认 <确认码>。回复 取消 可放弃。";
+  }
+
+  if (
+    pendingApproval.approvalCode &&
+    decision.code !== pendingApproval.approvalCode
+  ) {
+    return "确认码不正确，操作未执行。请核对后回复：确认 <确认码>，或回复 取消。";
+  }
+
   const approved = await approveRequest({
     id: pendingApproval.id,
     userId: input.userId,
     chatId: input.chatId
   });
+  let executedToolCallId: number | null = null;
 
   const result = await executeRegisteredTool({
     toolName: approved.toolName,
@@ -121,13 +167,17 @@ async function handleApprovalDecision(input: {
       chatId: input.chatId,
       runId: input.runId
     },
-    allowHighRiskExecution: true
+    allowHighRiskExecution: true,
+    onToolCallCreated(toolCallId) {
+      executedToolCallId = toolCallId;
+    }
   });
 
   await markApprovalExecuted({
     id: approved.id,
     userId: input.userId,
-    chatId: input.chatId
+    chatId: input.chatId,
+    executedToolCallId
   });
 
   return formatApprovalExecutionReply(result);
