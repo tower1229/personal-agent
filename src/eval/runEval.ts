@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createApprovalRequest } from "../db/approvals.js";
 import { createEvalResult, createEvalRun, finishEvalRun } from "../db/evals.js";
+import { createMockLlmClient } from "../llm/mockClient.js";
+import { type LlmClient } from "../llm/types.js";
 import { handleUserTextMessage } from "../services/messageHandler.js";
 import { executeRegisteredTool } from "../tools/registry.js";
 import { scoreEvalCase } from "./scoring.js";
@@ -144,6 +146,7 @@ async function executeCase(input: {
   evalCase: EvalCase;
   userId: string;
   chatId: string;
+  llmClient?: LlmClient;
 }): Promise<EvalExecutionResult> {
   const startedAt = new Date();
 
@@ -155,7 +158,8 @@ async function executeCase(input: {
       metadata: {
         source: "eval",
         case_id: input.evalCase.id
-      }
+      },
+      llmClient: input.llmClient
     });
 
     return {
@@ -175,6 +179,13 @@ async function executeCase(input: {
 }
 
 async function main(): Promise<void> {
+  const useMock = process.argv.includes("--mock");
+
+  if (useMock) {
+    process.env.EVAL_MOCK = "1";
+  }
+
+  const llmClient = useMock ? createMockLlmClient() : undefined;
   const cases = await loadCases();
   const evalRun = await createEvalRun({
     total: cases.length
@@ -184,7 +195,11 @@ async function main(): Promise<void> {
   let passed = 0;
   let failed = 0;
 
-  console.log(`Starting eval run ${evalRun.id} with ${cases.length} cases`);
+  console.log(
+    `Starting ${useMock ? "mock " : ""}eval run ${evalRun.id} with ${
+      cases.length
+    } cases`
+  );
   console.log(`Eval identity: userId=${evalUserId} chatId=${evalChatId}`);
 
   for (const evalCase of cases) {
@@ -201,7 +216,8 @@ async function main(): Promise<void> {
     const result = await executeCase({
       evalCase,
       userId: evalUserId,
-      chatId: evalChatId
+      chatId: evalChatId,
+      llmClient
     });
     const score = await scoreEvalCase({
       evalCase,

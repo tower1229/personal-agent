@@ -1,8 +1,9 @@
-import OpenAI from "openai";
 import { env } from "../config/env.js";
 import { listDocuments } from "../db/documents.js";
 import { listImportantMemories } from "../db/memories.js";
 import { listOpenTodos } from "../db/todos.js";
+import { createOpenAiClient } from "../llm/openaiClient.js";
+import { type LlmClient } from "../llm/types.js";
 import { emitProgress, type ProgressHandler } from "../services/progress.js";
 import {
   completeWorkflowStep,
@@ -16,12 +17,7 @@ import {
   type WorkflowRunResult
 } from "./types.js";
 
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-  baseURL: env.OPENAI_BASE_URL
-});
-
-const timeoutMs = 30_000;
+const defaultLlmClient = createOpenAiClient();
 
 export class DailyBriefWorkflowError extends Error {
   constructor(
@@ -98,8 +94,9 @@ async function generateBriefText(input: {
   todos: unknown[];
   memories: unknown[];
   documents: unknown[];
+  llmClient: LlmClient;
 }): Promise<string> {
-  const completion = await openai.chat.completions.create({
+  const completion = await input.llmClient.createChatCompletion({
     model: env.OPENAI_MODEL,
     messages: [
       {
@@ -118,12 +115,12 @@ async function generateBriefText(input: {
         content: toJson(input)
       }
     ],
+    tools: [],
+    tool_choice: "auto",
     stream: false
-  }, {
-    timeout: timeoutMs
   });
 
-  const output = completion.choices[0]?.message?.content?.trim();
+  const output = completion.message?.content?.trim();
 
   if (!output) {
     throw new Error("Model returned an empty daily brief");
@@ -133,8 +130,12 @@ async function generateBriefText(input: {
 }
 
 export async function runDailyBriefWorkflow(
-  input: DailyBriefWorkflowInput & { onProgress?: ProgressHandler }
+  input: DailyBriefWorkflowInput & {
+    onProgress?: ProgressHandler;
+    llmClient?: LlmClient;
+  }
 ): Promise<WorkflowRunResult> {
+  const llmClient = input.llmClient ?? defaultLlmClient;
   const workflow = await createWorkflow({
     userId: input.userId,
     runId: input.runId,
@@ -194,7 +195,8 @@ export async function runDailyBriefWorkflow(
         generateBriefText({
           todos,
           memories,
-          documents
+          documents,
+          llmClient
         })
     });
 

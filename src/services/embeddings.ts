@@ -6,11 +6,29 @@ const openai = new OpenAI({
   baseURL: env.OPENAI_BASE_URL
 });
 
+function generateDeterministicEmbedding(text: string): number[] {
+  const vector = new Array<number>(16).fill(0);
+
+  for (const [index, char] of Array.from(text).entries()) {
+    vector[index % vector.length] += char.codePointAt(0) ?? 0;
+  }
+
+  return vector.map((value) => value / 10_000);
+}
+
 export async function generateEmbedding(text: string): Promise<number[]> {
   const input = text.trim();
 
   if (!input) {
     throw new Error("Embedding input is empty");
+  }
+
+  if (process.env.DISABLE_EMBEDDINGS === "1") {
+    throw new Error("Embedding generation is disabled");
+  }
+
+  if (process.env.EVAL_MOCK === "1") {
+    return generateDeterministicEmbedding(input);
   }
 
   try {

@@ -12,7 +12,8 @@
 - Workflow：`daily_brief` 多步骤工作流
 - Observability：runs、tool_calls、workflows、workflow_steps、approval_requests
 - Admin API：Hono JSON API 查看调试数据
-- Eval：固定测试集评估 Agent 行为
+- Eval：固定测试集评估 Agent 行为，支持 mock LLM
+- Unit Tests + CI：Vitest 单元测试和 GitHub Actions 验证
 - Docker：标准化容器启动
 
 ## 环境变量
@@ -98,6 +99,39 @@ npm run dev
 npm run build
 npm start
 ```
+
+## v0.6 Unit Tests + Mock Eval + CI
+
+本项目使用 Vitest 做确定性单元测试，覆盖文本清洗、cosine similarity、approval 确认解析、JSON 安全格式化、progress event 格式化、文档检索打分 helper、核心 tools 和 approval 执行路径。
+
+```bash
+npm test
+npm run test:watch
+```
+
+测试会使用临时 SQLite 数据库、测试 token 和禁用 embedding 的 keyword fallback，不依赖真实 Telegram 用户数据，也不会调用真实模型或 embedding API。
+
+Eval 分两种：
+
+```bash
+npm run eval:mock
+npm run eval
+```
+
+- `npm test`：快速、确定性的 Vitest 单元/工具/approval 测试，不调用真实 API。
+- `npm run eval:mock`：运行 `eval/cases.json`，但注入 mock LLM；用于 CI 和回归检查，不调用真实模型。该脚本会先执行数据库迁移。
+- `npm run eval`：运行真实模型 eval，用于人工验收模型行为，需要有效 `OPENAI_API_KEY`、模型配置和已迁移数据库。
+
+CI 位于 `.github/workflows/ci.yml`，使用 Node 22，执行：
+
+```bash
+npm ci
+npm run build
+npm test
+npm run eval:mock
+```
+
+CI 不运行 `npm run eval`，因为真实 eval 需要外部 API key，且模型输出存在波动。
 
 ## 如何测试 Telegram Bot
 
@@ -426,16 +460,23 @@ userId = eval-user-<evalRunId>
 chatId = eval-chat-<evalRunId>
 ```
 
-运行：
+真实模型运行：
 
 ```bash
 npm run eval
+```
+
+不调用真实模型的 mock eval：
+
+```bash
+npm run eval:mock
 ```
 
 Eval runner 会：
 
 - 读取 `eval/cases.json`
 - 调用统一 `handleUserTextMessage` 服务，和 Telegram 文本消息走同一条 approval、workflow、Agent 路由
+- 使用 `--mock` 时注入 mock LLM client，模拟普通回复、tool call、多轮 tool call、空回复错误、destructive tool call 和 `search_documents` tool call，不请求真实模型
 - 在每条 case 前执行独立 setup，例如创建待办、保存记忆、导入文档或创建 pending approval
 - 捕获单条 case 错误，不中断整轮 eval
 - 检查 expected keywords、expectedAnyKeywords、forbidden keywords、tool_calls、approval_requests、approval status、approval code requirement 和 RAG retrievalMode
@@ -512,7 +553,7 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 
 - 文档检索已支持 SQLite JSON embedding + TypeScript cosine similarity，但暂未使用专用向量数据库或 rerank 模型。
 - 正常 Telegram 文本消息、文档上传、approval 确认和 daily brief 都使用 `running -> succeeded/failed` run 生命周期；eval setup 等非用户消息准备步骤仍可能产生 `run_id = null` 的工具日志。
-- Eval 是行为 smoke test，不是严格单元测试；模型输出波动可能导致部分 case 失败。
+- 真实 Eval 是行为 smoke test，不是严格单元测试；模型输出波动可能导致部分 case 失败。CI 使用 `eval:mock` 避免这种波动。
 - Telegram 文档上传只支持 2MB 以下文本类文件。
 - Approval 目前只有 Telegram 文本确认流程，暂无 Web UI；破坏性操作需要 `确认 <code>`。
 - SQLite 适合本地学习和小规模部署，不适合多实例并发写入。
@@ -520,4 +561,3 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 ## 下一步计划
 
 - 为 document RAG 增加 chunk rerank 和更稳定的中文分词。
-- 增加自动化测试和 CI。

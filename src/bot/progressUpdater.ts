@@ -12,7 +12,7 @@ export interface TelegramProgressUpdater {
   stop(): void;
 }
 
-function eventToLine(event: ProgressEvent): string {
+export function formatProgressEventLine(event: ProgressEvent): string {
   if (event.type === "tool_start") {
     return `调用工具：${event.toolName ?? event.message}`;
   }
@@ -38,8 +38,8 @@ function eventToLine(event: ProgressEvent): string {
   return event.message;
 }
 
-function buildProgressText(events: ProgressEvent[]): string {
-  const lines = events.slice(-maxProgressEvents).map(eventToLine);
+export function buildProgressText(events: ProgressEvent[]): string {
+  const lines = events.slice(-maxProgressEvents).map(formatProgressEventLine);
 
   return ["正在处理...", ...lines.map((line) => `- ${line}`)].join("\n");
 }

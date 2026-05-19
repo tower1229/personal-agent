@@ -1,23 +1,12 @@
-import OpenAI from "openai";
-import {
-  type ChatCompletion,
-  type ChatCompletionCreateParamsNonStreaming,
-  type ChatCompletionMessageParam,
-  type ChatCompletionToolMessageParam
-} from "openai/resources/chat/completions";
 import { env } from "../config/env.js";
 import { listImportantMemories } from "../db/memories.js";
+import { createOpenAiClient } from "../llm/openaiClient.js";
+import { type LlmClient, type LlmMessage } from "../llm/types.js";
 import { emitProgress, type ProgressHandler } from "../services/progress.js";
 import { executeRegisteredTool, getOpenAITools } from "../tools/registry.js";
 
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-  baseURL: env.OPENAI_BASE_URL
-});
-
-const timeoutMs = 30_000;
 const maxToolRounds = 8;
-const maxModelRetries = 2;
+const defaultLlmClient = createOpenAiClient();
 
 export interface GenerateReplyInput {
   input: string;
@@ -25,6 +14,7 @@ export interface GenerateReplyInput {
   chatId: string;
   runId: number;
   onProgress?: ProgressHandler;
+  llmClient?: LlmClient;
 }
 
 function getCurrentLocalTime(): string {
@@ -63,59 +53,16 @@ async function buildMemoryContext(userId: string): Promise<string> {
     .join("\n");
 }
 
-function isRetryableModelError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("connection error") ||
-    message.includes("econnreset") ||
-    message.includes("premature close") ||
-    message.includes("socket disconnected")
-  );
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function createChatCompletionWithRetry(
-  input: ChatCompletionCreateParamsNonStreaming
-): Promise<ChatCompletion> {
-  let lastError: unknown = null;
-
-  for (let attempt = 0; attempt <= maxModelRetries; attempt += 1) {
-    try {
-      return await openai.chat.completions.create(input, {
-        timeout: timeoutMs
-      });
-    } catch (error) {
-      lastError = error;
-
-      if (attempt >= maxModelRetries || !isRetryableModelError(error)) {
-        throw error;
-      }
-
-      await sleep(500 * (attempt + 1));
-    }
-  }
-
-  throw lastError;
-}
-
 export async function generateReply({
   input,
   userId,
   chatId,
   runId,
-  onProgress
+  onProgress,
+  llmClient = defaultLlmClient
 }: GenerateReplyInput): Promise<string> {
   const memoryContext = await buildMemoryContext(userId);
-  const messages: ChatCompletionMessageParam[] = [
+  const messages: LlmMessage[] = [
     {
       role: "system",
       content: [
@@ -166,7 +113,7 @@ export async function generateReply({
   ];
 
   for (let round = 0; round < maxToolRounds; round += 1) {
-    const completion = await createChatCompletionWithRetry({
+    const completion = await llmClient.createChatCompletion({
       model: env.OPENAI_MODEL,
       messages,
       tools: getOpenAITools(),
@@ -174,7 +121,7 @@ export async function generateReply({
       stream: false
     });
 
-    const message = completion.choices[0]?.message;
+    const message = completion.message;
 
     if (!message) {
       throw new Error("Model returned an empty response");
@@ -239,7 +186,7 @@ export async function generateReply({
           role: "tool",
           tool_call_id: toolCall.id,
           content: JSON.stringify(result)
-        } satisfies ChatCompletionToolMessageParam);
+        });
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -257,7 +204,7 @@ export async function generateReply({
           content: JSON.stringify({
             error: errorMessage
           })
-        } satisfies ChatCompletionToolMessageParam);
+        });
       }
     }
   }

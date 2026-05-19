@@ -20,6 +20,7 @@ import {
   runDailyBriefWorkflow
 } from "../workflows/dailyBrief.js";
 import { env } from "../config/env.js";
+import { type LlmClient } from "../llm/types.js";
 
 const friendlyErrorMessage =
   "抱歉，我刚刚处理消息时遇到问题。请稍后再试。";
@@ -30,6 +31,7 @@ export interface HandleUserTextMessageInput {
   chatId: string;
   metadata: Record<string, unknown>;
   onProgress?: ProgressHandler;
+  llmClient?: LlmClient;
 }
 
 export interface HandleUserTextMessageResult {
@@ -55,7 +57,7 @@ function isDailyBriefTrigger(message: string): boolean {
   );
 }
 
-function formatApprovalExecutionReply(result: unknown): string {
+export function formatApprovalExecutionReply(result: unknown): string {
   if (
     result &&
     typeof result === "object" &&
@@ -76,7 +78,7 @@ function formatApprovalExecutionReply(result: unknown): string {
   return "已执行确认的操作。";
 }
 
-function parseApprovalDecision(message: string):
+export function parseApprovalDecision(message: string):
   | { type: "approve"; code: string | null }
   | { type: "reject" }
   | null {
@@ -284,7 +286,8 @@ export async function handleUserTextMessage(
         chatId: input.chatId,
         triggerMessage: input.input,
         runId: run.id,
-        onProgress: input.onProgress
+        onProgress: input.onProgress,
+        llmClient: input.llmClient
       });
       const output = sanitizeTelegramText(result.output);
       const latencyMs = Date.now() - startedAt;
@@ -319,7 +322,8 @@ export async function handleUserTextMessage(
       userId: input.userId,
       chatId: input.chatId,
       runId: run.id,
-      onProgress: input.onProgress
+      onProgress: input.onProgress,
+      llmClient: input.llmClient
     });
     await emitProgress(input.onProgress, {
       type: "finalizing",

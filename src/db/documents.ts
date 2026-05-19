@@ -69,7 +69,7 @@ function splitIntoChunks(content: string): string[] {
   return chunks;
 }
 
-function tokenize(query: string): string[] {
+export function tokenizeDocumentQuery(query: string): string[] {
   const tokens = query
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
@@ -96,7 +96,10 @@ function tokenize(query: string): string[] {
   return Array.from(new Set([...tokens, ...cjkTokens]));
 }
 
-function scoreChunk(content: string, tokens: string[]): number {
+export function scoreDocumentChunkKeywords(
+  content: string,
+  tokens: string[]
+): number {
   const lowerContent = content.toLowerCase();
 
   return tokens.reduce((score, token) => {
@@ -105,7 +108,10 @@ function scoreChunk(content: string, tokens: string[]): number {
   }, 0);
 }
 
-function normalizeKeywordScore(rawScore: number, tokenCount: number): number {
+export function normalizeDocumentKeywordScore(
+  rawScore: number,
+  tokenCount: number
+): number {
   if (tokenCount <= 0) {
     return 0;
   }
@@ -119,6 +125,19 @@ function clampScore(score: number): number {
 
 function roundScore(score: number): number {
   return Math.round(score * 10_000) / 10_000;
+}
+
+export function calculateDocumentRetrievalScore(input: {
+  keywordScore: number;
+  vectorScore: number;
+  retrievalMode: "hybrid" | "keyword_fallback";
+}): number {
+  const score =
+    input.retrievalMode === "hybrid"
+      ? input.keywordScore * 0.4 + input.vectorScore * 0.6
+      : input.keywordScore;
+
+  return roundScore(clampScore(score));
 }
 
 function parseEmbedding(value: string): number[] | null {
@@ -292,7 +311,7 @@ export async function searchDocumentChunks(input: {
   query: string;
   limit: number;
 }): Promise<DocumentChunkSearchResult[]> {
-  const tokens = tokenize(input.query);
+  const tokens = tokenizeDocumentQuery(input.query);
   const limit = Math.min(Math.max(input.limit, 1), 10);
 
   if (!tokens.length) {
@@ -340,24 +359,28 @@ export async function searchDocumentChunks(input: {
 
   return rows
     .map(({ chunk, document }) => {
-      const rawKeywordScore = scoreChunk(chunk.content, tokens);
-      const keywordScore = normalizeKeywordScore(rawKeywordScore, tokens.length);
+      const rawKeywordScore = scoreDocumentChunkKeywords(chunk.content, tokens);
+      const keywordScore = normalizeDocumentKeywordScore(
+        rawKeywordScore,
+        tokens.length
+      );
       const chunkEmbedding = embeddingByChunkId.get(chunk.id);
       const vectorScore =
         queryEmbedding && chunkEmbedding
           ? clampScore(cosineSimilarity(queryEmbedding, chunkEmbedding))
           : 0;
-      const score =
-        retrievalMode === "hybrid"
-          ? keywordScore * 0.4 + vectorScore * 0.6
-          : keywordScore;
+      const score = calculateDocumentRetrievalScore({
+        keywordScore,
+        vectorScore,
+        retrievalMode
+      });
 
       return {
         documentId: chunk.documentId,
         chunkIndex: chunk.chunkIndex,
         content: chunk.content,
         sourceTitle: document.title,
-        score: roundScore(score),
+        score,
         keywordScore: roundScore(keywordScore),
         vectorScore: roundScore(vectorScore),
         retrievalMode
