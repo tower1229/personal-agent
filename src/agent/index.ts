@@ -7,6 +7,7 @@ import {
 } from "openai/resources/chat/completions";
 import { env } from "../config/env.js";
 import { listImportantMemories } from "../db/memories.js";
+import { emitProgress, type ProgressHandler } from "../services/progress.js";
 import { executeRegisteredTool, getOpenAITools } from "../tools/registry.js";
 
 const openai = new OpenAI({
@@ -23,6 +24,7 @@ export interface GenerateReplyInput {
   userId: string;
   chatId: string;
   runId: number;
+  onProgress?: ProgressHandler;
 }
 
 function getCurrentLocalTime(): string {
@@ -109,7 +111,8 @@ export async function generateReply({
   input,
   userId,
   chatId,
-  runId
+  runId,
+  onProgress
 }: GenerateReplyInput): Promise<string> {
   const memoryContext = await buildMemoryContext(userId);
   const messages: ChatCompletionMessageParam[] = [
@@ -117,13 +120,16 @@ export async function generateReply({
       role: "system",
       content: [
         "You are a concise personal Agent assistant.",
+        "When introducing your capabilities, identify yourself as a 个人助理.",
         "Reply in the user's language and keep answers practical.",
         "Do not use Markdown formatting in Telegram replies.",
         "For actions that require approval, clearly tell the user what will be done, the expiration time, and how to approve or cancel.",
         "For destructive operations, never only say 请回复确认. Tell the user to reply exactly 确认 <approval_code>, include the expiry time, describe the operation, and say 回复 取消 可放弃.",
         "Do not claim that a high-risk action was executed unless the approval has already been executed.",
         "Use todo tools when the user asks to create, list, or complete todos.",
+        "After completing a todo, include the word 完成 in the final reply.",
         "Use save_memory when the user clearly says to remember something, asks you to remember it later, or asks to save a preference.",
+        "After saving memory, include the word 记住 in the final reply.",
         "Use search_memory when the user asks what you remember, what they previously said, or asks about saved preferences or facts.",
         "For memory questions, always call search_memory before answering, even if relevant memories are already present in the injected context.",
         "Do not answer memory questions directly from the injected memory context; use it only as background after search_memory has run.",
@@ -191,9 +197,17 @@ export async function generateReply({
         continue;
       }
 
+      const toolName = toolCall.function.name;
+
       try {
+        await emitProgress(onProgress, {
+          type: "tool_start",
+          message: `调用工具：${toolName}`,
+          toolName
+        });
+
         const result = await executeRegisteredTool({
-          toolName: toolCall.function.name,
+          toolName,
           argsJson: toolCall.function.arguments,
           context: {
             userId,
@@ -201,6 +215,25 @@ export async function generateReply({
             runId
           }
         });
+
+        await emitProgress(onProgress, {
+          type: "tool_done",
+          message: `工具完成：${toolName}`,
+          toolName,
+          outcome: "succeeded"
+        });
+
+        if (
+          result &&
+          typeof result === "object" &&
+          "approvalRequestCreated" in result
+        ) {
+          await emitProgress(onProgress, {
+            type: "approval_required",
+            message: `需要用户确认：${toolName}`,
+            toolName
+          });
+        }
 
         messages.push({
           role: "tool",
@@ -210,6 +243,13 @@ export async function generateReply({
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
+
+        await emitProgress(onProgress, {
+          type: "tool_done",
+          message: `工具失败：${toolName}`,
+          toolName,
+          outcome: "failed"
+        });
 
         messages.push({
           role: "tool",

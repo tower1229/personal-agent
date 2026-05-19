@@ -7,6 +7,7 @@ import {
 } from "../db/runs.js";
 import { ingestDocument } from "../services/documentIngestion.js";
 import { handleUserTextMessage } from "../services/messageHandler.js";
+import { createTelegramProgressUpdater } from "./progressUpdater.js";
 
 const documentImportErrorMessage = "抱歉，文档导入失败。请稍后再试。";
 const maxUploadFileSizeBytes = 2 * 1024 * 1024;
@@ -205,14 +206,39 @@ export function createTelegramBot(): Telegraf {
       is_command: message.startsWith("/")
     };
 
-    const result = await handleUserTextMessage({
-      input: message,
-      userId,
-      chatId,
-      metadata
-    });
+    let progressUpdater: ReturnType<
+      typeof createTelegramProgressUpdater
+    > | null = null;
 
-    await replySafely(ctx, result.output);
+    try {
+      const progressMessage = await ctx.reply("正在处理...");
+      progressUpdater = createTelegramProgressUpdater({
+        ctx,
+        messageId: progressMessage.message_id
+      });
+    } catch (error) {
+      console.error("Failed to send Telegram progress message:", error);
+    }
+
+    try {
+      const result = await handleUserTextMessage({
+        input: message,
+        userId,
+        chatId,
+        metadata,
+        onProgress: progressUpdater?.onProgress
+      });
+
+      if (progressUpdater) {
+        await progressUpdater.finish(result.output);
+      } else {
+        await replySafely(ctx, result.output);
+      }
+    } catch (error) {
+      progressUpdater?.stop();
+      console.error("Telegram text handling failed:", error);
+      await replySafely(ctx, "抱歉，我刚刚处理消息时遇到问题。请稍后再试。");
+    }
   });
 
   bot.catch((error) => {

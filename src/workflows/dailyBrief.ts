@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { listDocuments } from "../db/documents.js";
 import { listImportantMemories } from "../db/memories.js";
 import { listOpenTodos } from "../db/todos.js";
+import { emitProgress, type ProgressHandler } from "../services/progress.js";
 import {
   completeWorkflowStep,
   createWorkflow,
@@ -48,6 +49,7 @@ async function runStep<T>(input: {
   workflowId: number;
   stepName: string;
   input?: unknown;
+  onProgress?: ProgressHandler;
   run: () => Promise<T>;
 }): Promise<T> {
   const step = await createWorkflowStep({
@@ -57,11 +59,23 @@ async function runStep<T>(input: {
   });
 
   try {
+    await emitProgress(input.onProgress, {
+      type: "workflow_step",
+      message: `工作流步骤：${input.stepName}`,
+      workflowStep: input.stepName
+    });
+
     const output = await input.run();
 
     await completeWorkflowStep({
       id: step.id,
       outputJson: toJson(output)
+    });
+    await emitProgress(input.onProgress, {
+      type: "workflow_step",
+      message: `工作流步骤完成：${input.stepName}`,
+      workflowStep: input.stepName,
+      outcome: "succeeded"
     });
 
     return output;
@@ -69,6 +83,12 @@ async function runStep<T>(input: {
     await failWorkflowStep({
       id: step.id,
       error: toErrorMessage(error)
+    });
+    await emitProgress(input.onProgress, {
+      type: "workflow_step",
+      message: `工作流步骤失败：${input.stepName}`,
+      workflowStep: input.stepName,
+      outcome: "failed"
     });
     throw error;
   }
@@ -113,7 +133,7 @@ async function generateBriefText(input: {
 }
 
 export async function runDailyBriefWorkflow(
-  input: DailyBriefWorkflowInput
+  input: DailyBriefWorkflowInput & { onProgress?: ProgressHandler }
 ): Promise<WorkflowRunResult> {
   const workflow = await createWorkflow({
     userId: input.userId,
@@ -132,6 +152,7 @@ export async function runDailyBriefWorkflow(
       input: {
         userId: input.userId
       },
+      onProgress: input.onProgress,
       run: () => listOpenTodos(input.userId)
     });
 
@@ -142,6 +163,7 @@ export async function runDailyBriefWorkflow(
         userId: input.userId,
         limit: 10
       },
+      onProgress: input.onProgress,
       run: () =>
         listImportantMemories({
           userId: input.userId,
@@ -155,6 +177,7 @@ export async function runDailyBriefWorkflow(
       input: {
         userId: input.userId
       },
+      onProgress: input.onProgress,
       run: () => listDocuments(input.userId)
     });
 
@@ -166,6 +189,7 @@ export async function runDailyBriefWorkflow(
         memoryCount: memories.length,
         documentCount: documents.length
       },
+      onProgress: input.onProgress,
       run: () =>
         generateBriefText({
           todos,
@@ -180,6 +204,7 @@ export async function runDailyBriefWorkflow(
       input: {
         outputLength: brief.length
       },
+      onProgress: input.onProgress,
       run: async () => {
         await updateWorkflowStatus({
           id: workflow.id,

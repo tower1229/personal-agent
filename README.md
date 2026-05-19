@@ -391,6 +391,32 @@ query token 只用于开发调试。URL 可能进入浏览器历史、代理日�
 
 Dashboard UI 只用于本地开发和调试，不建议暴露到公网。它不会提供 approval 执行、取消或任何写操作。
 
+## v0.5.1 Telegram Progress Trace
+
+Telegram 文本消息现在会先发送一条 progress message，并在处理过程中用 `editMessageText` 更新同一条消息。用户可以看到安全的执行进度，例如：
+
+```text
+正在处理...
+- 已创建运行记录
+- 正在分析请求
+- 调用工具：search_documents
+- 工具完成：search_documents
+- 正在生成最终回复
+```
+
+Progress trace 只展示安全状态摘要，不展示模型隐藏思考链、完整 prompt、API key、Telegram token、Admin token 或完整敏感 tool args。
+
+当前实现是兼容性优先的伪流式输出：
+
+- 处理开始后发送 `正在处理...`
+- 关键节点通过 `editMessageText` 更新同一条消息
+- 最终回答覆盖 progress message
+- 如果最终回答超过 Telegram 单条消息限制，会把第一段用于覆盖 progress message，后续内容用 `ctx.reply` 分段发送
+- progress 只保留最近 8 条事件，避免超过 Telegram 4096 字符限制
+- 处理期间会周期性发送 `typing` chat action
+
+后续如果需要更细粒度的草稿式体验，可以在兼容性验证后再升级到 Telegram `sendMessageDraft`，当前版本不使用它。
+
 ## Week 8 Eval
 
 Eval cases 位于 [eval/cases.json](eval/cases.json)。每次 eval run 会使用独立身份，避免污染真实用户和前一次 eval：

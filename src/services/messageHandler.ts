@@ -14,6 +14,7 @@ import {
 } from "../db/runs.js";
 import { executeRegisteredTool } from "../tools/registry.js";
 import { sanitizeTelegramText } from "../utils/sanitizeTelegramText.js";
+import { emitProgress, type ProgressHandler } from "./progress.js";
 import {
   DailyBriefWorkflowError,
   runDailyBriefWorkflow
@@ -28,6 +29,7 @@ export interface HandleUserTextMessageInput {
   userId: string;
   chatId: string;
   metadata: Record<string, unknown>;
+  onProgress?: ProgressHandler;
 }
 
 export interface HandleUserTextMessageResult {
@@ -101,12 +103,18 @@ async function handleApprovalDecision(input: {
   userId: string;
   chatId: string;
   runId: number;
+  onProgress?: ProgressHandler;
 }): Promise<string | null> {
   const decision = parseApprovalDecision(input.message);
 
   if (!decision) {
     return null;
   }
+
+  await emitProgress(input.onProgress, {
+    type: "status",
+    message: "正在处理确认回复"
+  });
 
   await expireOldApprovals();
 
@@ -116,6 +124,10 @@ async function handleApprovalDecision(input: {
   });
 
   if (latestApproval?.status === "expired") {
+    await emitProgress(input.onProgress, {
+      type: "approval_required",
+      message: "待确认操作已过期"
+    });
     return "待确认操作已过期，请重新发起。";
   }
 
@@ -138,10 +150,18 @@ async function handleApprovalDecision(input: {
       userId: input.userId,
       chatId: input.chatId
     });
+    await emitProgress(input.onProgress, {
+      type: "approval_required",
+      message: "已取消待确认操作"
+    });
     return "已取消这次操作。";
   }
 
   if (pendingApproval.approvalCode && !decision.code) {
+    await emitProgress(input.onProgress, {
+      type: "approval_required",
+      message: "需要确认码"
+    });
     return "这次操作需要确认码。请回复：确认 <确认码>。回复 取消 可放弃。";
   }
 
@@ -149,6 +169,10 @@ async function handleApprovalDecision(input: {
     pendingApproval.approvalCode &&
     decision.code !== pendingApproval.approvalCode
   ) {
+    await emitProgress(input.onProgress, {
+      type: "approval_required",
+      message: "确认码不正确"
+    });
     return "确认码不正确，操作未执行。请核对后回复：确认 <确认码>，或回复 取消。";
   }
 
@@ -159,19 +183,43 @@ async function handleApprovalDecision(input: {
   });
   let executedToolCallId: number | null = null;
 
-  const result = await executeRegisteredTool({
-    toolName: approved.toolName,
-    argsJson: approved.toolArgsJson,
-    context: {
-      userId: input.userId,
-      chatId: input.chatId,
-      runId: input.runId
-    },
-    allowHighRiskExecution: true,
-    onToolCallCreated(toolCallId) {
-      executedToolCallId = toolCallId;
-    }
+  await emitProgress(input.onProgress, {
+    type: "tool_start",
+    message: `调用工具：${approved.toolName}`,
+    toolName: approved.toolName
   });
+
+  let result: unknown;
+
+  try {
+    result = await executeRegisteredTool({
+      toolName: approved.toolName,
+      argsJson: approved.toolArgsJson,
+      context: {
+        userId: input.userId,
+        chatId: input.chatId,
+        runId: input.runId
+      },
+      allowHighRiskExecution: true,
+      onToolCallCreated(toolCallId) {
+        executedToolCallId = toolCallId;
+      }
+    });
+    await emitProgress(input.onProgress, {
+      type: "tool_done",
+      message: `工具完成：${approved.toolName}`,
+      toolName: approved.toolName,
+      outcome: "succeeded"
+    });
+  } catch (error) {
+    await emitProgress(input.onProgress, {
+      type: "tool_done",
+      message: `工具失败：${approved.toolName}`,
+      toolName: approved.toolName,
+      outcome: "failed"
+    });
+    throw error;
+  }
 
   await markApprovalExecuted({
     id: approved.id,
@@ -196,19 +244,28 @@ export async function handleUserTextMessage(
     metadata: initialMetadata,
     createdAt: new Date(startedAt)
   });
+  await emitProgress(input.onProgress, {
+    type: "status",
+    message: "已创建运行记录"
+  });
 
   try {
     const approvalOutput = await handleApprovalDecision({
       message: input.input,
       userId: input.userId,
       chatId: input.chatId,
-      runId: run.id
+      runId: run.id,
+      onProgress: input.onProgress
     });
 
     if (approvalOutput !== null) {
       const output = sanitizeTelegramText(approvalOutput);
       const latencyMs = Date.now() - startedAt;
 
+      await emitProgress(input.onProgress, {
+        type: "finalizing",
+        message: "正在生成最终回复"
+      });
       await markRunSucceeded({
         id: run.id,
         output,
@@ -226,7 +283,8 @@ export async function handleUserTextMessage(
         userId: input.userId,
         chatId: input.chatId,
         triggerMessage: input.input,
-        runId: run.id
+        runId: run.id,
+        onProgress: input.onProgress
       });
       const output = sanitizeTelegramText(result.output);
       const latencyMs = Date.now() - startedAt;
@@ -235,6 +293,10 @@ export async function handleUserTextMessage(
         workflow_id: result.workflowId
       };
 
+      await emitProgress(input.onProgress, {
+        type: "finalizing",
+        message: "正在生成最终回复"
+      });
       await markRunSucceeded({
         id: run.id,
         output,
@@ -248,11 +310,20 @@ export async function handleUserTextMessage(
       };
     }
 
+    await emitProgress(input.onProgress, {
+      type: "status",
+      message: "正在分析请求"
+    });
     const generatedOutput = await generateReply({
       input: input.input,
       userId: input.userId,
       chatId: input.chatId,
-      runId: run.id
+      runId: run.id,
+      onProgress: input.onProgress
+    });
+    await emitProgress(input.onProgress, {
+      type: "finalizing",
+      message: "正在生成最终回复"
     });
     const output = sanitizeTelegramText(generatedOutput);
     const latencyMs = Date.now() - startedAt;
