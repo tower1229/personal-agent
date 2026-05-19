@@ -348,6 +348,49 @@ GET /admin/approvals?runId=1
 
 这些接口只用于开发调试，不会返回 `.env`、Telegram Bot token、OpenAI API key 或 Admin token。
 
+## v0.5 Admin Dashboard UI
+
+Admin Dashboard UI 是基于现有 Hono Admin API 的只读 HTML 调试页面，不引入 React、Vite 或独立前端工程。所有页面都在 `/admin/ui` 下，复用同一个 Admin 鉴权规则：
+
+```http
+Authorization: Bearer <ADMIN_TOKEN>
+```
+
+curl 访问示例：
+
+```bash
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/runs
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/runs/1
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/workflows
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/approvals
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/documents
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/evals
+```
+
+浏览器调试如果不方便设置 Header，可以临时使用 query token：
+
+```text
+http://localhost:3000/admin/ui?token=<ADMIN_TOKEN>
+```
+
+query token 只用于开发调试。URL 可能进入浏览器历史、代理日志或截图，生产和公网环境不要使用这种方式。服务端验证 query token 后会设置一个仅限 `/admin/ui` 的 HttpOnly cookie，并重定向到不含 token 的 URL；页面不会把 token 写入 HTML、页面链接、数据库或应用日志。该 cookie 只用于 Admin Dashboard UI，不会让 JSON API 跳过 Bearer token 鉴权。
+
+页面清单：
+
+- `GET /admin/ui`：Dashboard 首页和快捷入口
+- `GET /admin/ui/runs`：最近 runs 列表
+- `GET /admin/ui/runs/:id`：run detail、tool_calls、approval_requests、workflow、workflow_steps
+- `GET /admin/ui/workflows`：workflow 列表
+- `GET /admin/ui/workflows/:id`：workflow detail 和 steps
+- `GET /admin/ui/approvals`：approval_requests，只读，高风险和过期项会明显标记
+- `GET /admin/ui/documents`：documents 列表
+- `GET /admin/ui/documents/:id/chunks`：document chunks 和 embedding 状态
+- `GET /admin/ui/evals`：eval_runs 列表
+- `GET /admin/ui/evals/:id`：eval_results 明细
+
+Dashboard UI 只用于本地开发和调试，不建议暴露到公网。它不会提供 approval 执行、取消或任何写操作。
+
 ## Week 8 Eval
 
 Eval cases 位于 [eval/cases.json](eval/cases.json)。每次 eval run 会使用独立身份，避免污染真实用户和前一次 eval：
@@ -451,5 +494,4 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 ## 下一步计划
 
 - 为 document RAG 增加 chunk rerank 和更稳定的中文分词。
-- 为 Admin API 增加只读 HTML dashboard。
 - 增加自动化测试和 CI。

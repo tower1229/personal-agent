@@ -1,86 +1,47 @@
 import { Hono } from "hono";
 import {
-  getApprovalRequests,
-  getDocumentChunks,
-  getDocuments,
-  getMemories,
-  getRunDetail,
-  getRuns,
-  getToolCalls,
-  getWorkflowDetail,
-  getWorkflows
-} from "../db/admin.js";
+  getEvalRunDetailForAdmin,
+  getRunDetailForAdmin,
+  getWorkflowDetailForAdmin,
+  listApprovalRequestsForAdmin,
+  listDocumentChunksForAdmin,
+  listDocumentsForAdmin,
+  listEvalRunsForAdmin,
+  listMemoriesForAdmin,
+  listRunsForAdmin,
+  listToolCallsForAdmin,
+  listWorkflowsForAdmin,
+  parseId,
+  parseLimit,
+  parseOptionalId
+} from "./data.js";
 import {
-  serializeApprovalRequest,
-  serializeDocument,
-  serializeDocumentChunk,
-  serializeRun,
-  serializeToolCall,
-  serializeWorkflow,
-  serializeWorkflowStep
-} from "./serializers.js";
+  renderApprovalsPage,
+  renderDashboardPage,
+  renderDocumentChunksPage,
+  renderDocumentsPage,
+  renderEvalDetailPage,
+  renderEvalRunsPage,
+  renderMessagePage,
+  renderRunDetailPage,
+  renderRunsPage,
+  renderWorkflowDetailPage,
+  renderWorkflowsPage
+} from "./ui/pages.js";
 
 export const adminRoutes = new Hono();
-
-function parseLimit(value: string | undefined, defaultValue: number): number {
-  if (!value) {
-    return defaultValue;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-
-  if (Number.isNaN(parsed)) {
-    return defaultValue;
-  }
-
-  return Math.min(Math.max(parsed, 1), 100);
-}
-
-function parseId(value: string): number | null {
-  const parsed = Number.parseInt(value, 10);
-
-  if (Number.isNaN(parsed) || parsed < 1) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function parseOptionalId(value: string | undefined): number | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  return parseId(value) ?? undefined;
-}
-
-function getWorkflowIdFromRun(run: ReturnType<typeof serializeRun>): number | null {
-  const metadata = run.metadataJson;
-
-  if (!metadata || typeof metadata !== "object" || !("workflow_id" in metadata)) {
-    return null;
-  }
-
-  const workflowId = Number(metadata.workflow_id);
-
-  if (Number.isNaN(workflowId) || workflowId < 1) {
-    return null;
-  }
-
-  return workflowId;
-}
 
 adminRoutes.get("/health", (c) => c.json({ ok: true }));
 
 adminRoutes.get("/runs", async (c) => {
-  const runs = await getRuns({
+  const runs = await listRunsForAdmin({
     userId: c.req.query("userId"),
     status: c.req.query("status"),
     limit: parseLimit(c.req.query("limit"), 20)
   });
 
   return c.json({
-    runs: runs.map((run) => serializeRun(run))
+    runs
   });
 });
 
@@ -91,36 +52,23 @@ adminRoutes.get("/runs/:id", async (c) => {
     return c.json({ error: "Invalid run id" }, 400);
   }
 
-  const detail = await getRunDetail(id);
+  const detail = await getRunDetailForAdmin(id);
 
   if (!detail) {
     return c.json({ error: "Run not found" }, 404);
   }
 
-  const run = serializeRun(detail.run);
-  const workflowByRun = detail.workflows[0] ?? null;
-  const workflowId = workflowByRun ? workflowByRun.id : getWorkflowIdFromRun(run);
-  const workflowDetail = workflowId ? await getWorkflowDetail(workflowId) : null;
-
   return c.json({
-    run,
-    toolCalls: detail.toolCalls.map((toolCall) =>
-      serializeToolCall(toolCall)
-    ),
-    approvalRequests: detail.approvalRequests.map((approval) =>
-      serializeApprovalRequest(approval)
-    ),
-    workflow: workflowDetail
-      ? serializeWorkflow(workflowDetail.workflow)
-      : null,
-    workflowSteps: workflowDetail
-      ? workflowDetail.steps.map((step) => serializeWorkflowStep(step))
-      : []
+    run: detail.run,
+    toolCalls: detail.toolCalls,
+    approvalRequests: detail.approvalRequests,
+    workflow: detail.workflow,
+    workflowSteps: detail.workflowSteps
   });
 });
 
 adminRoutes.get("/tool-calls", async (c) => {
-  const toolCalls = await getToolCalls({
+  const toolCalls = await listToolCallsForAdmin({
     runId: parseOptionalId(c.req.query("runId")),
     userId: c.req.query("userId"),
     toolName: c.req.query("toolName"),
@@ -129,12 +77,12 @@ adminRoutes.get("/tool-calls", async (c) => {
   });
 
   return c.json({
-    toolCalls: toolCalls.map((toolCall) => serializeToolCall(toolCall))
+    toolCalls
   });
 });
 
 adminRoutes.get("/workflows", async (c) => {
-  const workflows = await getWorkflows({
+  const workflows = await listWorkflowsForAdmin({
     runId: parseOptionalId(c.req.query("runId")),
     userId: c.req.query("userId"),
     status: c.req.query("status"),
@@ -143,7 +91,7 @@ adminRoutes.get("/workflows", async (c) => {
   });
 
   return c.json({
-    workflows: workflows.map((workflow) => serializeWorkflow(workflow))
+    workflows
   });
 });
 
@@ -154,26 +102,26 @@ adminRoutes.get("/workflows/:id", async (c) => {
     return c.json({ error: "Invalid workflow id" }, 400);
   }
 
-  const detail = await getWorkflowDetail(id);
+  const detail = await getWorkflowDetailForAdmin(id);
 
   if (!detail) {
     return c.json({ error: "Workflow not found" }, 404);
   }
 
   return c.json({
-    workflow: serializeWorkflow(detail.workflow),
-    steps: detail.steps.map((step) => serializeWorkflowStep(step))
+    workflow: detail.workflow,
+    steps: detail.steps
   });
 });
 
 adminRoutes.get("/documents", async (c) => {
-  const documents = await getDocuments({
+  const documents = await listDocumentsForAdmin({
     userId: c.req.query("userId"),
     limit: parseLimit(c.req.query("limit"), 50)
   });
 
   return c.json({
-    documents: documents.map((document) => serializeDocument(document))
+    documents
   });
 });
 
@@ -184,18 +132,18 @@ adminRoutes.get("/documents/:id/chunks", async (c) => {
     return c.json({ error: "Invalid document id" }, 400);
   }
 
-  const chunks = await getDocumentChunks({
+  const chunks = await listDocumentChunksForAdmin({
     documentId: id,
     userId: c.req.query("userId")
   });
 
   return c.json({
-    chunks: chunks.map((chunk) => serializeDocumentChunk(chunk))
+    chunks
   });
 });
 
 adminRoutes.get("/memories", async (c) => {
-  const memories = await getMemories({
+  const memories = await listMemoriesForAdmin({
     userId: c.req.query("userId"),
     type: c.req.query("type"),
     limit: parseLimit(c.req.query("limit"), 50)
@@ -207,7 +155,7 @@ adminRoutes.get("/memories", async (c) => {
 });
 
 adminRoutes.get("/approvals", async (c) => {
-  const approvals = await getApprovalRequests({
+  const approvals = await listApprovalRequestsForAdmin({
     runId: parseOptionalId(c.req.query("runId")),
     userId: c.req.query("userId"),
     status: c.req.query("status"),
@@ -215,8 +163,116 @@ adminRoutes.get("/approvals", async (c) => {
   });
 
   return c.json({
-    approvals: approvals.map((approval) =>
-      serializeApprovalRequest(approval)
-    )
+    approvals
   });
+});
+
+adminRoutes.get("/ui", (c) => c.html(renderDashboardPage()));
+
+adminRoutes.get("/ui/runs", async (c) => {
+  const runs = await listRunsForAdmin({
+    limit: parseLimit(c.req.query("limit"), 50)
+  });
+
+  return c.html(renderRunsPage(runs));
+});
+
+adminRoutes.get("/ui/runs/:id", async (c) => {
+  const id = parseId(c.req.param("id"));
+
+  if (!id) {
+    return c.html(renderMessagePage("Invalid run id", "Run id must be a positive integer."), 400);
+  }
+
+  const detail = await getRunDetailForAdmin(id);
+
+  if (!detail) {
+    return c.html(renderMessagePage("Run not found", `Run ${id} was not found.`), 404);
+  }
+
+  return c.html(renderRunDetailPage(detail));
+});
+
+adminRoutes.get("/ui/workflows", async (c) => {
+  const workflows = await listWorkflowsForAdmin({
+    limit: parseLimit(c.req.query("limit"), 50)
+  });
+
+  return c.html(renderWorkflowsPage(workflows));
+});
+
+adminRoutes.get("/ui/workflows/:id", async (c) => {
+  const id = parseId(c.req.param("id"));
+
+  if (!id) {
+    return c.html(
+      renderMessagePage("Invalid workflow id", "Workflow id must be a positive integer."),
+      400
+    );
+  }
+
+  const detail = await getWorkflowDetailForAdmin(id);
+
+  if (!detail) {
+    return c.html(renderMessagePage("Workflow not found", `Workflow ${id} was not found.`), 404);
+  }
+
+  return c.html(renderWorkflowDetailPage(detail));
+});
+
+adminRoutes.get("/ui/approvals", async (c) => {
+  const approvals = await listApprovalRequestsForAdmin({
+    limit: parseLimit(c.req.query("limit"), 100)
+  });
+
+  return c.html(renderApprovalsPage(approvals));
+});
+
+adminRoutes.get("/ui/documents", async (c) => {
+  const documents = await listDocumentsForAdmin({
+    limit: parseLimit(c.req.query("limit"), 100)
+  });
+
+  return c.html(renderDocumentsPage(documents));
+});
+
+adminRoutes.get("/ui/documents/:id/chunks", async (c) => {
+  const id = parseId(c.req.param("id"));
+
+  if (!id) {
+    return c.html(
+      renderMessagePage("Invalid document id", "Document id must be a positive integer."),
+      400
+    );
+  }
+
+  const chunks = await listDocumentChunksForAdmin({
+    documentId: id
+  });
+
+  return c.html(renderDocumentChunksPage(id, chunks));
+});
+
+adminRoutes.get("/ui/evals", async (c) => {
+  const evalRuns = await listEvalRunsForAdmin({
+    limit: parseLimit(c.req.query("limit"), 50)
+  });
+
+  return c.html(renderEvalRunsPage(evalRuns));
+});
+
+adminRoutes.get("/ui/evals/:id", async (c) => {
+  const id = parseId(c.req.param("id"));
+
+  if (!id) {
+    return c.html(renderMessagePage("Invalid eval id", "Eval id must be a positive integer."), 400);
+  }
+
+  const detail = await getEvalRunDetailForAdmin(id);
+
+  if (!detail) {
+    return c.html(renderMessagePage("Eval not found", `Eval ${id} was not found.`), 404);
+  }
+
+  return c.html(renderEvalDetailPage(detail));
 });

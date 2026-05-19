@@ -34,6 +34,7 @@ export interface DocumentChunkWithEmbeddingStatus extends DocumentChunk {
   embeddingModel: string | null;
   embeddingProvider: string | null;
   embeddingDimensions: number | null;
+  dimensions: number | null;
 }
 
 function hashContent(content: string): string {
@@ -436,7 +437,8 @@ export async function listDocumentChunks(input: {
       hasEmbedding: Boolean(embedding),
       embeddingModel: embedding?.model ?? null,
       embeddingProvider: embedding?.provider ?? null,
-      embeddingDimensions: embedding?.dimensions ?? null
+      embeddingDimensions: embedding?.dimensions ?? null,
+      dimensions: embedding?.dimensions ?? null
     };
   });
 }

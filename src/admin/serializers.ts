@@ -61,3 +61,14 @@ export function serializeDocumentChunk(chunk: Record<string, unknown>) {
     metadataJson: parseJson(chunk.metadataJson as string | null)
   };
 }
+
+export function serializeEvalRun(evalRun: Record<string, unknown>) {
+  return evalRun;
+}
+
+export function serializeEvalResult(result: Record<string, unknown>) {
+  return {
+    ...result,
+    scoreJson: parseJson(result.scoreJson as string | null)
+  };
+}

@@ -1,8 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
+import { listDocumentChunks } from "./documents.js";
 import { db } from "./client.js";
 import {
   approvalRequests,
-  documentChunks,
+  evalResults,
+  evalRuns,
   documents,
   memories,
   runs,
@@ -229,17 +231,7 @@ export async function getDocumentChunks(input: {
   documentId: number;
   userId?: string;
 }) {
-  const conditions = [eq(documentChunks.documentId, input.documentId)];
-
-  if (input.userId) {
-    conditions.push(eq(documentChunks.userId, input.userId));
-  }
-
-  return db
-    .select()
-    .from(documentChunks)
-    .where(and(...conditions))
-    .orderBy(documentChunks.chunkIndex);
+  return listDocumentChunks(input);
 }
 
 export async function getApprovalRequests(input: {
@@ -281,4 +273,38 @@ export async function getApprovalRequests(input: {
   return query
     .orderBy(desc(approvalRequests.createdAt))
     .limit(clampLimit(input.limit, 100));
+}
+
+export async function getEvalRuns(input: { limit: number }) {
+  return db
+    .select()
+    .from(evalRuns)
+    .orderBy(desc(evalRuns.startedAt), desc(evalRuns.id))
+    .limit(clampLimit(input.limit, 100));
+}
+
+export async function getEvalResults(input: { evalRunId: number }) {
+  return db
+    .select()
+    .from(evalResults)
+    .where(eq(evalResults.evalRunId, input.evalRunId))
+    .orderBy(evalResults.id);
+}
+
+export async function getEvalRunDetail(id: number) {
+  const evalRunRows = await db
+    .select()
+    .from(evalRuns)
+    .where(eq(evalRuns.id, id))
+    .limit(1);
+  const evalRun = evalRunRows[0] ?? null;
+
+  if (!evalRun) {
+    return null;
+  }
+
+  return {
+    evalRun,
+    results: await getEvalResults({ evalRunId: id })
+  };
 }
