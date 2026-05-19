@@ -9,6 +9,7 @@ import {
 import { cosineSimilarity } from "../src/services/embeddings.js";
 import { parseApprovalDecision } from "../src/services/messageHandler.js";
 import { prettyJson } from "../src/admin/ui/formatters.js";
+import { createMockLlmClient } from "../src/llm/mockClient.js";
 import { sanitizeTelegramText } from "../src/utils/sanitizeTelegramText.js";
 
 describe("unit helpers", () => {
@@ -87,5 +88,31 @@ describe("unit helpers", () => {
         retrievalMode: "keyword_fallback"
       })
     ).toBe(0.5);
+  });
+
+  it("mock LLM exposes deterministic simulation modes", async () => {
+    const empty = await createMockLlmClient({
+      behavior: "empty_response"
+    }).createChatCompletion({
+      model: "mock",
+      messages: [{ role: "user", content: "hello" }],
+      tools: [],
+      tool_choice: "auto",
+      stream: false
+    });
+    const tool = await createMockLlmClient({
+      behavior: "search_documents_tool_call"
+    }).createChatCompletion({
+      model: "mock",
+      messages: [{ role: "user", content: "根据知识库查询" }],
+      tools: [],
+      tool_choice: "auto",
+      stream: false
+    });
+
+    expect(empty.message?.content).toBe("");
+    expect(tool.message?.tool_calls?.[0]?.function.name).toBe(
+      "search_documents"
+    );
   });
 });
