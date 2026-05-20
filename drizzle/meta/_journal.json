@@ -78,6 +78,13 @@
       "when": 1779109607135,
       "tag": "0010_swift_thaddeus_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1779277800000,
+      "tag": "0011_memory_hardening",
+      "breakpoints": true
     }
   ]
 }

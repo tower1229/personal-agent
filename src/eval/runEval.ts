@@ -6,6 +6,7 @@ import { createMockLlmClient } from "../llm/mockClient.js";
 import { type LlmClient } from "../llm/types.js";
 import { handleUserTextMessage } from "../services/messageHandler.js";
 import { executeRegisteredTool } from "../tools/registry.js";
+import { deleteMemory, searchMemoriesStrict } from "../db/memories.js";
 import { scoreEvalCase } from "./scoring.js";
 import {
   type EvalCase,
@@ -76,6 +77,26 @@ async function runSetupAction(input: {
         context
       });
       return;
+    case "delete_memory_matching": {
+      const [memory] = await searchMemoriesStrict({
+        userId: input.userId,
+        keyword: input.action.keyword,
+        limit: 1,
+        sourceRunId: null,
+        reason: input.action.reason ?? "eval setup delete"
+      });
+
+      if (memory) {
+        await deleteMemory({
+          userId: input.userId,
+          id: memory.id,
+          sourceRunId: null,
+          reason: input.action.reason ?? "eval setup delete"
+        });
+      }
+
+      return;
+    }
     case "add_document":
       await executeRegisteredTool({
         toolName: "add_document",

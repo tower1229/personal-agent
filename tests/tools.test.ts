@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { db } from "../src/db/client.js";
 import { listDocumentChunks } from "../src/db/documents.js";
+import { deleteMemory, searchMemories } from "../src/db/memories.js";
+import { memories } from "../src/db/schema.js";
 import { executeRegisteredTool } from "../src/tools/registry.js";
 
 const context = {
@@ -80,6 +83,180 @@ describe("registered tools", () => {
       exactKeywordMatched: true,
       memories: [expect.objectContaining({ content: "用户喜欢 TypeScript" })]
     });
+  });
+
+  it("deduplicates exact memory saves and updates access count", async () => {
+    const first = await executeRegisteredTool({
+      toolName: "save_memory",
+      argsJson: JSON.stringify({
+        type: "preference",
+        content: "用户喜欢 TypeScript。",
+        confidence: 90,
+        importance: 80,
+        source: "unit-test"
+      }),
+      context
+    });
+    const second = await executeRegisteredTool({
+      toolName: "save_memory",
+      argsJson: JSON.stringify({
+        type: "preference",
+        content: " 用户喜欢 TypeScript! ",
+        confidence: 90,
+        importance: 80,
+        source: "unit-test"
+      }),
+      context
+    });
+    const rows = await db.select().from(memories);
+
+    expect(first).toMatchObject({ status: "created" });
+    expect(second).toMatchObject({ status: "duplicate" });
+    expect(rows.filter((memory) => memory.status === "active")).toHaveLength(1);
+    expect(rows[0]?.accessCount).toBe(1);
+
+    await executeRegisteredTool({
+      toolName: "search_memory",
+      argsJson: JSON.stringify({
+        keyword: "TypeScript",
+        limit: 5
+      }),
+      context
+    });
+
+    const afterSearch = await db.select().from(memories);
+    expect(afterSearch[0]?.accessCount).toBe(2);
+    expect(afterSearch[0]?.lastAccessedAt).toBeInstanceOf(Date);
+  });
+
+  it("merges semantic duplicate memories when embeddings are available", async () => {
+    const previousDisableEmbeddings = process.env.DISABLE_EMBEDDINGS;
+    const previousEvalMock = process.env.EVAL_MOCK;
+    const semanticContext = {
+      ...context,
+      userId: "tool-test-semantic-memory-user"
+    };
+
+    process.env.DISABLE_EMBEDDINGS = "0";
+    process.env.EVAL_MOCK = "1";
+
+    try {
+      await executeRegisteredTool({
+        toolName: "save_memory",
+        argsJson: JSON.stringify({
+          type: "preference",
+          content: "abcabcabcabc",
+          confidence: 80,
+          importance: 70,
+          source: "unit-test"
+        }),
+        context: semanticContext
+      });
+      const second = await executeRegisteredTool({
+        toolName: "save_memory",
+        argsJson: JSON.stringify({
+          type: "preference",
+          content: "abcabcabcabcx",
+          confidence: 80,
+          importance: 70,
+          source: "unit-test"
+        }),
+        context: semanticContext
+      });
+      const activeRows = (await db.select().from(memories)).filter(
+        (memory) => memory.userId === semanticContext.userId && memory.status === "active"
+      );
+
+      expect(second).toMatchObject({ status: expect.stringMatching(/merged|updated/) });
+      expect(activeRows).toHaveLength(1);
+    } finally {
+      if (typeof previousDisableEmbeddings === "undefined") {
+        delete process.env.DISABLE_EMBEDDINGS;
+      } else {
+        process.env.DISABLE_EMBEDDINGS = previousDisableEmbeddings;
+      }
+
+      if (typeof previousEvalMock === "undefined") {
+        delete process.env.EVAL_MOCK;
+      } else {
+        process.env.EVAL_MOCK = previousEvalMock;
+      }
+    }
+  });
+
+  it("does not return deleted memories from search", async () => {
+    const saved = await executeRegisteredTool({
+      toolName: "save_memory",
+      argsJson: JSON.stringify({
+        type: "note",
+        content: "删除后不应返回的记忆",
+        confidence: 80,
+        importance: 70,
+        source: "unit-test"
+      }),
+      context
+    });
+    const memoryId = (saved as { memory: { id: number } }).memory.id;
+
+    await deleteMemory({
+      userId: context.userId,
+      id: memoryId,
+      sourceRunId: null,
+      reason: "unit-test"
+    });
+
+    const results = await searchMemories({
+      userId: context.userId,
+      keyword: "删除后不应返回",
+      limit: 5,
+      sourceRunId: null,
+      reason: "unit-test"
+    });
+    const rows = await db.select().from(memories);
+
+    expect(results).toEqual([]);
+    expect(rows.find((memory) => memory.id === memoryId)?.status).toBe("deleted");
+  });
+
+  it("archives conflicting answer style preferences", async () => {
+    await executeRegisteredTool({
+      toolName: "save_memory",
+      argsJson: JSON.stringify({
+        type: "preference",
+        content: "用户希望回答尽量详细",
+        confidence: 80,
+        importance: 70,
+        source: "unit-test"
+      }),
+      context: {
+        ...context,
+        userId: "tool-test-conflict-memory-user"
+      }
+    });
+    await executeRegisteredTool({
+      toolName: "save_memory",
+      argsJson: JSON.stringify({
+        type: "preference",
+        content: "用户希望回答尽量简洁",
+        confidence: 80,
+        importance: 70,
+        source: "unit-test"
+      }),
+      context: {
+        ...context,
+        userId: "tool-test-conflict-memory-user"
+      }
+    });
+
+    const rows = (await db.select().from(memories)).filter(
+      (memory) => memory.userId === "tool-test-conflict-memory-user"
+    );
+
+    expect(rows.filter((memory) => memory.status === "active")).toHaveLength(1);
+    expect(rows.filter((memory) => memory.status === "archived")).toHaveLength(1);
+    expect(rows.find((memory) => memory.status === "archived")?.supersededByMemoryId).toBe(
+      rows.find((memory) => memory.status === "active")?.id
+    );
   });
 
   it("adds documents and searches via keyword fallback without embeddings", async () => {

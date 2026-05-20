@@ -325,6 +325,7 @@ export function renderDashboardPage(): string {
         <a class="quick-link" href="/admin/ui/runs">Runs</a>
         <a class="quick-link" href="/admin/ui/workflows">Workflows</a>
         <a class="quick-link" href="/admin/ui/approvals">Approvals</a>
+        <a class="quick-link" href="/admin/ui/memories">Memories</a>
         <a class="quick-link" href="/admin/ui/documents">Documents</a>
         <a class="quick-link" href="/admin/ui/evals">Eval Runs</a>
       </div>
@@ -602,6 +603,110 @@ export function renderDocumentsPage(
         "No documents found"
       )}
     </section>`
+  );
+}
+
+export function renderMemoriesPage(
+  memoryRows: Row[],
+  filters: FilterValues = {}
+): string {
+  const rows = memoryRows.map((memory) => {
+    const status = String(valueOf(memory, "status") ?? "active");
+    const rowClass = ["archived", "deleted"].includes(status) ? "row-muted" : "";
+
+    return `<tr class="${rowClass}">
+      <td class="mono">${link(`/admin/ui/memories/${valueOf(memory, "id")}`, valueOf(memory, "id"))}</td>
+      <td>${badge(status)}</td>
+      <td>${field(memory, "type")}</td>
+      <td>${field(memory, "userId")}</td>
+      <td class="preview">${escapeHtml(truncate(valueOf(memory, "content"), 140))}</td>
+      <td class="mono">${field(memory, "accessCount")}</td>
+      <td>${escapeHtml(formatDate(valueOf(memory, "lastAccessedAt")))}</td>
+      <td class="mono">${field(memory, "supersededByMemoryId")}</td>
+      <td>${escapeHtml(formatDate(valueOf(memory, "updatedAt")))}</td>
+    </tr>`;
+  });
+
+  return layout(
+    "Memories",
+    `<section class="section"><h1>Memories</h1>
+      ${filterForm("/admin/ui/memories", [
+        input("userId", "userId", filters.userId),
+        select("type", "type", filters.type, ["profile", "preference", "fact", "project", "note"]),
+        select("status", "status", filters.status, ["active", "archived", "deleted"]),
+        input("limit", "limit", filters.limit ?? 100)
+      ])}
+      ${table(
+        [
+          "id",
+          "status",
+          "type",
+          "userId",
+          "content",
+          "accessCount",
+          "lastAccessedAt",
+          "supersededByMemoryId",
+          "updatedAt"
+        ],
+        rows,
+        "No memories found"
+      )}
+    </section>`
+  );
+}
+
+export function renderMemoryDetailPage(detail: {
+  memory: Row;
+  events: Row[];
+  embeddings: Row[];
+}): string {
+  const memory = detail.memory;
+  const eventRows = detail.events.map((event) => `<tr>
+    <td class="mono">${field(event, "id")}</td>
+    <td>${field(event, "eventType")}</td>
+    <td class="mono">${field(event, "sourceRunId")}</td>
+    <td>${field(event, "reason")}</td>
+    <td>${escapeHtml(formatDate(valueOf(event, "createdAt")))}</td>
+  </tr>`);
+  const embeddingRows = detail.embeddings.map((embedding) => `<tr>
+    <td class="mono">${field(embedding, "id")}</td>
+    <td>${field(embedding, "provider")}</td>
+    <td>${field(embedding, "model")}</td>
+    <td class="mono">${field(embedding, "dimensions")}</td>
+    <td>${escapeHtml(formatDate(valueOf(embedding, "createdAt")))}</td>
+  </tr>`);
+
+  return layout(
+    `Memory ${valueOf(memory, "id")}`,
+    `<section class="section">
+      <h1>Memory ${escapeHtml(valueOf(memory, "id"))}</h1>
+      ${rowsFromKeyValues(memory, [
+        "id",
+        "status",
+        "type",
+        "userId",
+        "content",
+        "normalizedContent",
+        "canonicalKey",
+        "confidence",
+        "importance",
+        "accessCount",
+        "lastAccessedAt",
+        "supersededByMemoryId",
+        "createdAt",
+        "updatedAt"
+      ])}
+    </section>
+    <section class="section"><h2>memory_events</h2>${table(
+      ["id", "eventType", "sourceRunId", "reason", "createdAt"],
+      eventRows,
+      "No memory events"
+    )}</section>
+    <section class="section"><h2>memory_embeddings</h2>${table(
+      ["id", "provider", "model", "dimensions", "createdAt"],
+      embeddingRows,
+      "No memory embeddings"
+    )}</section>`
   );
 }
 

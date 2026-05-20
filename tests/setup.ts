@@ -37,6 +37,7 @@ beforeEach(() => {
     DELETE FROM document_chunks;
     DELETE FROM documents;
     DELETE FROM approval_requests;
+    DELETE FROM memory_embeddings;
     DELETE FROM memory_events;
     DELETE FROM memories;
     DELETE FROM tool_calls;

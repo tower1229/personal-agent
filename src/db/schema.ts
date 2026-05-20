@@ -22,9 +22,18 @@ export const memoryEventTypes = [
   "created",
   "updated",
   "deleted",
-  "searched"
+  "searched",
+  "duplicate_detected",
+  "merged",
+  "superseded",
+  "archived",
+  "accessed",
+  "conflict_detected"
 ] as const;
 export type MemoryEventType = (typeof memoryEventTypes)[number];
+
+export const memoryStatuses = ["active", "archived", "deleted"] as const;
+export type MemoryStatus = (typeof memoryStatuses)[number];
 
 export const approvalRequestStatuses = [
   "pending",
@@ -114,11 +123,17 @@ export const memories = sqliteTable("memories", {
   userId: text("user_id").notNull(),
   type: text("type", { enum: memoryTypes }).notNull(),
   content: text("content").notNull(),
+  normalizedContent: text("normalized_content"),
+  canonicalKey: text("canonical_key"),
+  status: text("status", { enum: memoryStatuses }).notNull().default("active"),
   confidence: integer("confidence").notNull().default(80),
   importance: integer("importance").notNull().default(50),
   source: text("source"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  lastAccessedAt: integer("last_accessed_at", { mode: "timestamp_ms" }),
+  accessCount: integer("access_count").notNull().default(0),
+  supersededByMemoryId: integer("superseded_by_memory_id")
 });
 
 export const memoryEvents = sqliteTable("memory_events", {
@@ -128,6 +143,17 @@ export const memoryEvents = sqliteTable("memory_events", {
   eventType: text("event_type", { enum: memoryEventTypes }).notNull(),
   sourceRunId: integer("source_run_id"),
   reason: text("reason"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+});
+
+export const memoryEmbeddings = sqliteTable("memory_embeddings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memoryId: integer("memory_id").notNull(),
+  userId: text("user_id").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  embeddingJson: text("embedding_json").notNull(),
+  dimensions: integer("dimensions").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
@@ -237,6 +263,8 @@ export type Memory = typeof memories.$inferSelect;
 export type NewMemory = typeof memories.$inferInsert;
 export type MemoryEvent = typeof memoryEvents.$inferSelect;
 export type NewMemoryEvent = typeof memoryEvents.$inferInsert;
+export type MemoryEmbedding = typeof memoryEmbeddings.$inferSelect;
+export type NewMemoryEmbedding = typeof memoryEmbeddings.$inferInsert;
 export type ApprovalRequest = typeof approvalRequests.$inferSelect;
 export type NewApprovalRequest = typeof approvalRequests.$inferInsert;
 export type Document = typeof documents.$inferSelect;

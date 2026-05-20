@@ -7,6 +7,8 @@ import {
   evalRuns,
   documents,
   memories,
+  memoryEmbeddings,
+  memoryEvents,
   runs,
   toolCalls,
   workflows,
@@ -184,6 +186,7 @@ export async function getWorkflowDetail(id: number) {
 export async function getMemories(input: {
   userId?: string;
   type?: string;
+  status?: string;
   limit: number;
 }) {
   const conditions = [];
@@ -201,6 +204,12 @@ export async function getMemories(input: {
     );
   }
 
+  if (input.status) {
+    conditions.push(
+      eq(memories.status, input.status as "active" | "archived" | "deleted")
+    );
+  }
+
   let query = db.select().from(memories).$dynamic();
 
   if (conditions.length) {
@@ -210,6 +219,36 @@ export async function getMemories(input: {
   return query
     .orderBy(desc(memories.updatedAt))
     .limit(clampLimit(input.limit, 100));
+}
+
+export async function getMemoryDetail(id: number) {
+  const memoryRows = await db
+    .select()
+    .from(memories)
+    .where(eq(memories.id, id))
+    .limit(1);
+  const memory = memoryRows[0] ?? null;
+
+  if (!memory) {
+    return null;
+  }
+
+  const events = await db
+    .select()
+    .from(memoryEvents)
+    .where(eq(memoryEvents.memoryId, id))
+    .orderBy(desc(memoryEvents.createdAt));
+  const embeddings = await db
+    .select()
+    .from(memoryEmbeddings)
+    .where(eq(memoryEmbeddings.memoryId, id))
+    .orderBy(desc(memoryEmbeddings.createdAt));
+
+  return {
+    memory,
+    events,
+    embeddings
+  };
 }
 
 export async function getDocuments(input: {

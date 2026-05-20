@@ -5,6 +5,7 @@ import {
   getEvalRunDetail,
   getEvalRuns,
   getMemories,
+  getMemoryDetail,
   getRunDetail,
   getRuns,
   getToolCalls,
@@ -173,9 +174,20 @@ export async function listDocumentChunksForAdmin(input: {
 export async function listMemoriesForAdmin(input: {
   userId?: string;
   type?: string;
+  status?: string;
   limit: number;
 }) {
   return getMemories(input);
+}
+
+export async function getMemoryDetailForAdmin(id: number) {
+  const detail = await getMemoryDetail(id);
+
+  if (!detail) {
+    return null;
+  }
+
+  return detail;
 }
 
 export async function listApprovalRequestsForAdmin(input: {

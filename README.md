@@ -197,6 +197,21 @@ Agent 会让模型决定是否调用 todo 工具。工具参数会先经过 Zod 
 
 Agent 会在用户明确要求“记住”“以后请记得”“保存这个偏好”时调用 `save_memory`。当用户询问之前说过什么或偏好时，会调用 `search_memory`。每次回复前，Agent 还会自动加载当前用户最多 10 条重要记忆作为上下文，但不会把所有历史聊天塞进 prompt。
 
+## v0.8.x Memory Hardening
+
+长期记忆不再是简单 append-only。`save_memory` 会先规范化内容并尝试去重：
+
+- `normalizeMemoryContent` 会 trim、合并空白、英文小写、去除明显标点差异，同时保留中文语义。
+- exact duplicate 会返回 `status = duplicate`，不会新增 active memory，只更新 `updated_at`、`last_accessed_at` 和 `access_count`，并写入 `memory_events.duplicate_detected`。
+- 如果 embedding 可用，会为 memory 写入 `memory_embeddings`，并用 similarity 检测语义重复；相似度达到阈值时返回 `merged` 或 `updated`，并写入 `merged` / `updated` 事件。
+- embedding 失败不会导致记忆保存失败；memory 仍会保存，事件 reason 会标记 `embedding_failed`，后续 `search_memory` 仍可使用关键词 fallback。
+- memories 增加 `status`：`active`、`archived`、`deleted`。普通搜索只返回 active memories。
+- `delete_memory` 仍走 destructive approval，但执行后改为软删除：`status = deleted`，不会物理删除记录，并写入 `memory_events.deleted`。
+- 查询命中的 memory 会更新 `last_accessed_at`、`access_count`，并写入 `searched` / `accessed` 事件。
+- 明显冲突的回答风格偏好会归档旧 active memory，并用 `superseded_by_memory_id` 指向新 memory。
+
+Admin Dashboard 的 `/admin/ui/memories` 可查看 status、access count、last accessed、superseded id；`/admin/ui/memories/:id` 可查看 memory events 和 embeddings。
+
 ## Week 4 / v0.4 Approval Hardening 使用示例
 
 高风险工具不会被 Agent 直接执行，会先创建 approval request。v0.4.0 起，`write_high`、`external_send`、`destructive` 风险级别的工具会写入结构化审批记录，默认 10 分钟过期。破坏性操作必须使用确认码，不能只回复“确认”。
@@ -419,6 +434,7 @@ curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/run
 curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/runs/1
 curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/workflows
 curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/approvals
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/memories
 curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/documents
 curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/ui/evals
 ```
@@ -439,6 +455,8 @@ query token 只用于开发调试。URL 可能进入浏览器历史、代理日�
 - `GET /admin/ui/workflows`：workflow 列表，支持 `status`、`type`、`userId`、`runId`、`limit` 筛选
 - `GET /admin/ui/workflows/:id`：workflow detail 和 steps timeline
 - `GET /admin/ui/approvals`：approval_requests，支持 `status`、`riskLevel`、`userId`、`runId`、`limit` 筛选，只读，高风险和过期项会明显标记
+- `GET /admin/ui/memories`：memories 列表，支持 `userId`、`type`、`status`、`limit` 筛选
+- `GET /admin/ui/memories/:id`：memory detail、memory_events 和 memory_embeddings
 - `GET /admin/ui/documents`：documents 列表，支持 `title`、`userId`、`limit` 筛选
 - `GET /admin/ui/documents/:id/chunks`：document chunks、headingPath、chunkType 和 embedding 状态
 - `GET /admin/ui/evals`：eval_runs 列表
@@ -526,6 +544,7 @@ Eval 主链路通过 `handleUserTextMessage` 创建 `running` run，并在 scori
 delete from eval_results;
 delete from eval_runs;
 delete from todos where user_id = 'eval-user';
+delete from memory_embeddings where user_id = 'eval-user';
 delete from memories where user_id = 'eval-user';
 delete from documents where user_id = 'eval-user';
 delete from document_chunks where user_id = 'eval-user';
@@ -540,6 +559,7 @@ delete from workflows where user_id = 'eval-user';
 delete from eval_results;
 delete from eval_runs;
 delete from todos where user_id like 'eval-user-%';
+delete from memory_embeddings where user_id like 'eval-user-%';
 delete from memories where user_id like 'eval-user-%';
 delete from documents where user_id like 'eval-user-%';
 delete from document_chunks where user_id like 'eval-user-%';

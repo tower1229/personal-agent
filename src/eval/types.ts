@@ -16,6 +16,11 @@ export type EvalSetupAction =
       source?: string | null;
     }
   | {
+      type: "delete_memory_matching";
+      keyword: string;
+      reason?: string | null;
+    }
+  | {
       type: "add_document";
       title: string;
       content: string;

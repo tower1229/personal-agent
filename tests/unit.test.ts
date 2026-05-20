@@ -9,6 +9,10 @@ import {
 import { cosineSimilarity } from "../src/services/embeddings.js";
 import { splitDocumentIntoChunks } from "../src/services/chunking.js";
 import { rerankDocumentChunks } from "../src/services/rerank.js";
+import {
+  buildCanonicalKey,
+  normalizeMemoryContent
+} from "../src/services/memoryNormalization.js";
 import { parseApprovalDecision } from "../src/services/messageHandler.js";
 import { prettyJson } from "../src/admin/ui/formatters.js";
 import {
@@ -45,6 +49,26 @@ describe("unit helpers", () => {
     expect(parseApprovalDecision("取消")).toEqual({ type: "reject" });
     expect(parseApprovalDecision("确认 1234 5678")).toBeNull();
     expect(parseApprovalDecision("好的")).toBeNull();
+  });
+
+  it("normalizes memory content and builds stable canonical keys", () => {
+    const normalized = normalizeMemoryContent("  User LIKES TypeScript!!!  ");
+
+    expect(normalized).toBe("user likes typescript");
+    expect(normalizeMemoryContent("用户 喜欢 TypeScript。")).toBe(
+      "用户 喜欢 typescript"
+    );
+    expect(
+      buildCanonicalKey({
+        type: "preference",
+        normalizedContent: normalized
+      })
+    ).toBe(
+      buildCanonicalKey({
+        type: "preference",
+        normalizedContent: "user likes typescript"
+      })
+    );
   });
 
   it("formats JSON safely for admin UI", () => {

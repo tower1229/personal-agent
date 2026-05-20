@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { saveMemory } from "../../db/memories.js";
+import { upsertMemory } from "../../db/memories.js";
 import { memoryTypes } from "../../db/schema.js";
 import { type AgentTool } from "../types.js";
 
@@ -41,7 +41,7 @@ export const saveMemoryTool: AgentTool<typeof saveMemoryInputSchema> = {
   inputSchema: saveMemoryInputSchema,
   riskLevel: "write_low",
   async execute(args, context) {
-    const memory = await saveMemory({
+    const result = await upsertMemory({
       userId: context.userId,
       type: args.type,
       content: args.content,
@@ -53,7 +53,11 @@ export const saveMemoryTool: AgentTool<typeof saveMemoryInputSchema> = {
     });
 
     return {
-      memory
+      status: result.status,
+      memory: result.memory,
+      duplicateOfMemoryId: result.duplicateOfMemoryId ?? null,
+      mergedFromContent: result.mergedFromContent ?? null,
+      embeddingFailed: result.embeddingFailed ?? false
     };
   }
 };

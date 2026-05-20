@@ -743,5 +743,70 @@
     "expectedKeywords": ["简洁"],
     "forbiddenKeywords": [],
     "expectedBehavior": "查询并基于记忆回答"
+  },
+  {
+    "id": "memory_hardening_duplicate_001",
+    "category": "memory_save",
+    "input": "记住：用户喜欢 Go。",
+    "setup": [
+      {
+        "type": "save_memory",
+        "memoryType": "preference",
+        "content": "用户喜欢 Go",
+        "confidence": 90,
+        "importance": 80,
+        "source": "eval-setup"
+      }
+    ],
+    "expectedTools": ["save_memory"],
+    "expectedKeywords": [],
+    "expectedAnyKeywords": ["已经记得", "已经记住", "已记得", "记得了"],
+    "forbiddenKeywords": ["新增"],
+    "expectedBehavior": "重复保存同一句话时不新增 active memory，应提示已经记得"
+  },
+  {
+    "id": "memory_hardening_deleted_not_searchable_001",
+    "category": "memory_search",
+    "input": "我之前说过 SecretMemoryZeta 吗？",
+    "setup": [
+      {
+        "type": "save_memory",
+        "memoryType": "note",
+        "content": "SecretMemoryZeta 删除后不可搜索",
+        "confidence": 80,
+        "importance": 70,
+        "source": "eval-setup"
+      },
+      {
+        "type": "delete_memory_matching",
+        "keyword": "SecretMemoryZeta",
+        "reason": "eval deleted memory setup"
+      }
+    ],
+    "expectedTools": ["search_memory"],
+    "expectedKeywords": [],
+    "expectedAnyKeywords": ["没有", "未找到", "不记得"],
+    "forbiddenKeywords": ["SecretMemoryZeta 删除后不可搜索"],
+    "expectedBehavior": "删除后的 memory 不应被 search_memory 返回"
+  },
+  {
+    "id": "memory_hardening_update_preference_001",
+    "category": "memory_save",
+    "input": "记住：用户希望回答尽量简洁",
+    "setup": [
+      {
+        "type": "save_memory",
+        "memoryType": "preference",
+        "content": "用户希望回答尽量详细",
+        "confidence": 80,
+        "importance": 70,
+        "source": "eval-setup"
+      }
+    ],
+    "expectedTools": ["save_memory"],
+    "expectedKeywords": [],
+    "expectedAnyKeywords": ["记住", "已保存", "已记住", "记住了", "更新"],
+    "forbiddenKeywords": [],
+    "expectedBehavior": "更新回答风格偏好时不应留下多条冲突 active memory"
   }
 ]

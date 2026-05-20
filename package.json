@@ -14,7 +14,9 @@
     "eval:mock": "tsx src/eval/runEval.ts --mock",
     "db:generate": "drizzle-kit generate",
     "predb:migrate": "node scripts/ensure-data-dir.mjs",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:clear": "node scripts/clear-db.mjs",
+    "db:reset": "npm run db:clear && npm run db:migrate"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.2",

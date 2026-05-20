@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   getEvalRunDetailForAdmin,
+  getMemoryDetailForAdmin,
   getRunDetailForAdmin,
   getWorkflowDetailForAdmin,
   listApprovalRequestsForAdmin,
@@ -23,6 +24,8 @@ import {
   renderEvalDetailPage,
   renderEvalRunsPage,
   renderMessagePage,
+  renderMemoriesPage,
+  renderMemoryDetailPage,
   renderRunDetailPage,
   renderRunsPage,
   renderWorkflowDetailPage,
@@ -148,6 +151,7 @@ adminRoutes.get("/memories", async (c) => {
   const memories = await listMemoriesForAdmin({
     userId: c.req.query("userId"),
     type: c.req.query("type"),
+    status: c.req.query("status"),
     limit: parseLimit(c.req.query("limit"), 50)
   });
 
@@ -271,6 +275,37 @@ adminRoutes.get("/ui/documents/:id/chunks", async (c) => {
   });
 
   return c.html(renderDocumentChunksPage(id, chunks));
+});
+
+adminRoutes.get("/ui/memories", async (c) => {
+  const filters = {
+    userId: c.req.query("userId"),
+    type: c.req.query("type"),
+    status: c.req.query("status"),
+    limit: parseLimit(c.req.query("limit"), 100)
+  };
+  const memories = await listMemoriesForAdmin(filters);
+
+  return c.html(renderMemoriesPage(memories, filters));
+});
+
+adminRoutes.get("/ui/memories/:id", async (c) => {
+  const id = parseId(c.req.param("id"));
+
+  if (!id) {
+    return c.html(
+      renderMessagePage("Invalid memory id", "Memory id must be a positive integer."),
+      400
+    );
+  }
+
+  const detail = await getMemoryDetailForAdmin(id);
+
+  if (!detail) {
+    return c.html(renderMessagePage("Memory not found", `Memory ${id} was not found.`), 404);
+  }
+
+  return c.html(renderMemoryDetailPage(detail));
 });
 
 adminRoutes.get("/ui/evals", async (c) => {

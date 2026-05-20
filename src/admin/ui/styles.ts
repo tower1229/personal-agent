@@ -245,6 +245,11 @@ tr:last-child td {
   background: var(--danger-bg);
 }
 
+.row-muted {
+  color: var(--muted);
+  background: var(--gray-bg);
+}
+
 .muted {
   color: var(--muted);
 }

@@ -126,7 +126,9 @@ describe("approval flow", () => {
     const result = await handle("确认 1234");
 
     expect(result.output).toContain("已删除记忆");
-    expect(await db.select().from(memories)).toHaveLength(0);
+    const rows = await db.select().from(memories);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe("deleted");
     expect(await db.select().from(toolCalls)).toHaveLength(1);
     expect((await db.select().from(approvalRequests))[0]?.status).toBe("executed");
   });

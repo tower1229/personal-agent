@@ -268,6 +268,20 @@ function createAutoReply(input: LlmChatCompletionInput): LlmChatCompletionResult
     }
 
     if (latestToolResult.name === "save_memory") {
+      const result =
+        latestToolResult.result && typeof latestToolResult.result === "object"
+          ? (latestToolResult.result as Record<string, unknown>)
+          : {};
+      const status = String(result.status ?? "created");
+
+      if (status === "duplicate") {
+        return assistantText("这条我已经记得了。");
+      }
+
+      if (["merged", "updated"].includes(status)) {
+        return assistantText("已更新已有记忆。");
+      }
+
       return assistantText("已记住。");
     }
 
@@ -308,7 +322,11 @@ function createAutoReply(input: LlmChatCompletionInput): LlmChatCompletionResult
   if (textIncludesAny(userText, ["记得我", "之前说过", "回答风格"])) {
     return assistantToolCall(
       nextToolCall("search_memory", {
-        keyword: userText.includes("风格") ? "回答风格" : "偏好",
+        keyword: userText.includes("SecretMemoryZeta")
+          ? "SecretMemoryZeta"
+          : userText.includes("风格")
+            ? "回答风格"
+            : "偏好",
         limit: 5,
         reason: "mock memory search"
       })
