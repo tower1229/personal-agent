@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { db } from "../src/db/client.js";
 import { listDocumentChunks } from "../src/db/documents.js";
 import { deleteMemory, searchMemories } from "../src/db/memories.js";
-import { memories } from "../src/db/schema.js";
+import { memories, memoryEvents } from "../src/db/schema.js";
 import { executeRegisteredTool } from "../src/tools/registry.js";
 
 const context = {
@@ -114,6 +114,9 @@ describe("registered tools", () => {
     expect(second).toMatchObject({ status: "duplicate" });
     expect(rows.filter((memory) => memory.status === "active")).toHaveLength(1);
     expect(rows[0]?.accessCount).toBe(1);
+    expect((await db.select().from(memoryEvents)).map((event) => event.eventType)).toContain(
+      "duplicate_detected"
+    );
 
     await executeRegisteredTool({
       toolName: "search_memory",
@@ -127,6 +130,49 @@ describe("registered tools", () => {
     const afterSearch = await db.select().from(memories);
     expect(afterSearch[0]?.accessCount).toBe(2);
     expect(afterSearch[0]?.lastAccessedAt).toBeInstanceOf(Date);
+  });
+
+  it("merges semantically similar memories without embeddings", async () => {
+    const semanticContext = {
+      ...context,
+      userId: "tool-test-local-semantic-memory-user"
+    };
+
+    const first = await executeRegisteredTool({
+      toolName: "save_memory",
+      argsJson: JSON.stringify({
+        type: "preference",
+        content: "用户喜欢用 TypeScript 学 Agent",
+        confidence: 90,
+        importance: 70,
+        source: "unit-test"
+      }),
+      context: semanticContext
+    });
+    const second = await executeRegisteredTool({
+      toolName: "save_memory",
+      argsJson: JSON.stringify({
+        type: "preference",
+        content: "用户更偏好用 TS 学 Agent 开发",
+        confidence: 90,
+        importance: 70,
+        source: "unit-test"
+      }),
+      context: semanticContext
+    });
+    const activeRows = (await db.select().from(memories)).filter(
+      (memory) => memory.userId === semanticContext.userId && memory.status === "active"
+    );
+    const events = (await db.select().from(memoryEvents)).filter(
+      (event) => event.userId === semanticContext.userId
+    );
+
+    expect(first).toMatchObject({ status: "created" });
+    expect(second).toMatchObject({ status: expect.stringMatching(/merged|updated/) });
+    expect(activeRows).toHaveLength(1);
+    expect(events.map((event) => event.eventType)).toEqual(
+      expect.arrayContaining(["created", "merged"])
+    );
   });
 
   it("merges semantic duplicate memories when embeddings are available", async () => {
@@ -207,15 +253,20 @@ describe("registered tools", () => {
 
     const results = await searchMemories({
       userId: context.userId,
-      keyword: "删除后不应返回",
+      keyword: "你记得我喜欢用什么语言学 Agent 吗？",
       limit: 5,
       sourceRunId: null,
       reason: "unit-test"
     });
     const rows = await db.select().from(memories);
+    const events = await db.select().from(memoryEvents);
 
     expect(results).toEqual([]);
     expect(rows.find((memory) => memory.id === memoryId)?.status).toBe("deleted");
+    expect(events.map((event) => event.eventType)).toEqual(
+      expect.arrayContaining(["deleted", "searched"])
+    );
+    expect(events.map((event) => event.eventType)).not.toContain("accessed");
   });
 
   it("archives conflicting answer style preferences", async () => {

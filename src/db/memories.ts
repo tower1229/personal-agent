@@ -16,6 +16,8 @@ import {
 } from "./schema.js";
 
 const semanticDuplicateThreshold = 0.9;
+const localDuplicateCoverageThreshold = 0.8;
+const localDuplicateJaccardThreshold = 0.55;
 
 export interface UpsertMemoryResult {
   status: "created" | "duplicate" | "updated" | "merged";
@@ -70,6 +72,125 @@ function mergeMemoryContent(existing: string, incoming: string): string {
   }
 
   return `${existing}；${incoming}`;
+}
+
+function tokenizeMemoryContent(content: string): Set<string> {
+  const normalized = normalizeMemoryContent(content)
+    .replace(/\bts\b/g, "typescript")
+    .replace(/更偏好|偏好|喜欢/g, "偏好")
+    .replace(/学习|学/g, "学习");
+  const tokens = new Set<string>();
+
+  for (const token of normalized.match(/[a-z0-9]+/g) ?? []) {
+    if (token.length >= 2) {
+      tokens.add(token);
+    }
+  }
+
+  for (const keyword of [
+    "typescript",
+    "javascript",
+    "python",
+    "agent",
+    "学习",
+    "开发",
+    "偏好",
+    "回答",
+    "简洁",
+    "详细",
+    "项目"
+  ]) {
+    if (normalized.includes(keyword)) {
+      tokens.add(keyword);
+    }
+  }
+
+  return tokens;
+}
+
+function scoreLocalMemorySimilarity(left: string, right: string): {
+  score: number;
+  coverage: number;
+  jaccard: number;
+  incomingCoversExisting: boolean;
+  reasons: string[];
+} {
+  const leftTokens = tokenizeMemoryContent(left);
+  const rightTokens = tokenizeMemoryContent(right);
+
+  if (!leftTokens.size || !rightTokens.size) {
+    return {
+      score: 0,
+      coverage: 0,
+      jaccard: 0,
+      incomingCoversExisting: false,
+      reasons: []
+    };
+  }
+
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token));
+  const unionSize = new Set([...leftTokens, ...rightTokens]).size;
+  const coverage = intersection.length / Math.min(leftTokens.size, rightTokens.size);
+  const jaccard = intersection.length / unionSize;
+  const score = Math.round((coverage * 0.7 + jaccard * 0.3) * 10_000) / 10_000;
+  const incomingCoversExisting = [...leftTokens].every((token) =>
+    rightTokens.has(token)
+  );
+  const reasons = [
+    `local_coverage=${Math.round(coverage * 10_000) / 10_000}`,
+    `local_jaccard=${Math.round(jaccard * 10_000) / 10_000}`
+  ];
+
+  return {
+    score,
+    coverage,
+    jaccard,
+    incomingCoversExisting,
+    reasons
+  };
+}
+
+async function findLocalSimilarMemories(input: {
+  userId: string;
+  type: MemoryType;
+  normalizedContent: string;
+}): Promise<Array<{
+  memory: Memory;
+  score: number;
+  incomingCoversExisting: boolean;
+  reasons: string[];
+}>> {
+  const activeMemories = await db
+    .select()
+    .from(memories)
+    .where(
+      and(
+        eq(memories.userId, input.userId),
+        eq(memories.type, input.type),
+        eq(memories.status, "active" as const)
+      )
+    );
+
+  return activeMemories
+    .map((memory) => {
+      const existingNormalized =
+        memory.normalizedContent ?? normalizeMemoryContent(memory.content);
+      const similarity = scoreLocalMemorySimilarity(
+        existingNormalized,
+        input.normalizedContent
+      );
+
+      return {
+        memory,
+        ...similarity
+      };
+    })
+    .filter(
+      (item) =>
+        item.coverage >= localDuplicateCoverageThreshold &&
+        item.jaccard >= localDuplicateJaccardThreshold
+    )
+    .sort((left, right) => right.score - left.score);
 }
 
 function isAnswerStylePreference(normalizedContent: string): boolean {
@@ -332,6 +453,78 @@ export async function upsertMemory(input: {
       status: "duplicate",
       memory,
       duplicateOfMemoryId: memory.id
+    };
+  }
+
+  const [localSimilar, ...additionalLocalSimilar] = await findLocalSimilarMemories({
+    userId: input.userId,
+    type: input.type,
+    normalizedContent
+  });
+
+  if (localSimilar) {
+    const mergedContent = localSimilar.incomingCoversExisting
+      ? input.content
+      : mergeMemoryContent(localSimilar.memory.content, input.content);
+    const mergedNormalizedContent = normalizeMemoryContent(mergedContent);
+    const eventType =
+      mergedContent === localSimilar.memory.content ? "updated" : "merged";
+    const updated = await db
+      .update(memories)
+      .set({
+        content: mergedContent,
+        normalizedContent: mergedNormalizedContent,
+        canonicalKey: buildCanonicalKey({
+          userId: input.userId,
+          type: localSimilar.memory.type,
+          normalizedContent: mergedNormalizedContent
+        }),
+        confidence: Math.max(localSimilar.memory.confidence, input.confidence),
+        importance: Math.max(localSimilar.memory.importance, input.importance),
+        source: input.source ?? localSimilar.memory.source,
+        updatedAt: now,
+        lastAccessedAt: now,
+        accessCount: localSimilar.memory.accessCount + 1
+      })
+      .where(eq(memories.id, localSimilar.memory.id))
+      .returning();
+    const memory = updated[0] ?? localSimilar.memory;
+
+    await recordMemoryEvent({
+      memoryId: memory.id,
+      userId: input.userId,
+      eventType,
+      sourceRunId: input.sourceRunId,
+      reason:
+        input.reason ??
+        `local duplicate ${localSimilar.reasons.join(", ")}`,
+      createdAt: now
+    });
+
+    for (const duplicate of additionalLocalSimilar) {
+      await archiveMemory({
+        userId: input.userId,
+        id: duplicate.memory.id,
+        status: "archived",
+        supersededByMemoryId: memory.id,
+        sourceRunId: input.sourceRunId,
+        reason: `merged into memory ${memory.id}`
+      });
+      await recordMemoryEvent({
+        memoryId: duplicate.memory.id,
+        userId: input.userId,
+        eventType: "superseded",
+        sourceRunId: input.sourceRunId,
+        reason: `merged into memory ${memory.id}; ${duplicate.reasons.join(", ")}`,
+        createdAt: now
+      });
+    }
+
+    return {
+      status: eventType,
+      memory,
+      duplicateOfMemoryId: localSimilar.memory.id,
+      mergedFromContent: input.content
     };
   }
 

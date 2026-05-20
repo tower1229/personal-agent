@@ -17,6 +17,7 @@ import { parseApprovalDecision } from "../src/services/messageHandler.js";
 import { prettyJson } from "../src/admin/ui/formatters.js";
 import {
   renderEvalDetailPage,
+  renderMemoryDetailPage,
   renderRunDetailPage,
   renderRunsPage
 } from "../src/admin/ui/pages.js";
@@ -175,6 +176,46 @@ describe("unit helpers", () => {
     expect(evalHtml).toContain("Debug Prompt");
     expect(evalHtml).toContain("/admin/ui/runs/99");
     expect(evalHtml).toContain("case&lt;script&gt;");
+
+    const memoryHtml = renderMemoryDetailPage({
+      memory: {
+        id: 1,
+        status: "active",
+        type: "preference",
+        userId: "u",
+        content: "用户喜欢 TypeScript",
+        normalizedContent: "用户喜欢 typescript",
+        canonicalKey: "key",
+        confidence: 90,
+        importance: 70,
+        accessCount: 1,
+        lastAccessedAt: new Date("2026-01-01T00:00:00.000Z"),
+        supersededByMemoryId: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z")
+      },
+      events: [
+        { id: 1, eventType: "created", sourceRunId: null, reason: null, createdAt: new Date() },
+        { id: 2, eventType: "duplicate_detected", sourceRunId: null, reason: null, createdAt: new Date() },
+        { id: 3, eventType: "merged", sourceRunId: null, reason: null, createdAt: new Date() },
+        { id: 4, eventType: "deleted", sourceRunId: null, reason: null, createdAt: new Date() },
+        { id: 5, eventType: "searched", sourceRunId: null, reason: null, createdAt: new Date() },
+        { id: 6, eventType: "accessed", sourceRunId: null, reason: null, createdAt: new Date() }
+      ],
+      embeddings: []
+    });
+
+    expect(memoryHtml).toContain("memory_events");
+    for (const eventType of [
+      "created",
+      "duplicate_detected",
+      "merged",
+      "deleted",
+      "searched",
+      "accessed"
+    ]) {
+      expect(memoryHtml).toContain(eventType);
+    }
   });
 
   it("formats progress events into Telegram progress text", () => {
