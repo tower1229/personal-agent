@@ -11,6 +11,11 @@ import { splitDocumentIntoChunks } from "../src/services/chunking.js";
 import { rerankDocumentChunks } from "../src/services/rerank.js";
 import { parseApprovalDecision } from "../src/services/messageHandler.js";
 import { prettyJson } from "../src/admin/ui/formatters.js";
+import {
+  renderEvalDetailPage,
+  renderRunDetailPage,
+  renderRunsPage
+} from "../src/admin/ui/pages.js";
 import { createMockLlmClient } from "../src/llm/mockClient.js";
 import { validateSearchDocumentResultShape } from "../src/eval/scoring.js";
 import { sanitizeTelegramText } from "../src/utils/sanitizeTelegramText.js";
@@ -47,6 +52,105 @@ describe("unit helpers", () => {
     expect(prettyJson("{bad json")).toBe("{bad json");
     expect(prettyJson({ a: 1 })).toBe('{\n  "a": 1\n}');
     expect(prettyJson(null)).toBe("");
+  });
+
+  it("renders admin UI with escaped user content and debug sections", () => {
+    const runsHtml = renderRunsPage(
+      [
+        {
+          id: 1,
+          status: "succeeded",
+          userId: "user<script>",
+          input: "<img src=x onerror=alert(1)>",
+          output: "safe output",
+          latencyMs: 12,
+          createdAt: new Date("2026-01-01T00:00:00.000Z")
+        }
+      ],
+      { userId: "user<script>", status: "succeeded", q: "<bad>", limit: 10 }
+    );
+
+    expect(runsHtml).toContain("filter-form");
+    expect(runsHtml).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(runsHtml).not.toContain("<img src=x");
+
+    const detailHtml = renderRunDetailPage({
+      run: {
+        id: 1,
+        status: "succeeded",
+        userId: "u",
+        chatId: "c",
+        model: "m",
+        input: "根据知识库",
+        output: "回答",
+        latencyMs: 20,
+        createdAt: new Date("2026-01-01T00:00:00.000Z")
+      },
+      toolCalls: [
+        {
+          toolName: "search_documents",
+          status: "succeeded",
+          argsJson: { query: "Admin" },
+          resultJson: {
+            query: "Admin",
+            retrievalMode: "keyword_fallback",
+            resultCount: 1,
+            chunks: [
+              {
+                sourceTitle: "Admin Doc",
+                chunkIndex: 0,
+                headingPath: ["Admin"],
+                score: 1,
+                rerankScore: 1,
+                keywordScore: 1,
+                vectorScore: 0,
+                retrievalMode: "keyword_fallback",
+                rerankReasons: ["keywordCoverage=1"],
+                content: "<script>alert(1)</script>"
+              }
+            ]
+          },
+          latencyMs: 5,
+          createdAt: new Date("2026-01-01T00:00:00.010Z")
+        }
+      ],
+      approvalRequests: [],
+      workflow: null,
+      workflowSteps: []
+    });
+
+    expect(detailHtml).toContain("Trace Timeline");
+    expect(detailHtml).toContain("RAG Debug");
+    expect(detailHtml).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+
+    const evalHtml = renderEvalDetailPage({
+      evalRun: {
+        id: 1,
+        total: 1,
+        passed: 0,
+        failed: 1,
+        passRate: 0,
+        startedAt: new Date("2026-01-01T00:00:00.000Z"),
+        finishedAt: new Date("2026-01-01T00:01:00.000Z")
+      },
+      results: [
+        {
+          caseId: "case<script>",
+          category: "document_search",
+          passed: false,
+          input: "bad input",
+          output: "bad output",
+          scoreJson: {
+            runId: 99,
+            failureReasons: ["missing"]
+          }
+        }
+      ]
+    });
+
+    expect(evalHtml).toContain("Debug Prompt");
+    expect(evalHtml).toContain("/admin/ui/runs/99");
+    expect(evalHtml).toContain("case&lt;script&gt;");
   });
 
   it("formats progress events into Telegram progress text", () => {

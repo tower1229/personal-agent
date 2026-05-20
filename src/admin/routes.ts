@@ -37,6 +37,7 @@ adminRoutes.get("/runs", async (c) => {
   const runs = await listRunsForAdmin({
     userId: c.req.query("userId"),
     status: c.req.query("status"),
+    q: c.req.query("q"),
     limit: parseLimit(c.req.query("limit"), 20)
   });
 
@@ -117,6 +118,7 @@ adminRoutes.get("/workflows/:id", async (c) => {
 adminRoutes.get("/documents", async (c) => {
   const documents = await listDocumentsForAdmin({
     userId: c.req.query("userId"),
+    title: c.req.query("title"),
     limit: parseLimit(c.req.query("limit"), 50)
   });
 
@@ -159,6 +161,7 @@ adminRoutes.get("/approvals", async (c) => {
     runId: parseOptionalId(c.req.query("runId")),
     userId: c.req.query("userId"),
     status: c.req.query("status"),
+    riskLevel: c.req.query("riskLevel"),
     limit: parseLimit(c.req.query("limit"), 50)
   });
 
@@ -170,11 +173,15 @@ adminRoutes.get("/approvals", async (c) => {
 adminRoutes.get("/ui", (c) => c.html(renderDashboardPage()));
 
 adminRoutes.get("/ui/runs", async (c) => {
-  const runs = await listRunsForAdmin({
+  const filters = {
+    userId: c.req.query("userId"),
+    status: c.req.query("status"),
+    q: c.req.query("q"),
     limit: parseLimit(c.req.query("limit"), 50)
-  });
+  };
+  const runs = await listRunsForAdmin(filters);
 
-  return c.html(renderRunsPage(runs));
+  return c.html(renderRunsPage(runs, filters));
 });
 
 adminRoutes.get("/ui/runs/:id", async (c) => {
@@ -194,11 +201,16 @@ adminRoutes.get("/ui/runs/:id", async (c) => {
 });
 
 adminRoutes.get("/ui/workflows", async (c) => {
-  const workflows = await listWorkflowsForAdmin({
+  const filters = {
+    runId: parseOptionalId(c.req.query("runId")),
+    userId: c.req.query("userId"),
+    status: c.req.query("status"),
+    type: c.req.query("type"),
     limit: parseLimit(c.req.query("limit"), 50)
-  });
+  };
+  const workflows = await listWorkflowsForAdmin(filters);
 
-  return c.html(renderWorkflowsPage(workflows));
+  return c.html(renderWorkflowsPage(workflows, filters));
 });
 
 adminRoutes.get("/ui/workflows/:id", async (c) => {
@@ -221,19 +233,27 @@ adminRoutes.get("/ui/workflows/:id", async (c) => {
 });
 
 adminRoutes.get("/ui/approvals", async (c) => {
-  const approvals = await listApprovalRequestsForAdmin({
+  const filters = {
+    runId: parseOptionalId(c.req.query("runId")),
+    userId: c.req.query("userId"),
+    status: c.req.query("status"),
+    riskLevel: c.req.query("riskLevel"),
     limit: parseLimit(c.req.query("limit"), 100)
-  });
+  };
+  const approvals = await listApprovalRequestsForAdmin(filters);
 
-  return c.html(renderApprovalsPage(approvals));
+  return c.html(renderApprovalsPage(approvals, filters));
 });
 
 adminRoutes.get("/ui/documents", async (c) => {
-  const documents = await listDocumentsForAdmin({
+  const filters = {
+    userId: c.req.query("userId"),
+    title: c.req.query("title"),
     limit: parseLimit(c.req.query("limit"), 100)
-  });
+  };
+  const documents = await listDocumentsForAdmin(filters);
 
-  return c.html(renderDocumentsPage(documents));
+  return c.html(renderDocumentsPage(documents, filters));
 });
 
 adminRoutes.get("/ui/documents/:id/chunks", async (c) => {

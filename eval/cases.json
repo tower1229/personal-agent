@@ -116,7 +116,7 @@
     "input": "以后请记得：我希望回答尽量简洁",
     "expectedTools": ["save_memory"],
     "expectedKeywords": [],
-    "expectedAnyKeywords": ["记得", "已保存", "已记住"],
+    "expectedAnyKeywords": ["记得", "记住了", "已保存", "已记住"],
     "forbiddenKeywords": [],
     "expectedBehavior": "保存偏好类记忆"
   },

@@ -269,6 +269,7 @@ export async function scoreEvalCase(input: {
     ragResultShapePassed;
 
   return {
+    runId: input.result.runId,
     keywordPassed,
     forbiddenPassed,
     expectedToolsPassed,

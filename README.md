@@ -403,9 +403,9 @@ GET /admin/approvals?runId=1
 
 这些接口只用于开发调试，不会返回 `.env`、Telegram Bot token、OpenAI API key 或 Admin token。
 
-## v0.5 Admin Dashboard UI
+## v0.5 / v0.8 Admin Dashboard UI
 
-Admin Dashboard UI 是基于现有 Hono Admin API 的只读 HTML 调试页面，不引入 React、Vite 或独立前端工程。所有页面都在 `/admin/ui` 下，复用同一个 Admin 鉴权规则：
+Admin Dashboard UI 是基于现有 Hono Admin API 的只读 HTML 调试页面，不引入 React、Vite 或独立前端工程。v0.8.0 起增强了筛选、trace timeline、RAG debug、workflow steps timeline、eval failure debug prompt 等交互能力。所有页面都在 `/admin/ui` 下，复用同一个 Admin 鉴权规则：
 
 ```http
 Authorization: Bearer <ADMIN_TOKEN>
@@ -434,17 +434,25 @@ query token 只用于开发调试。URL 可能进入浏览器历史、代理日�
 页面清单：
 
 - `GET /admin/ui`：Dashboard 首页和快捷入口
-- `GET /admin/ui/runs`：最近 runs 列表
-- `GET /admin/ui/runs/:id`：run detail、tool_calls、approval_requests、workflow、workflow_steps
-- `GET /admin/ui/workflows`：workflow 列表
-- `GET /admin/ui/workflows/:id`：workflow detail 和 steps
-- `GET /admin/ui/approvals`：approval_requests，只读，高风险和过期项会明显标记
-- `GET /admin/ui/documents`：documents 列表
-- `GET /admin/ui/documents/:id/chunks`：document chunks 和 embedding 状态
+- `GET /admin/ui/runs`：runs 列表，支持 `userId`、`status`、`q`、`limit` 筛选
+- `GET /admin/ui/runs/:id`：run detail、trace timeline、RAG debug、tool_calls、approval_requests、workflow、workflow_steps
+- `GET /admin/ui/workflows`：workflow 列表，支持 `status`、`type`、`userId`、`runId`、`limit` 筛选
+- `GET /admin/ui/workflows/:id`：workflow detail 和 steps timeline
+- `GET /admin/ui/approvals`：approval_requests，支持 `status`、`riskLevel`、`userId`、`runId`、`limit` 筛选，只读，高风险和过期项会明显标记
+- `GET /admin/ui/documents`：documents 列表，支持 `title`、`userId`、`limit` 筛选
+- `GET /admin/ui/documents/:id/chunks`：document chunks、headingPath、chunkType 和 embedding 状态
 - `GET /admin/ui/evals`：eval_runs 列表
-- `GET /admin/ui/evals/:id`：eval_results 明细
+- `GET /admin/ui/evals/:id`：eval_results 明细、run detail link、失败 case Debug Prompt
 
 Dashboard UI 只用于本地开发和调试，不建议暴露到公网。它不会提供 approval 执行、取消或任何写操作。
+
+常用排查路径：
+
+- Agent 回答错误：打开 `/admin/ui/runs`，用 `userId` 或 `q` 找到对应 run，进入 `/admin/ui/runs/:id` 查看 trace timeline、最终 output、tool_calls 和 error。
+- RAG 命中错误：在 run detail 的 RAG Debug 查看 `retrievalMode`、`sourceTitle`、`headingPath`、`score`、`rerankScore`、`keywordScore`、`vectorScore`、`rerankReasons` 和 chunk preview；必要时跳到 `/admin/ui/documents/:id/chunks` 检查 chunking metadata。
+- approval 没执行：打开 `/admin/ui/approvals`，用 `runId`、`userId` 或 `status=pending/executed/expired` 筛选，检查 `approvalCode`、`expiresAt`、`executedToolCallId` 和 run link。
+- workflow 失败：打开 `/admin/ui/workflows`，用 `status=failed` 或 `runId` 筛选，进入 workflow detail 查看 steps timeline、每步 input/output/error。
+- eval case 失败：打开 `/admin/ui/evals/:id`，查看 `failureReasons`、`scoreJson` 和 run link；失败 case 下方的 Debug Prompt 可直接复制给模型分析。
 
 ## v0.5.1 Telegram Progress Trace
 

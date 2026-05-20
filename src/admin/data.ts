@@ -77,6 +77,7 @@ function getWorkflowIdFromRun(run: ReturnType<typeof serializeRun>): number | nu
 export async function listRunsForAdmin(input: {
   userId?: string;
   status?: string;
+  q?: string;
   limit: number;
 }) {
   const runs = await getRuns(input);
@@ -150,6 +151,7 @@ export async function getWorkflowDetailForAdmin(id: number) {
 
 export async function listDocumentsForAdmin(input: {
   userId?: string;
+  title?: string;
   limit: number;
 }) {
   const documents = await getDocuments(input);
@@ -180,6 +182,7 @@ export async function listApprovalRequestsForAdmin(input: {
   runId?: number;
   userId?: string;
   status?: string;
+  riskLevel?: string;
   limit: number;
 }) {
   const approvals = await getApprovalRequests(input);

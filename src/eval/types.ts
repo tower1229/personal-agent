@@ -58,6 +58,7 @@ export interface EvalExecutionResult {
 }
 
 export interface EvalScore {
+  runId: number | null;
   keywordPassed: boolean;
   forbiddenPassed: boolean;
   expectedToolsPassed: boolean;

@@ -1,4 +1,5 @@
 import { adminUiStyles } from "./styles.js";
+import { escapeHtml } from "./formatters.js";
 
 export function layout(title: string, body: string): string {
   const pageTitle = `${title} | Admin Debug`;
@@ -8,7 +9,7 @@ export function layout(title: string, body: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${pageTitle}</title>
+  <title>${escapeHtml(pageTitle)}</title>
   <style>${adminUiStyles}</style>
 </head>
 <body>

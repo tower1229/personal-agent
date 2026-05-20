@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, like, or } from "drizzle-orm";
 import { listDocumentChunks } from "./documents.js";
 import { db } from "./client.js";
 import {
@@ -20,6 +20,7 @@ function clampLimit(limit: number, max: number): number {
 export async function getRuns(input: {
   userId?: string;
   status?: string;
+  q?: string;
   limit: number;
 }) {
   const conditions = [];
@@ -32,6 +33,11 @@ export async function getRuns(input: {
     conditions.push(
       eq(runs.status, input.status as "running" | "succeeded" | "failed")
     );
+  }
+
+  if (input.q) {
+    const pattern = `%${input.q}%`;
+    conditions.push(or(like(runs.input, pattern), like(runs.output, pattern)));
   }
 
   let query = db.select().from(runs).$dynamic();
@@ -208,12 +214,17 @@ export async function getMemories(input: {
 
 export async function getDocuments(input: {
   userId?: string;
+  title?: string;
   limit: number;
 }) {
   const conditions = [];
 
   if (input.userId) {
     conditions.push(eq(documents.userId, input.userId));
+  }
+
+  if (input.title) {
+    conditions.push(like(documents.title, `%${input.title}%`));
   }
 
   let query = db.select().from(documents).$dynamic();
@@ -238,6 +249,7 @@ export async function getApprovalRequests(input: {
   runId?: number;
   userId?: string;
   status?: string;
+  riskLevel?: string;
   limit: number;
 }) {
   const conditions = [];
@@ -262,6 +274,10 @@ export async function getApprovalRequests(input: {
           | "expired"
       )
     );
+  }
+
+  if (input.riskLevel) {
+    conditions.push(eq(approvalRequests.riskLevel, input.riskLevel));
   }
 
   let query = db.select().from(approvalRequests).$dynamic();
