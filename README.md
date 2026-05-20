@@ -8,7 +8,7 @@
 - Agent tool calling：todo、memory、document RAG tools
 - Human-in-the-loop approval：高风险工具先创建带确认码、过期时间和审计摘要的 approval request
 - Memory system：保存、搜索、删除长期记忆
-- Document RAG：保存文档、chunk 切分、keyword + embedding 混合检索
+- Document RAG：保存文档、结构化 chunk 切分、keyword + embedding 混合检索和本地 rerank
 - Workflow：`daily_brief` 多步骤工作流
 - Observability：runs、tool_calls、workflows、workflow_steps、approval_requests
 - Admin API：Hono JSON API 查看调试数据
@@ -119,8 +119,15 @@ npm run eval
 ```
 
 - `npm test`：快速、确定性的 Vitest 单元/工具/approval 测试，不调用真实 API。
-- `npm run eval:mock`：运行 `eval/cases.json`，但注入 mock LLM；用于 CI 和回归检查，不调用真实模型。该脚本会先执行数据库迁移。
+- `npm run eval:mock`：运行 `eval/cases.json`，但注入 mock LLM；用于 RAG、tool calling、approval、workflow、prompt 行为相关改动的回归检查，不调用真实模型。该脚本会先执行数据库迁移。
 - `npm run eval`：运行真实模型 eval，用于人工验收模型行为，需要有效 `OPENAI_API_KEY`、模型配置和已迁移数据库。
+
+默认验收策略：
+
+- 代码或配置变更默认至少运行 `npm run build` 和 `npm test`。
+- 修改 Agent prompt、tool resultJson、eval scoring/cases、RAG 检索、approval 行为、workflow 路由，或其他会影响模型决策链路的内容时，运行 `npm run eval:mock`。
+- 只有在改动确实需要验证真实模型行为时才运行 `npm run eval`，例如 prompt 大改、RAG grounding 策略变化、安全/审批策略变化、发布前人工验收，或用户明确要求。
+- README、注释、纯 UI 文案等不影响运行行为的改动，不要求运行 eval。
 
 CI 位于 `.github/workflows/ci.yml`，使用 Node 22，执行：
 
@@ -131,7 +138,7 @@ npm test
 npm run eval:mock
 ```
 
-CI 不运行 `npm run eval`，因为真实 eval 需要外部 API key，且模型输出存在波动。
+CI 不运行 `npm run eval`，因为真实 eval 需要外部 API key，且模型输出存在波动。日常开发也不把真实 eval 作为每次修改的固定步骤。
 
 ## 如何测试 Telegram Bot
 
@@ -286,7 +293,7 @@ Telegram Bot 支持直接上传文本类文档并自动导入知识库。
 - 查询时先生成 query embedding，再计算 cosine similarity。
 - 最终分数：`keywordScore * 0.4 + vectorScore * 0.6`。
 - 如果 embedding 生成失败、查询 embedding 失败，或当前 chunk 没有 embedding，会自动 fallback 到关键词检索。
-- `search_documents` tool 的结果会包含 `retrievalMode`、`score`、`keywordScore`、`vectorScore`、`sourceTitle` 和 `chunkIndex`。
+- `search_documents` tool 的结果会包含 `retrievalMode`、`score`、`keywordScore`、`vectorScore`、`sourceTitle`、`chunkIndex`、`headingPath`、`rerankScore` 和 `rerankReasons`。
 
 Embedding 复用现有 OpenAI-compatible SDK 配置：
 
@@ -296,6 +303,20 @@ EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 如果你的 `OPENAI_BASE_URL` 对应服务不支持 embeddings，文档仍会正常导入，chunk metadata 会标记 `embedding_failed`，检索会使用 `retrievalMode = keyword_fallback`。
+
+## v0.7 Better Chunking + Rerank
+
+v0.7.0 提升文档 RAG 的可解释性和稳定性：
+
+- Markdown 文档优先按 heading / section 切分，并在 chunk metadata 中保存 `headingPath`。
+- 普通文本优先按段落切分。
+- fenced code block 不会被普通长度切分打断；超长文本段落会再按长度切分并保留 overlap。
+- 每个 chunk 的 `metadata_json` 会保存 `sourceTitle`、`sourceType`、`headingPath`、`chunkType` 和 `originalChunkLength`。
+- `searchDocumentChunks` 会先召回最多 20 个 hybrid candidates，再用本地规则 rerank 后返回请求的 `limit`。
+- rerank 不调用外部 API，规则综合原始 hybrid `score`、exact phrase match、title match、headingPath match、keyword coverage 和 recency。
+- `search_documents` 的 resultJson 适合 Admin UI 展示，会返回 `score`、`rerankScore`、`keywordScore`、`vectorScore`、`retrievalMode`、`sourceTitle`、`chunkIndex`、`headingPath` 和 `rerankReasons`。
+- Agent 基于文档回答时必须依据 `search_documents` 返回的 chunks；依据不足时应说明没有足够依据，不能编造来源。
+- 文档型回答末尾会简短标注来源，例如：`依据：Admin API 配置 / chunk 0`。
 
 ## Week 6 Workflow 示例
 
@@ -484,6 +505,11 @@ Eval runner 会：
 - 写入 `eval_runs` 和 `eval_results`
 - 输出总数、通过数、失败数和通过率
 
+运行策略：
+
+- `npm run eval:mock` 用于会影响 Agent 行为、工具调用、RAG、approval 或 workflow 的改动。
+- `npm run eval` 只在需要真实模型验收时运行，不作为每次开发修改的固定要求。
+
 Eval 主链路通过 `handleUserTextMessage` 创建 `running` run，并在 scoring 中优先使用 `runId` 精确查询 `tool_calls`、`approval_requests` 和 workflow。只有 case 在 run 创建前失败时，才会 fallback 到 eval user + 最近时间窗口；eval setup 产生的工具调用不属于用户消息 run，因此允许 `tool_calls.run_id` 为 `null`。
 
 清理 eval 数据可以用 SQLite 执行：
@@ -551,7 +577,7 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 
 ## 当前限制
 
-- 文档检索已支持 SQLite JSON embedding + TypeScript cosine similarity，但暂未使用专用向量数据库或 rerank 模型。
+- 文档检索已支持 SQLite JSON embedding、TypeScript cosine similarity 和本地规则 rerank，但暂未使用专用向量数据库或外部 reranker 模型。
 - 正常 Telegram 文本消息、文档上传、approval 确认和 daily brief 都使用 `running -> succeeded/failed` run 生命周期；eval setup 等非用户消息准备步骤仍可能产生 `run_id = null` 的工具日志。
 - 真实 Eval 是行为 smoke test，不是严格单元测试；模型输出波动可能导致部分 case 失败。CI 使用 `eval:mock` 避免这种波动。
 - Telegram 文档上传只支持 2MB 以下文本类文件。
@@ -560,4 +586,4 @@ Docker Compose 会读取 `.env`，将 `./data` 挂载到容器 `/app/data`，并
 
 ## 下一步计划
 
-- 为 document RAG 增加 chunk rerank 和更稳定的中文分词。
+- 为 document RAG 增加更稳定的中文分词和更严格的引用质量评估。

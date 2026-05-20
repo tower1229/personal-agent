@@ -392,6 +392,105 @@
     "expectedBehavior": "检索只返回当前 eval user 的文档，不泄漏其他用户文档"
   },
   {
+    "id": "rag_v070_markdown_heading_001",
+    "category": "document_search",
+    "input": "根据知识库，Webhook 回调地址是什么？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "Telegram 集成",
+        "content": "# Telegram\nBot 使用 polling。\n\n## Webhook\nWebhook 回调地址是 /telegram/webhook。\n\n## Admin\nAdmin API 路径是 /admin。",
+        "sourceType": "markdown"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["/telegram/webhook"],
+    "expectedAnyKeywords": ["依据", "Telegram 集成"],
+    "forbiddenKeywords": ["/admin"],
+    "expectedBehavior": "Markdown heading 下的问题应命中 Webhook section，并标注文档依据"
+  },
+  {
+    "id": "rag_v070_multi_doc_correct_001",
+    "category": "document_search",
+    "input": "根据知识库，Admin Dashboard 的发布窗口是什么？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "Public Site 发布说明",
+        "content": "Public Site 的发布窗口是每周五 18:00。",
+        "sourceType": "text"
+      },
+      {
+        "type": "add_document",
+        "title": "Admin Dashboard 发布说明",
+        "content": "Admin Dashboard 的发布窗口是每周三 10:00。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["每周三", "10:00"],
+    "forbiddenKeywords": ["每周五", "18:00"],
+    "expectedBehavior": "多个相似文档时 rerank 应选择标题和内容都匹配的文档"
+  },
+  {
+    "id": "rag_v070_title_match_001",
+    "category": "document_search",
+    "input": "根据知识库，Release Notes 的发布窗口是什么？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "Release Notes",
+        "content": "发布窗口是每周三 10:00。",
+        "sourceType": "text"
+      },
+      {
+        "type": "add_document",
+        "title": "Support Notes",
+        "content": "发布窗口是每周五 18:00。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["每周三", "10:00"],
+    "forbiddenKeywords": ["每周五", "18:00"],
+    "expectedBehavior": "查询标题相关内容时 title match 有加成"
+  },
+  {
+    "id": "rag_v070_no_evidence_001",
+    "category": "document_no_evidence",
+    "input": "根据知识库，火星农业采购单号是什么？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "Agent Runtime 范围",
+        "content": "Agent runtime 负责 tool calling、approval 和 workflow，不包含农业采购信息。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": [],
+    "expectedAnyKeywords": ["没有找到", "未找到", "没有", "不足"],
+    "forbiddenKeywords": ["采购单号是"],
+    "expectedBehavior": "无依据问题仍拒答，不编造来源"
+  },
+  {
+    "id": "rag_v070_citation_source_001",
+    "category": "document_search",
+    "input": "根据知识库，citation 测试值是什么？",
+    "setup": [
+      {
+        "type": "add_document",
+        "title": "Citation 来源文档",
+        "content": "citation 测试值是 SOURCE-777。",
+        "sourceType": "text"
+      }
+    ],
+    "expectedTools": ["search_documents"],
+    "expectedKeywords": ["SOURCE-777", "依据", "Citation 来源文档"],
+    "forbiddenKeywords": [],
+    "expectedBehavior": "回答应包含 sourceTitle / chunk index 形式的依据"
+  },
+  {
     "id": "daily_brief_001",
     "category": "daily_brief",
     "input": "生成今日简报",

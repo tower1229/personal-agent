@@ -39,6 +39,14 @@ function safeNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function inlineList(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return escapeHtml(value ?? "-");
+  }
+
+  return value.length ? escapeHtml(value.join(" > ")) : "-";
+}
+
 function extractionRows(toolCall: Row): string {
   if (valueOf(toolCall, "toolName") !== "search_documents") {
     return "";
@@ -60,14 +68,25 @@ function extractionRows(toolCall: Row): string {
   const rows = chunks
     .filter((chunk): chunk is Row => Boolean(chunk) && typeof chunk === "object")
     .map((chunk) => `<tr>
-      <td>${field(chunk, "retrievalMode") || escapeHtml(resultRecord.retrievalMode ?? "-")}</td>
-      <td class="mono">${escapeHtml(valueOf(chunk, "score") ?? "-")}</td>
       <td>${field(chunk, "sourceTitle")}</td>
       <td class="mono">${field(chunk, "chunkIndex")}</td>
+      <td>${inlineList(valueOf(chunk, "headingPath"))}</td>
+      <td class="mono">${escapeHtml(valueOf(chunk, "score") ?? "-")}</td>
+      <td class="mono">${escapeHtml(valueOf(chunk, "rerankScore") ?? "-")}</td>
+      <td>${field(chunk, "retrievalMode") || escapeHtml(resultRecord.retrievalMode ?? "-")}</td>
+      <td>${inlineList(valueOf(chunk, "rerankReasons"))}</td>
     </tr>`);
 
   return `<details><summary>retrieval results</summary>${table(
-    ["retrievalMode", "score", "sourceTitle", "chunkIndex"],
+    [
+      "sourceTitle",
+      "chunkIndex",
+      "headingPath",
+      "score",
+      "rerankScore",
+      "retrievalMode",
+      "rerankReasons"
+    ],
     rows,
     "No retrieval rows"
   )}</details>`;

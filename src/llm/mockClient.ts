@@ -194,6 +194,16 @@ function createAutoReply(input: LlmChatCompletionInput): LlmChatCompletionResult
       }
 
       const chunks = firstObjectArrayValue(latestToolResult.result, "chunks");
+      const firstChunk = chunks[0];
+      const sourceTitle =
+        firstChunk && typeof firstChunk === "object" && "sourceTitle" in firstChunk
+          ? String((firstChunk as { sourceTitle: unknown }).sourceTitle)
+          : "未知文档";
+      const chunkIndex =
+        firstChunk && typeof firstChunk === "object" && "chunkIndex" in firstChunk
+          ? String((firstChunk as { chunkIndex: unknown }).chunkIndex)
+          : "0";
+      const evidence = `\n依据：${sourceTitle} / chunk ${chunkIndex}`;
       const content = chunks
         .map((chunk) =>
           chunk && typeof chunk === "object" && "content" in chunk
@@ -203,27 +213,39 @@ function createAutoReply(input: LlmChatCompletionInput): LlmChatCompletionResult
         .join("\n");
 
       if (userText.includes("Week 8")) {
-        return assistantText("Week 8 要做 eval 系统、Docker 部署和项目收尾。");
+        return assistantText(`Week 8 要做 eval 系统、Docker 部署和项目收尾。${evidence}`);
       }
 
       if (userText.includes("Trace Integrity")) {
-        return assistantText("Trace Integrity 的核心指标是 runId 全链路贯穿。");
+        return assistantText(`Trace Integrity 的核心指标是 runId 全链路贯穿。${evidence}`);
       }
 
       if (userText.includes("项目代号")) {
-        return assistantText("项目代号是 RIVER-100。");
+        return assistantText(`项目代号是 RIVER-100。${evidence}`);
       }
 
       if (userText.includes("经费")) {
-        return assistantText("项目经费总额为 12000 元。");
+        return assistantText(`项目经费总额为 12000 元。${evidence}`);
+      }
+
+      if (userText.includes("Webhook 回调地址")) {
+        return assistantText(`Webhook 回调地址是 /telegram/webhook。${evidence}`);
+      }
+
+      if (userText.includes("发布窗口")) {
+        return assistantText(`发布窗口是每周三 10:00。${evidence}`);
+      }
+
+      if (userText.includes("citation 测试值")) {
+        return assistantText(`citation 测试值是 SOURCE-777。${evidence}`);
       }
 
       if (content.includes("/admin")) {
-        return assistantText("Admin API 的 base path 是 /admin。");
+        return assistantText(`Admin API 的 base path 是 /admin。${evidence}`);
       }
 
       if (content.includes("eval") || content.includes("Docker")) {
-        return assistantText("Week 8 要做 eval 系统、Docker 部署和项目收尾。");
+        return assistantText(`Week 8 要做 eval 系统、Docker 部署和项目收尾。${evidence}`);
       }
 
       return assistantText(

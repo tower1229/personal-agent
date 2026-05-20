@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { listDocumentChunks } from "../src/db/documents.js";
 import { executeRegisteredTool } from "../src/tools/registry.js";
 
 const context = {
@@ -97,6 +98,16 @@ describe("registered tools", () => {
       chunk_count: 1,
       duplicate: false
     });
+    const chunks = await listDocumentChunks({
+      documentId: (addResult as { document_id: number }).document_id,
+      userId: context.userId
+    });
+
+    expect(chunks[0]?.metadataJson).toContain('"sourceTitle":"Admin API 配置"');
+    expect(chunks[0]?.metadataJson).toContain('"sourceType":"text"');
+    expect(chunks[0]?.metadataJson).toContain('"headingPath":[]');
+    expect(chunks[0]?.metadataJson).toContain('"chunkType":"text_paragraph"');
+    expect(chunks[0]?.metadataJson).toContain('"originalChunkLength"');
 
     const searchResult = await executeRegisteredTool({
       toolName: "search_documents",
@@ -112,9 +123,89 @@ describe("registered tools", () => {
       chunks: [
         expect.objectContaining({
           sourceTitle: "Admin API 配置",
+          rerankScore: expect.any(Number),
+          rerankReasons: expect.any(Array),
           retrievalMode: "keyword_fallback"
         })
       ]
     });
+  });
+
+  it("returns no document chunks when there is no lexical evidence", async () => {
+    await executeRegisteredTool({
+      toolName: "add_document",
+      argsJson: JSON.stringify({
+        title: "Agent 项目范围",
+        content: "本项目关注 Telegram Bot、Agent runtime、workflow 和 eval。",
+        sourceType: "text"
+      }),
+      context
+    });
+
+    const searchResult = await executeRegisteredTool({
+      toolName: "search_documents",
+      argsJson: JSON.stringify({
+        query: "火星农业预算",
+        limit: 5
+      }),
+      context
+    });
+
+    expect(searchResult).toMatchObject({
+      resultCount: 0,
+      chunks: []
+    });
+  });
+
+  it("filters weak vector-only hybrid candidates", async () => {
+    const previousDisableEmbeddings = process.env.DISABLE_EMBEDDINGS;
+    const previousEvalMock = process.env.EVAL_MOCK;
+
+    process.env.DISABLE_EMBEDDINGS = "0";
+    process.env.EVAL_MOCK = "1";
+
+    try {
+      await executeRegisteredTool({
+        toolName: "add_document",
+        argsJson: JSON.stringify({
+          title: "Workflow 范围",
+          content: "Workflow 负责 daily brief、步骤状态和输出记录。",
+          sourceType: "text"
+        }),
+        context: {
+          ...context,
+          userId: "tool-test-vector-filter-user"
+        }
+      });
+
+      const searchResult = await executeRegisteredTool({
+        toolName: "search_documents",
+        argsJson: JSON.stringify({
+          query: "orphan-vector-only-token",
+          limit: 5
+        }),
+        context: {
+          ...context,
+          userId: "tool-test-vector-filter-user"
+        }
+      });
+
+      expect(searchResult).toMatchObject({
+        resultCount: 0,
+        chunks: []
+      });
+    } finally {
+      if (typeof previousDisableEmbeddings === "undefined") {
+        delete process.env.DISABLE_EMBEDDINGS;
+      } else {
+        process.env.DISABLE_EMBEDDINGS = previousDisableEmbeddings;
+      }
+
+      if (typeof previousEvalMock === "undefined") {
+        delete process.env.EVAL_MOCK;
+      } else {
+        process.env.EVAL_MOCK = previousEvalMock;
+      }
+    }
   });
 });

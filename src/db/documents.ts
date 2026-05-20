@@ -5,6 +5,9 @@ import {
   cosineSimilarity,
   generateEmbedding
 } from "../services/embeddings.js";
+import { rerankDocumentChunks } from "../services/rerank.js";
+import { splitDocumentIntoChunks } from "../services/chunking.js";
+import { tokenizeRagQuery } from "../services/ragText.js";
 import { db } from "./client.js";
 import {
   documentChunkEmbeddings,
@@ -15,19 +18,27 @@ import {
   type DocumentSourceType
 } from "./schema.js";
 
-const chunkSize = 800;
-const chunkOverlap = 80;
-
 export interface DocumentChunkSearchResult {
   documentId: number;
   chunkIndex: number;
   content: string;
   sourceTitle: string;
+  sourceType: DocumentSourceType;
+  headingPath: string[];
   score: number;
+  rerankScore: number;
   keywordScore: number;
   vectorScore: number;
   retrievalMode: "hybrid" | "keyword_fallback";
+  rerankReasons: string[];
 }
+
+type DocumentChunkRetrievalCandidate = Omit<
+  DocumentChunkSearchResult,
+  "rerankScore" | "rerankReasons"
+> & {
+  createdAt: Date;
+};
 
 export interface DocumentChunkWithEmbeddingStatus extends DocumentChunk {
   hasEmbedding: boolean;
@@ -41,59 +52,8 @@ function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function splitIntoChunks(content: string): string[] {
-  const normalized = content.trim();
-
-  if (!normalized) {
-    return [];
-  }
-
-  const chunks: string[] = [];
-  let start = 0;
-
-  while (start < normalized.length) {
-    const end = Math.min(start + chunkSize, normalized.length);
-    const chunk = normalized.slice(start, end).trim();
-
-    if (chunk) {
-      chunks.push(chunk);
-    }
-
-    if (end >= normalized.length) {
-      break;
-    }
-
-    start = Math.max(end - chunkOverlap, start + 1);
-  }
-
-  return chunks;
-}
-
 export function tokenizeDocumentQuery(query: string): string[] {
-  const tokens = query
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .map((token) => token.trim())
-    .filter(Boolean);
-  const cjkTokens = tokens.flatMap((token) => {
-    const cjkChars = Array.from(token.matchAll(/\p{Script=Han}/gu)).map(
-      (match) => match[0]
-    );
-
-    if (cjkChars.length < 2) {
-      return [];
-    }
-
-    const grams: string[] = [];
-
-    for (let index = 0; index < cjkChars.length - 1; index += 1) {
-      grams.push(`${cjkChars[index]}${cjkChars[index + 1]}`);
-    }
-
-    return grams;
-  });
-
-  return Array.from(new Set([...tokens, ...cjkTokens]));
+  return tokenizeRagQuery(query);
 }
 
 export function scoreDocumentChunkKeywords(
@@ -175,6 +135,33 @@ function parseMetadata(value: string | null): Record<string, unknown> {
   return {};
 }
 
+function stringArrayMetadata(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function hasRerankedEvidence(
+  chunk: DocumentChunkSearchResult & { createdAt?: Date }
+): boolean {
+  if (chunk.keywordScore > 0) {
+    return true;
+  }
+
+  if (chunk.vectorScore >= 0.9) {
+    return true;
+  }
+
+  return chunk.rerankReasons.some(
+    (reason) =>
+      reason === "exactPhraseMatch" ||
+      reason.startsWith("titleMatch=") ||
+      reason.startsWith("headingPathMatch=")
+  );
+}
+
 async function saveChunkEmbeddings(input: {
   userId: string;
   chunks: DocumentChunk[];
@@ -254,7 +241,12 @@ export async function createDocumentWithChunks(input: {
     };
   }
 
-  const chunks = splitIntoChunks(content);
+  const chunks = splitDocumentIntoChunks({
+    title: input.title,
+    sourceType: input.sourceType,
+    content,
+    metadata: input.metadata
+  });
 
   if (!chunks.length) {
     throw new Error("Document content is too short to save");
@@ -284,11 +276,11 @@ export async function createDocumentWithChunks(input: {
       documentId: document.id,
       userId: input.userId,
       chunkIndex: index,
-      content: chunk,
+      content: chunk.content,
       metadataJson: JSON.stringify({
         title: input.title,
         source_type: input.sourceType,
-        ...(input.metadata ?? {})
+        ...chunk.metadata
       }),
       createdAt: now
     })))
@@ -357,8 +349,10 @@ export async function searchDocumentChunks(input: {
   const hasUsableEmbeddings = Boolean(queryEmbedding && embeddingByChunkId.size);
   const retrievalMode = hasUsableEmbeddings ? "hybrid" : "keyword_fallback";
 
-  return rows
+  const candidates = rows
     .map(({ chunk, document }) => {
+      const metadata = parseMetadata(chunk.metadataJson);
+      const headingPath = stringArrayMetadata(metadata.headingPath);
       const rawKeywordScore = scoreDocumentChunkKeywords(chunk.content, tokens);
       const keywordScore = normalizeDocumentKeywordScore(
         rawKeywordScore,
@@ -380,19 +374,40 @@ export async function searchDocumentChunks(input: {
         chunkIndex: chunk.chunkIndex,
         content: chunk.content,
         sourceTitle: document.title,
+        sourceType: document.sourceType,
+        headingPath,
         score,
         keywordScore: roundScore(keywordScore),
         vectorScore: roundScore(vectorScore),
-        retrievalMode
-      } satisfies DocumentChunkSearchResult;
+        retrievalMode,
+        createdAt: document.createdAt
+      } satisfies DocumentChunkRetrievalCandidate;
     })
     .filter((chunk) =>
       retrievalMode === "hybrid"
         ? chunk.score > 0
         : chunk.keywordScore > 0
     )
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .sort((a, b) => {
+      const leftRecallScore = a.score + a.keywordScore;
+      const rightRecallScore = b.score + b.keywordScore;
+      const recallDelta = rightRecallScore - leftRecallScore;
+
+      if (recallDelta !== 0) {
+        return recallDelta;
+      }
+
+      return b.score - a.score;
+    })
+    .slice(0, 20);
+
+  return rerankDocumentChunks({
+    query: input.query,
+    candidates
+  })
+    .filter(hasRerankedEvidence)
+    .slice(0, limit)
+    .map(({ createdAt, ...chunk }) => chunk);
 }
 
 export async function listDocuments(userId: string): Promise<Document[]> {

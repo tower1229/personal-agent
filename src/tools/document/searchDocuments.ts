@@ -29,7 +29,9 @@ export const searchDocumentsTool: AgentTool<
     });
 
     return {
+      query: args.query,
       retrievalMode: chunks[0]?.retrievalMode ?? "keyword_fallback",
+      resultCount: chunks.length,
       chunks
     };
   }

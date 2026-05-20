@@ -7,9 +7,12 @@ import {
   tokenizeDocumentQuery
 } from "../src/db/documents.js";
 import { cosineSimilarity } from "../src/services/embeddings.js";
+import { splitDocumentIntoChunks } from "../src/services/chunking.js";
+import { rerankDocumentChunks } from "../src/services/rerank.js";
 import { parseApprovalDecision } from "../src/services/messageHandler.js";
 import { prettyJson } from "../src/admin/ui/formatters.js";
 import { createMockLlmClient } from "../src/llm/mockClient.js";
+import { validateSearchDocumentResultShape } from "../src/eval/scoring.js";
 import { sanitizeTelegramText } from "../src/utils/sanitizeTelegramText.js";
 
 describe("unit helpers", () => {
@@ -88,6 +91,147 @@ describe("unit helpers", () => {
         retrievalMode: "keyword_fallback"
       })
     ).toBe(0.5);
+  });
+
+  it("chunks markdown by heading path", () => {
+    const chunks = splitDocumentIntoChunks({
+      title: "RAG 说明",
+      sourceType: "markdown",
+      content: [
+        "# Admin",
+        "Admin API 使用 Hono。",
+        "## Auth",
+        "需要 Bearer token。",
+        "## Paths",
+        "base path 是 /admin。"
+      ].join("\n")
+    });
+
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0]?.metadata.headingPath).toEqual(["Admin"]);
+    expect(chunks[1]?.metadata.headingPath).toEqual(["Admin", "Auth"]);
+    expect(chunks[2]?.metadata.headingPath).toEqual(["Admin", "Paths"]);
+    expect(chunks[2]?.metadata).toMatchObject({
+      sourceTitle: "RAG 说明",
+      sourceType: "markdown",
+      chunkType: "markdown_section"
+    });
+  });
+
+  it("does not split markdown code blocks", () => {
+    const code = [
+      "```ts",
+      "export function handler() {",
+      "  return 'abcdefghijklmnopqrstuvwxyz';",
+      "}",
+      "```"
+    ].join("\n");
+    const chunks = splitDocumentIntoChunks({
+      title: "代码文档",
+      sourceType: "markdown",
+      content: ["# Example", "说明文字。", code, "后续说明文字。"].join("\n\n"),
+      maxChunkLength: 40,
+      chunkOverlap: 5
+    });
+    const codeChunk = chunks.find((chunk) => chunk.content.includes("```ts"));
+
+    expect(codeChunk?.content).toBe(code);
+    expect(codeChunk?.metadata.chunkType).toBe("code_block");
+  });
+
+  it("preserves overlap when plain text paragraph boundaries split chunks", () => {
+    const chunks = splitDocumentIntoChunks({
+      title: "Overlap",
+      sourceType: "text",
+      content: [
+        "alpha beta gamma delta epsilon",
+        "second paragraph starts here"
+      ].join("\n\n"),
+      maxChunkLength: 40,
+      chunkOverlap: 7
+    });
+
+    expect(chunks).toHaveLength(2);
+    expect(chunks[1]?.content.startsWith("epsilon")).toBe(true);
+  });
+
+  it("reranks title matches above weaker candidates", () => {
+    const [first] = rerankDocumentChunks({
+      query: "Admin API base path",
+      candidates: [
+        {
+          content: "path 是 /pay。",
+          sourceTitle: "支付网关说明",
+          score: 0.05,
+          keywordScore: 0.05,
+          vectorScore: 0
+        },
+        {
+          content: "使用 Hono，需要 Bearer token。",
+          sourceTitle: "Admin API 配置",
+          score: 0.05,
+          keywordScore: 0.05,
+          vectorScore: 0
+        }
+      ],
+      now: new Date("2026-01-01T00:00:00.000Z")
+    });
+
+    expect(first?.sourceTitle).toBe("Admin API 配置");
+    expect(first?.rerankReasons).toContain("titleMatch=0.5");
+  });
+
+  it("reranks exact phrase matches above higher base scores", () => {
+    const [first] = rerankDocumentChunks({
+      query: "runId 全链路贯穿",
+      candidates: [
+        {
+          content: "Trace Integrity 的核心指标是 runId 全链路贯穿。",
+          sourceTitle: "Trace Integrity 说明",
+          score: 0.1,
+          keywordScore: 0.2,
+          vectorScore: 0
+        },
+        {
+          content: "runId 用于关联 runs 和 tool calls。",
+          sourceTitle: "运行记录说明",
+          score: 0.25,
+          keywordScore: 0.4,
+          vectorScore: 0
+        }
+      ],
+      now: new Date("2026-01-01T00:00:00.000Z")
+    });
+
+    expect(first?.sourceTitle).toBe("Trace Integrity 说明");
+    expect(first?.rerankReasons).toContain("exactPhraseMatch");
+  });
+
+  it("validates search_documents result shape for eval scoring", () => {
+    expect(
+      validateSearchDocumentResultShape({
+        retrievalMode: "keyword_fallback",
+        chunks: [
+          {
+            score: 1,
+            rerankScore: 1,
+            keywordScore: 1,
+            vectorScore: 0,
+            retrievalMode: "keyword_fallback",
+            sourceTitle: "Doc",
+            chunkIndex: 0,
+            headingPath: [],
+            rerankReasons: ["keywordCoverage=1"]
+          }
+        ]
+      })
+    ).toEqual([]);
+    expect(
+      validateSearchDocumentResultShape({
+        retrievalMode: "keyword_fallback",
+        chunks: [{ score: 1 }]
+      })
+    ).toContain("chunks[0].rerankScore is missing");
   });
 
   it("mock LLM exposes deterministic simulation modes", async () => {

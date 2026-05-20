@@ -48,6 +48,64 @@ function extractRetrievalModes(result: unknown): string[] {
   return Array.from(modes);
 }
 
+function hasNumberField(row: Record<string, unknown>, key: string): boolean {
+  return typeof row[key] === "number" && Number.isFinite(row[key]);
+}
+
+export function validateSearchDocumentResultShape(result: unknown): string[] {
+  if (!result || typeof result !== "object") {
+    return ["search_documents resultJson is not an object"];
+  }
+
+  const record = result as Record<string, unknown>;
+  const errors: string[] = [];
+
+  if (typeof record.retrievalMode !== "string") {
+    errors.push("resultJson.retrievalMode is missing");
+  }
+
+  if (!Array.isArray(record.chunks)) {
+    return [...errors, "resultJson.chunks is not an array"];
+  }
+
+  for (const [index, chunk] of record.chunks.entries()) {
+    if (!chunk || typeof chunk !== "object") {
+      errors.push(`chunks[${index}] is not an object`);
+      continue;
+    }
+
+    const row = chunk as Record<string, unknown>;
+
+    for (const key of ["score", "rerankScore", "keywordScore", "vectorScore"]) {
+      if (!hasNumberField(row, key)) {
+        errors.push(`chunks[${index}].${key} is missing`);
+      }
+    }
+
+    if (typeof row.retrievalMode !== "string") {
+      errors.push(`chunks[${index}].retrievalMode is missing`);
+    }
+
+    if (typeof row.sourceTitle !== "string") {
+      errors.push(`chunks[${index}].sourceTitle is missing`);
+    }
+
+    if (!hasNumberField(row, "chunkIndex")) {
+      errors.push(`chunks[${index}].chunkIndex is missing`);
+    }
+
+    if (!Array.isArray(row.headingPath)) {
+      errors.push(`chunks[${index}].headingPath is missing`);
+    }
+
+    if (!Array.isArray(row.rerankReasons)) {
+      errors.push(`chunks[${index}].rerankReasons is missing`);
+    }
+  }
+
+  return errors;
+}
+
 export async function scoreEvalCase(input: {
   evalCase: EvalCase;
   result: EvalExecutionResult;
@@ -164,9 +222,15 @@ export async function scoreEvalCase(input: {
   const observedRetrievalModes = searchDocumentCalls.flatMap((toolCall) =>
     extractRetrievalModes(parseJson(toolCall.resultJson))
   );
+  const observedRagResultShapeErrors = searchDocumentCalls.flatMap((toolCall) =>
+    validateSearchDocumentResultShape(parseJson(toolCall.resultJson))
+  );
   const retrievalModePassed =
     !input.evalCase.expectedTools.includes("search_documents") ||
     observedRetrievalModes.length > 0;
+  const ragResultShapePassed =
+    !input.evalCase.expectedTools.includes("search_documents") ||
+    observedRagResultShapeErrors.length === 0;
   const failureReasons = [
     input.result.error ? `error: ${input.result.error}` : null,
     requiredKeywordPassed
@@ -188,7 +252,10 @@ export async function scoreEvalCase(input: {
       : `expected approval code required: ${input.evalCase.expectedApprovalCodeRequired}`,
     retrievalModePassed
       ? null
-      : "search_documents resultJson is missing retrievalMode"
+      : "search_documents resultJson is missing retrievalMode",
+    ragResultShapePassed
+      ? null
+      : `search_documents resultJson shape errors: ${observedRagResultShapeErrors.join("; ")}`
   ].filter((reason): reason is string => Boolean(reason));
   const passed =
     !input.result.error &&
@@ -198,7 +265,8 @@ export async function scoreEvalCase(input: {
     approvalPassed &&
     approvalStatusPassed &&
     approvalCodeRequiredPassed &&
-    retrievalModePassed;
+    retrievalModePassed &&
+    ragResultShapePassed;
 
   return {
     keywordPassed,
@@ -208,6 +276,7 @@ export async function scoreEvalCase(input: {
     approvalStatusPassed,
     approvalCodeRequiredPassed,
     retrievalModePassed,
+    ragResultShapePassed,
     passed,
     matchedKeywords,
     missingKeywords,
@@ -222,6 +291,7 @@ export async function scoreEvalCase(input: {
     observedApprovalStatuses,
     observedApprovalCodeRequired,
     observedRetrievalModes,
+    observedRagResultShapeErrors,
     failureReasons,
     notes: [
       input.result.runId

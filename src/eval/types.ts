@@ -63,6 +63,7 @@ export interface EvalScore {
   expectedToolsPassed: boolean;
   approvalPassed: boolean;
   retrievalModePassed: boolean;
+  ragResultShapePassed: boolean;
   passed: boolean;
   matchedKeywords: string[];
   missingKeywords: string[];
@@ -79,6 +80,7 @@ export interface EvalScore {
   observedApprovalStatuses: string[];
   observedApprovalCodeRequired: boolean[];
   observedRetrievalModes: string[];
+  observedRagResultShapeErrors: string[];
   failureReasons: string[];
   notes: string[];
 }
