@@ -1,4 +1,5 @@
 import { createDocumentWithChunks } from "../db/documents.js";
+import { createJob } from "../db/jobs.js";
 import { type DocumentSourceType } from "../db/schema.js";
 
 export interface IngestDocumentInput {
@@ -26,6 +27,25 @@ export async function ingestDocument(
     sourceType: input.sourceType,
     metadata: input.metadata
   });
+
+  if (!result.duplicate) {
+    await createJob({
+      type: "index_document_chunks",
+      userId: input.userId,
+      chatId:
+        typeof input.metadata?.chatId === "string"
+          ? input.metadata.chatId
+          : "system",
+      runId:
+        typeof input.metadata?.runId === "number"
+          ? input.metadata.runId
+          : null,
+      idempotencyKey: `index-document:${input.userId}:${result.document.id}`,
+      payload: {
+        documentId: result.document.id
+      }
+    });
+  }
 
   return {
     documentId: result.document.id,

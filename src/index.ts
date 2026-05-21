@@ -1,15 +1,20 @@
 import { startAdminServer } from "./admin/server.js";
 import { createTelegramBot } from "./bot/telegram.js";
+import { createJobWorker } from "./jobs/worker.js";
 
 async function main(): Promise<void> {
   const bot = createTelegramBot();
   const adminServer = startAdminServer();
+  const jobWorker = createJobWorker();
 
   await bot.launch();
+  jobWorker.start();
   console.log("Telegram bot is running.");
+  console.log("Job worker is running.");
 
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`Received ${signal}, stopping Telegram bot...`);
+    jobWorker.stop();
     bot.stop(signal);
     adminServer.close();
   };

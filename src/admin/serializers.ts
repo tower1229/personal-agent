@@ -72,3 +72,10 @@ export function serializeEvalResult(result: Record<string, unknown>) {
     scoreJson: parseJson(result.scoreJson as string | null)
   };
 }
+
+export function serializeJob(job: Record<string, unknown>) {
+  return {
+    ...job,
+    payloadJson: parseJson(job.payloadJson as string | null)
+  };
+}

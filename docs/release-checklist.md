@@ -27,6 +27,8 @@ curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/health
 - [ ] `/admin/ui` 可打开
 - [ ] `/admin/ui/runs` 可查看 run 列表
 - [ ] run detail 可看到 trace timeline、tool calls、approval、workflow 或 RAG debug
+- [ ] `/admin/ui/jobs` 可查看 job backlog，pending/running/failed 状态合理
+- [ ] `/admin/ui/documents` 可查看 `indexStatus`、`indexError`、`indexedAt`
 
 ## Telegram Smoke Test
 
@@ -38,7 +40,10 @@ curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/admin/health
 - [ ] 基于文档问答包含来源
 - [ ] destructive approval 只回复 `确认` 不会执行
 - [ ] destructive approval 回复 `确认 <code>` 后才执行
+- [ ] 重复发送同一个确认码不会二次执行
+- [ ] approval 工具执行失败时状态为 `execution_failed`
 - [ ] `生成今日简报` 可生成 workflow 记录
+- [ ] 文档导入后会创建 indexing job，embedding 失败时仍可 keyword fallback
 
 ## Secrets / Repo Hygiene
 

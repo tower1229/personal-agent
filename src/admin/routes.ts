@@ -8,6 +8,7 @@ import {
   listDocumentChunksForAdmin,
   listDocumentsForAdmin,
   listEvalRunsForAdmin,
+  listJobsForAdmin,
   listMemoriesForAdmin,
   listRunsForAdmin,
   listToolCallsForAdmin,
@@ -23,6 +24,7 @@ import {
   renderDocumentsPage,
   renderEvalDetailPage,
   renderEvalRunsPage,
+  renderJobsPage,
   renderMessagePage,
   renderMemoriesPage,
   renderMemoryDetailPage,
@@ -174,6 +176,20 @@ adminRoutes.get("/approvals", async (c) => {
   });
 });
 
+adminRoutes.get("/jobs", async (c) => {
+  const jobs = await listJobsForAdmin({
+    runId: parseOptionalId(c.req.query("runId")),
+    userId: c.req.query("userId"),
+    status: c.req.query("status"),
+    type: c.req.query("type"),
+    limit: parseLimit(c.req.query("limit"), 50)
+  });
+
+  return c.json({
+    jobs
+  });
+});
+
 adminRoutes.get("/ui", (c) => c.html(renderDashboardPage()));
 
 adminRoutes.get("/ui/runs", async (c) => {
@@ -247,6 +263,19 @@ adminRoutes.get("/ui/approvals", async (c) => {
   const approvals = await listApprovalRequestsForAdmin(filters);
 
   return c.html(renderApprovalsPage(approvals, filters));
+});
+
+adminRoutes.get("/ui/jobs", async (c) => {
+  const filters = {
+    runId: parseOptionalId(c.req.query("runId")),
+    userId: c.req.query("userId"),
+    status: c.req.query("status"),
+    type: c.req.query("type"),
+    limit: parseLimit(c.req.query("limit"), 100)
+  };
+  const jobs = await listJobsForAdmin(filters);
+
+  return c.html(renderJobsPage(jobs, filters));
 });
 
 adminRoutes.get("/ui/documents", async (c) => {

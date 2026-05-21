@@ -133,6 +133,30 @@ describe("approval flow", () => {
     expect((await db.select().from(approvalRequests))[0]?.status).toBe("executed");
   });
 
+  it("does not execute the same approval twice", async () => {
+    const memory = await createMemory("只删除一次");
+    await pendingDeleteApproval({ memoryId: memory.id, approvalCode: "1234" });
+
+    const first = await handle("确认 1234");
+    const second = await handle("确认 1234");
+
+    expect(first.output).toContain("已删除记忆");
+    expect(second.output).toContain("当前没有待确认的操作");
+    expect(await db.select().from(toolCalls)).toHaveLength(1);
+    expect((await db.select().from(approvalRequests))[0]?.status).toBe("executed");
+  });
+
+  it("marks approval execution failures explicitly", async () => {
+    await pendingDeleteApproval({ memoryId: 999999, approvalCode: "1234" });
+
+    const result = await handle("确认 1234");
+    const approval = (await db.select().from(approvalRequests))[0];
+
+    expect(result.output).toContain("抱歉");
+    expect(approval?.status).toBe("execution_failed");
+    expect(approval?.executionError).toContain("was not found");
+  });
+
   it("rejects pending approval on cancel", async () => {
     const memory = await createMemory();
     await pendingDeleteApproval({ memoryId: memory.id, approvalCode: "1234" });

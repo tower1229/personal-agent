@@ -51,7 +51,13 @@ export interface EvalCase {
   forbiddenKeywords: string[];
   expectedBehavior: string;
   riskLevel?: ToolRiskLevel;
-  expectedApprovalStatus?: "pending" | "rejected" | "executed" | "expired";
+  expectedApprovalStatus?:
+    | "pending"
+    | "rejected"
+    | "executing"
+    | "executed"
+    | "execution_failed"
+    | "expired";
   expectedApprovalCodeRequired?: boolean;
 }
 

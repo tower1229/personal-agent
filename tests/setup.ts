@@ -40,6 +40,7 @@ beforeEach(() => {
     DELETE FROM memory_embeddings;
     DELETE FROM memory_events;
     DELETE FROM memories;
+    DELETE FROM jobs;
     DELETE FROM tool_calls;
     DELETE FROM todos;
     DELETE FROM runs;

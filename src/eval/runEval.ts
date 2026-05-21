@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createApprovalRequest } from "../db/approvals.js";
 import { createEvalResult, createEvalRun, finishEvalRun } from "../db/evals.js";
 import { createMockLlmClient } from "../llm/mockClient.js";
@@ -199,8 +200,8 @@ async function executeCase(input: {
   }
 }
 
-async function main(): Promise<void> {
-  const useMock = process.argv.includes("--mock");
+export async function runEval(input: { useMock?: boolean } = {}): Promise<void> {
+  const useMock = input.useMock ?? false;
 
   if (useMock) {
     process.env.EVAL_MOCK = "1";
@@ -292,7 +293,19 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error) => {
-  console.error("Eval runner failed:", error);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  await runEval({
+    useMock: process.argv.includes("--mock")
+  });
+}
+
+const executedPath = process.argv[1]
+  ? pathToFileURL(resolve(process.argv[1])).href
+  : null;
+
+if (executedPath === import.meta.url) {
+  main().catch((error) => {
+    console.error("Eval runner failed:", error);
+    process.exit(1);
+  });
+}

@@ -73,15 +73,15 @@ export function badge(value: unknown): string {
 export const statusBadge = badge;
 
 export function statusBadgeClass(status: string): string {
-  if (["succeeded", "passed", "approved", "executed"].includes(status)) {
+  if (["succeeded", "passed", "executed", "indexed"].includes(status)) {
     return "badge-green";
   }
 
-  if (["failed"].includes(status)) {
+  if (["failed", "execution_failed"].includes(status)) {
     return "badge-red";
   }
 
-  if (["running", "pending"].includes(status)) {
+  if (["running", "pending", "executing"].includes(status)) {
     return "badge-yellow";
   }
 

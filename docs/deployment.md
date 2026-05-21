@@ -15,6 +15,7 @@ npm run dev
 
 - Telegram Bot polling
 - Hono Admin API，默认 `http://127.0.0.1:3000/admin`
+- 同进程 SQLite Job Worker，用于处理文本消息、文档导入和 RAG indexing
 
 生产模式：
 
@@ -78,6 +79,17 @@ Docker Compose 将本地 `./data` 挂载到容器 `/app/data`。这意味着：
 - 备份宿主机 `./data` 即可备份运行数据。
 - 不要把 `data/` 提交到 Git。
 
+## Job Worker 与恢复
+
+当前 worker 与 Bot/Admin 在同一个 Node.js 进程中运行，使用 SQLite `jobs` 表保存任务状态。任务状态包括 `pending`、`running`、`succeeded`、`failed`、`cancelled`。
+
+- 文本消息会先创建 run 和 `handle_text_message` job，再由 worker 执行。
+- 文档上传会创建 `ingest_document` job；导入成功后再创建 `index_document_chunks` job。
+- worker 通过 SQLite 条件更新领取 job，避免同一个 job 被重复执行。
+- 可重试错误会按 attempts 重新排队；超过 `max_attempts` 后进入 `failed`。
+- 进程重启后，SQLite 中的 pending/failed job 仍可在 Admin UI 查看；旧 Telegram progress message 的编辑上下文不会跨进程恢复。
+- 当前仍是单实例模型，不要同时启动多个容器/进程消费同一个 SQLite 数据库。
+
 ## Admin API 安全注意事项
 
 - Admin API 是开发/演示调试接口，不应直接暴露公网。
@@ -125,7 +137,9 @@ sqlite3 data/personal-agent.sqlite ".backup 'data/personal-agent.backup.sqlite'"
 ### RAG 没有 vector score
 
 - provider 可能不支持 embeddings，或 `EMBEDDING_MODEL` 配置不可用。
+- RAG indexing 可能仍在 `pending`，或 `index_status=failed`。
 - 系统会 fallback 到 keyword 检索，文档入库仍可成功。
+- 可在 `/admin/ui/documents` 和 `/admin/ui/jobs` 查看索引状态和失败原因。
 
 ### 真实 eval 失败
 

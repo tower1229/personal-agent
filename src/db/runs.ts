@@ -39,6 +39,11 @@ export async function createRunningRun(input: {
   return run;
 }
 
+export async function getRun(id: number): Promise<Run | null> {
+  const rows = await db.select().from(runs).where(eq(runs.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
 export async function markRunSucceeded(input: {
   id: number;
   output: string;

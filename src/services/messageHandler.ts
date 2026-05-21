@@ -1,17 +1,23 @@
 import { generateReply } from "../agent/index.js";
 import {
-  approveRequest,
   expireOldApprovals,
+  findPendingApprovalByCode,
   getLatestApprovalForUser,
+  getLatestApprovalForUserByCode,
   getLatestPendingApprovalForUser,
+  markApprovalExecuting,
   markApprovalExecuted,
+  markApprovalExecutionFailed,
   rejectRequest
 } from "../db/approvals.js";
+import { createJob } from "../db/jobs.js";
 import {
   createRunningRun,
+  getRun,
   markRunFailed,
   markRunSucceeded
 } from "../db/runs.js";
+import { type Run } from "../db/schema.js";
 import { executeRegisteredTool } from "../tools/registry.js";
 import { sanitizeTelegramText } from "../utils/sanitizeTelegramText.js";
 import { emitProgress, type ProgressHandler } from "./progress.js";
@@ -37,6 +43,12 @@ export interface HandleUserTextMessageInput {
 export interface HandleUserTextMessageResult {
   output: string;
   runId: number;
+}
+
+export interface EnqueueUserTextMessageResult {
+  output: string;
+  runId: number;
+  jobId: number;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -120,29 +132,25 @@ async function handleApprovalDecision(input: {
 
   await expireOldApprovals();
 
-  const latestApproval = await getLatestApprovalForUser({
-    userId: input.userId,
-    chatId: input.chatId
-  });
-
-  if (latestApproval?.status === "expired") {
-    await emitProgress(input.onProgress, {
-      type: "approval_required",
-      message: "待确认操作已过期"
-    });
-    return "待确认操作已过期，请重新发起。";
-  }
-
-  if (latestApproval?.status !== "pending") {
-    return "当前没有待确认的操作。";
-  }
-
   const pendingApproval = await getLatestPendingApprovalForUser({
     userId: input.userId,
     chatId: input.chatId
   });
 
-  if (!pendingApproval || pendingApproval.id !== latestApproval.id) {
+  if (!pendingApproval) {
+    const latestApproval = await getLatestApprovalForUser({
+      userId: input.userId,
+      chatId: input.chatId
+    });
+
+    if (latestApproval?.status === "expired") {
+      await emitProgress(input.onProgress, {
+        type: "approval_required",
+        message: "待确认操作已过期"
+      });
+      return "待确认操作已过期，请重新发起。";
+    }
+
     return "当前没有待确认的操作。";
   }
 
@@ -159,7 +167,7 @@ async function handleApprovalDecision(input: {
     return "已取消这次操作。";
   }
 
-  if (pendingApproval.approvalCode && !decision.code) {
+  if (!decision.code) {
     await emitProgress(input.onProgress, {
       type: "approval_required",
       message: "需要确认码"
@@ -167,36 +175,58 @@ async function handleApprovalDecision(input: {
     return "这次操作需要确认码。请回复：确认 <确认码>。回复 取消 可放弃。";
   }
 
-  if (
-    pendingApproval.approvalCode &&
-    decision.code !== pendingApproval.approvalCode
-  ) {
+  const latestApprovalForCode = await getLatestApprovalForUserByCode({
+    userId: input.userId,
+    chatId: input.chatId,
+    code: decision.code
+  });
+
+  if (latestApprovalForCode?.status === "expired") {
+    await emitProgress(input.onProgress, {
+      type: "approval_required",
+      message: "待确认操作已过期"
+    });
+    return "待确认操作已过期，请重新发起。";
+  }
+
+  if (latestApprovalForCode?.status && latestApprovalForCode.status !== "pending") {
+    return "当前没有匹配确认码的待确认操作。";
+  }
+
+  const approvalToExecute = await findPendingApprovalByCode({
+    userId: input.userId,
+    chatId: input.chatId,
+    code: decision.code
+  });
+
+  if (!approvalToExecute) {
     await emitProgress(input.onProgress, {
       type: "approval_required",
       message: "确认码不正确"
     });
-    return "确认码不正确，操作未执行。请核对后回复：确认 <确认码>，或回复 取消。";
+    return "确认码不正确或待确认操作已不可执行。请核对后回复：确认 <确认码>，或回复 取消。";
   }
 
-  const approved = await approveRequest({
-    id: pendingApproval.id,
+  const executing = await markApprovalExecuting({
+    id: approvalToExecute.id,
     userId: input.userId,
-    chatId: input.chatId
+    chatId: input.chatId,
+    code: decision.code
   });
   let executedToolCallId: number | null = null;
 
   await emitProgress(input.onProgress, {
     type: "tool_start",
-    message: `调用工具：${approved.toolName}`,
-    toolName: approved.toolName
+    message: `调用工具：${executing.toolName}`,
+    toolName: executing.toolName
   });
 
   let result: unknown;
 
   try {
     result = await executeRegisteredTool({
-      toolName: approved.toolName,
-      argsJson: approved.toolArgsJson,
+      toolName: executing.toolName,
+      argsJson: executing.toolArgsJson,
       context: {
         userId: input.userId,
         chatId: input.chatId,
@@ -209,43 +239,44 @@ async function handleApprovalDecision(input: {
     });
     await emitProgress(input.onProgress, {
       type: "tool_done",
-      message: `工具完成：${approved.toolName}`,
-      toolName: approved.toolName,
+      message: `工具完成：${executing.toolName}`,
+      toolName: executing.toolName,
       outcome: "succeeded"
     });
   } catch (error) {
+    await markApprovalExecutionFailed({
+      id: executing.id,
+      error: toErrorMessage(error)
+    });
     await emitProgress(input.onProgress, {
       type: "tool_done",
-      message: `工具失败：${approved.toolName}`,
-      toolName: approved.toolName,
+      message: `工具失败：${executing.toolName}`,
+      toolName: executing.toolName,
       outcome: "failed"
     });
     throw error;
   }
 
   await markApprovalExecuted({
-    id: approved.id,
-    userId: input.userId,
-    chatId: input.chatId,
+    id: executing.id,
     executedToolCallId
   });
 
   return formatApprovalExecutionReply(result);
 }
 
-export async function handleUserTextMessage(
-  input: HandleUserTextMessageInput
-): Promise<HandleUserTextMessageResult> {
-  const startedAt = Date.now();
+async function processRunningTextMessage(input: {
+  run: Run;
+  input: string;
+  userId: string;
+  chatId: string;
+  metadata: Record<string, unknown>;
+  onProgress?: ProgressHandler;
+  llmClient?: LlmClient;
+}): Promise<HandleUserTextMessageResult> {
+  const startedAt = input.run.createdAt.getTime();
   const initialMetadata = input.metadata;
-  const run = await createRunningRun({
-    userId: input.userId,
-    chatId: input.chatId,
-    model: env.OPENAI_MODEL,
-    input: input.input,
-    metadata: initialMetadata,
-    createdAt: new Date(startedAt)
-  });
+
   await emitProgress(input.onProgress, {
     type: "status",
     message: "已创建运行记录"
@@ -256,7 +287,7 @@ export async function handleUserTextMessage(
       message: input.input,
       userId: input.userId,
       chatId: input.chatId,
-      runId: run.id,
+      runId: input.run.id,
       onProgress: input.onProgress
     });
 
@@ -269,14 +300,14 @@ export async function handleUserTextMessage(
         message: "正在生成最终回复"
       });
       await markRunSucceeded({
-        id: run.id,
+        id: input.run.id,
         output,
         latencyMs
       });
 
       return {
         output,
-        runId: run.id
+        runId: input.run.id
       };
     }
 
@@ -285,7 +316,7 @@ export async function handleUserTextMessage(
         userId: input.userId,
         chatId: input.chatId,
         triggerMessage: input.input,
-        runId: run.id,
+        runId: input.run.id,
         onProgress: input.onProgress,
         llmClient: input.llmClient
       });
@@ -301,7 +332,7 @@ export async function handleUserTextMessage(
         message: "正在生成最终回复"
       });
       await markRunSucceeded({
-        id: run.id,
+        id: input.run.id,
         output,
         latencyMs,
         metadata
@@ -309,7 +340,7 @@ export async function handleUserTextMessage(
 
       return {
         output,
-        runId: run.id
+        runId: input.run.id
       };
     }
 
@@ -321,7 +352,7 @@ export async function handleUserTextMessage(
       input: input.input,
       userId: input.userId,
       chatId: input.chatId,
-      runId: run.id,
+      runId: input.run.id,
       onProgress: input.onProgress,
       llmClient: input.llmClient
     });
@@ -333,14 +364,14 @@ export async function handleUserTextMessage(
     const latencyMs = Date.now() - startedAt;
 
     await markRunSucceeded({
-      id: run.id,
+      id: input.run.id,
       output,
       latencyMs
     });
 
     return {
       output,
-      runId: run.id
+      runId: input.run.id
     };
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
@@ -349,7 +380,7 @@ export async function handleUserTextMessage(
 
     console.error("Message handling failed:", error);
     await markRunFailed({
-      id: run.id,
+      id: input.run.id,
       error: errorMessage,
       latencyMs,
       output: null,
@@ -364,7 +395,109 @@ export async function handleUserTextMessage(
 
     return {
       output,
-      runId: run.id
+      runId: input.run.id
     };
   }
+}
+
+export async function processUserTextMessageJob(input: {
+  runId: number;
+  message: string;
+  userId: string;
+  chatId: string;
+  metadata: Record<string, unknown>;
+  onProgress?: ProgressHandler;
+  llmClient?: LlmClient;
+}): Promise<HandleUserTextMessageResult> {
+  const run = await getRun(input.runId);
+
+  if (!run) {
+    throw new Error(`Run ${input.runId} was not found`);
+  }
+
+  return processRunningTextMessage({
+    run,
+    input: input.message,
+    userId: input.userId,
+    chatId: input.chatId,
+    metadata: input.metadata,
+    onProgress: input.onProgress,
+    llmClient: input.llmClient
+  });
+}
+
+export async function enqueueUserTextMessage(input: HandleUserTextMessageInput & {
+  idempotencyKey: string;
+}): Promise<EnqueueUserTextMessageResult> {
+  const startedAt = Date.now();
+  const run = await createRunningRun({
+    userId: input.userId,
+    chatId: input.chatId,
+    model: env.OPENAI_MODEL,
+    input: input.input,
+    metadata: input.metadata,
+    createdAt: new Date(startedAt)
+  });
+  const job = await createJob({
+    type: "handle_text_message",
+    userId: input.userId,
+    chatId: input.chatId,
+    runId: run.id,
+    idempotencyKey: input.idempotencyKey,
+    payload: {
+      message: input.input,
+      metadata: input.metadata
+    }
+  });
+
+  if (job.runId && job.runId !== run.id) {
+    await markRunFailed({
+      id: run.id,
+      error: `Duplicate idempotency key: ${input.idempotencyKey}`,
+      latencyMs: Date.now() - startedAt,
+      output: null,
+      metadata: input.metadata
+    });
+
+    return {
+      output: "已收到，正在处理。",
+      runId: job.runId,
+      jobId: job.id
+    };
+  }
+
+  await emitProgress(input.onProgress, {
+    type: "status",
+    message: "已收到，正在处理"
+  });
+
+  return {
+    output: "已收到，正在处理。",
+    runId: run.id,
+    jobId: job.id
+  };
+}
+
+export async function handleUserTextMessage(
+  input: HandleUserTextMessageInput
+): Promise<HandleUserTextMessageResult> {
+  const startedAt = Date.now();
+  const run = await createRunningRun({
+    userId: input.userId,
+    chatId: input.chatId,
+    model: env.OPENAI_MODEL,
+    input: input.input,
+    metadata: input.metadata,
+    createdAt: new Date(startedAt)
+  });
+
+  return processRunningTextMessage({
+    run,
+    input: input.input,
+    userId: input.userId,
+    chatId: input.chatId,
+    metadata: input.metadata,
+    onProgress: input.onProgress,
+    llmClient: input.llmClient
+  });
 }

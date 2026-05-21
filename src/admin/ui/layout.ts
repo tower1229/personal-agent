@@ -19,6 +19,7 @@ export function layout(title: string, body: string): string {
       <nav class="nav" aria-label="Admin sections">
         <a href="/admin/ui/runs">Runs</a>
         <a href="/admin/ui/workflows">Workflows</a>
+        <a href="/admin/ui/jobs">Jobs</a>
         <a href="/admin/ui/approvals">Approvals</a>
         <a href="/admin/ui/memories">Memories</a>
         <a href="/admin/ui/documents">Documents</a>

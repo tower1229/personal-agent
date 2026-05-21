@@ -324,6 +324,7 @@ export function renderDashboardPage(): string {
       <div class="quick-grid">
         <a class="quick-link" href="/admin/ui/runs">Runs</a>
         <a class="quick-link" href="/admin/ui/workflows">Workflows</a>
+        <a class="quick-link" href="/admin/ui/jobs">Jobs</a>
         <a class="quick-link" href="/admin/ui/approvals">Approvals</a>
         <a class="quick-link" href="/admin/ui/memories">Memories</a>
         <a class="quick-link" href="/admin/ui/documents">Documents</a>
@@ -552,7 +553,7 @@ export function renderApprovalsPage(
     "Approvals",
     `<section class="section"><h1>Approvals</h1>
       ${filterForm("/admin/ui/approvals", [
-        select("status", "status", filters.status, ["pending", "approved", "rejected", "executed", "expired"]),
+        select("status", "status", filters.status, ["pending", "rejected", "executing", "executed", "execution_failed", "expired"]),
         select("riskLevel", "riskLevel", filters.riskLevel, ["read", "write_low", "write_high", "external_send", "destructive"]),
         input("userId", "userId", filters.userId),
         input("runId", "runId", filters.runId),
@@ -577,6 +578,43 @@ export function renderApprovalsPage(
   );
 }
 
+export function renderJobsPage(jobs: Row[], filters: FilterValues = {}): string {
+  const rows = jobs.map((job) => {
+    const runId = valueOf(job, "runId");
+
+    return `<tr>
+      <td class="mono">${field(job, "id")}</td>
+      <td>${field(job, "type")}</td>
+      <td>${badge(valueOf(job, "status"))}</td>
+      <td>${field(job, "userId")}</td>
+      <td class="mono">${runId ? link(`/admin/ui/runs/${runId}`, runId) : "-"}</td>
+      <td class="mono">${field(job, "attempts")} / ${field(job, "maxAttempts")}</td>
+      <td>${escapeHtml(formatDate(valueOf(job, "availableAt")))}</td>
+      <td>${field(job, "lockedBy")}</td>
+      <td class="preview">${escapeHtml(truncate(valueOf(job, "lastError"), 160))}</td>
+      <td><details><summary>payload</summary>${htmlPre(valueOf(job, "payloadJson"))}</details></td>
+    </tr>`;
+  });
+
+  return layout(
+    "Jobs",
+    `<section class="section"><h1>Jobs</h1>
+      ${filterForm("/admin/ui/jobs", [
+        select("status", "status", filters.status, ["pending", "running", "succeeded", "failed", "cancelled"]),
+        select("type", "type", filters.type, ["handle_text_message", "ingest_document", "index_document_chunks", "run_eval"]),
+        input("userId", "userId", filters.userId),
+        input("runId", "runId", filters.runId),
+        input("limit", "limit", filters.limit ?? 100)
+      ])}
+      ${table(
+        ["id", "type", "status", "userId", "run", "attempts", "availableAt", "lockedBy", "lastError", "payload"],
+        rows,
+        "No jobs found"
+      )}
+    </section>`
+  );
+}
+
 export function renderDocumentsPage(
   documents: Row[],
   filters: FilterValues = {}
@@ -586,6 +624,9 @@ export function renderDocumentsPage(
     <td>${field(document, "title")}</td>
     <td>${field(document, "userId")}</td>
     <td>${field(document, "sourceType")}</td>
+    <td>${badge(valueOf(document, "indexStatus"))}</td>
+    <td class="preview">${escapeHtml(truncate(valueOf(document, "indexError"), 120))}</td>
+    <td>${escapeHtml(formatDate(valueOf(document, "indexedAt")))}</td>
     <td>${escapeHtml(formatDate(valueOf(document, "createdAt")))}</td>
   </tr>`);
 
@@ -598,7 +639,7 @@ export function renderDocumentsPage(
         input("limit", "limit", filters.limit ?? 100)
       ])}
       ${table(
-        ["id", "title", "userId", "sourceType", "createdAt"],
+        ["id", "title", "userId", "sourceType", "indexStatus", "indexError", "indexedAt", "createdAt"],
         rows,
         "No documents found"
       )}
@@ -717,6 +758,7 @@ export function renderDocumentChunksPage(documentId: number, chunks: Row[]): str
     <td>${escapeHtml(metadataField(chunk, "chunkType") ?? "-")}</td>
     <td class="preview">${escapeHtml(truncate(valueOf(chunk, "content"), 220))}</td>
     <td>${escapeHtml(boolText(valueOf(chunk, "hasEmbedding")))}</td>
+    <td>${escapeHtml(boolText(metadataField(chunk, "embedding_failed")))}</td>
     <td>${field(chunk, "embeddingModel")}</td>
     <td class="mono">${escapeHtml(valueOf(chunk, "dimensions") ?? valueOf(chunk, "embeddingDimensions") ?? "-")}</td>
   </tr>`);
@@ -724,7 +766,7 @@ export function renderDocumentChunksPage(documentId: number, chunks: Row[]): str
   return layout(
     `Document ${documentId} chunks`,
     `<section class="section"><h1>Document ${escapeHtml(documentId)} chunks</h1>${table(
-      ["chunkIndex", "headingPath", "chunkType", "content preview", "hasEmbedding", "embeddingModel", "dimensions"],
+      ["chunkIndex", "headingPath", "chunkType", "content preview", "hasEmbedding", "embeddingFailed", "embeddingModel", "dimensions"],
       rows,
       "No chunks found"
     )}</section>`

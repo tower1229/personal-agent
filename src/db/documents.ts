@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { env } from "../config/env.js";
 import {
@@ -165,7 +165,9 @@ function hasRerankedEvidence(
 async function saveChunkEmbeddings(input: {
   userId: string;
   chunks: DocumentChunk[];
-}): Promise<void> {
+}): Promise<string[]> {
+  const failures: string[] = [];
+
   for (const chunk of input.chunks) {
     try {
       const embedding = await generateEmbedding(chunk.content);
@@ -181,6 +183,9 @@ async function saveChunkEmbeddings(input: {
       });
     } catch (error) {
       const metadata = parseMetadata(chunk.metadataJson);
+      const message = error instanceof Error ? error.message : String(error);
+
+      failures.push(`chunk ${chunk.id}: ${message}`);
 
       await db
         .update(documentChunks)
@@ -195,6 +200,8 @@ async function saveChunkEmbeddings(input: {
         .where(eq(documentChunks.id, chunk.id));
     }
   }
+
+  return failures;
 }
 
 export async function createDocumentWithChunks(input: {
@@ -260,6 +267,9 @@ export async function createDocumentWithChunks(input: {
       title: input.title,
       sourceType: input.sourceType,
       contentHash,
+      indexStatus: "pending",
+      indexError: null,
+      indexedAt: null,
       createdAt: now
     })
     .returning();
@@ -286,15 +296,93 @@ export async function createDocumentWithChunks(input: {
     })))
     .returning();
 
-  await saveChunkEmbeddings({
-    userId: input.userId,
-    chunks: createdChunks
-  });
-
   return {
     document,
     chunkCount: chunks.length,
     duplicate: false
+  };
+}
+
+export async function updateDocumentIndexStatus(input: {
+  userId: string;
+  documentId: number;
+  status: "pending" | "indexed" | "failed";
+  error?: string | null;
+  indexedAt?: Date | null;
+}): Promise<Document> {
+  const updated = await db
+    .update(documents)
+    .set({
+      indexStatus: input.status,
+      indexError: input.error ?? null,
+      indexedAt:
+        typeof input.indexedAt === "undefined"
+          ? input.status === "indexed"
+            ? new Date()
+            : null
+          : input.indexedAt
+    })
+    .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)))
+    .returning();
+
+  if (!updated[0]) {
+    throw new Error(`Document ${input.documentId} was not found`);
+  }
+
+  return updated[0];
+}
+
+export async function indexDocumentChunks(input: {
+  userId: string;
+  documentId: number;
+}): Promise<{ status: "indexed" | "failed"; failures: string[] }> {
+  const chunks = await db
+    .select()
+    .from(documentChunks)
+    .where(
+      and(
+        eq(documentChunks.documentId, input.documentId),
+        eq(documentChunks.userId, input.userId)
+      )
+    )
+    .orderBy(documentChunks.chunkIndex);
+
+  if (!chunks.length) {
+    await updateDocumentIndexStatus({
+      userId: input.userId,
+      documentId: input.documentId,
+      status: "failed",
+      error: "No chunks found for indexing",
+      indexedAt: null
+    });
+
+    return {
+      status: "failed",
+      failures: ["No chunks found for indexing"]
+    };
+  }
+
+  await db
+    .delete(documentChunkEmbeddings)
+    .where(inArray(documentChunkEmbeddings.documentChunkId, chunks.map((chunk) => chunk.id)));
+
+  const failures = await saveChunkEmbeddings({
+    userId: input.userId,
+    chunks
+  });
+  const status = failures.length ? "failed" : "indexed";
+
+  await updateDocumentIndexStatus({
+    userId: input.userId,
+    documentId: input.documentId,
+    status,
+    error: failures.length ? failures.join("; ") : null,
+    indexedAt: status === "indexed" ? new Date() : null
+  });
+
+  return {
+    status,
+    failures
   };
 }
 

@@ -1,4 +1,5 @@
 import { and, desc, eq, like, or } from "drizzle-orm";
+import { listJobs } from "./jobs.js";
 import { listDocumentChunks } from "./documents.js";
 import { db } from "./client.js";
 import {
@@ -307,9 +308,10 @@ export async function getApprovalRequests(input: {
         approvalRequests.status,
         input.status as
           | "pending"
-          | "approved"
           | "rejected"
+          | "executing"
           | "executed"
+          | "execution_failed"
           | "expired"
       )
     );
@@ -328,6 +330,16 @@ export async function getApprovalRequests(input: {
   return query
     .orderBy(desc(approvalRequests.createdAt))
     .limit(clampLimit(input.limit, 100));
+}
+
+export async function getJobs(input: {
+  runId?: number;
+  userId?: string;
+  status?: string;
+  type?: string;
+  limit: number;
+}) {
+  return listJobs(input);
 }
 
 export async function getEvalRuns(input: { limit: number }) {

@@ -4,6 +4,7 @@ import {
   getDocuments,
   getEvalRunDetail,
   getEvalRuns,
+  getJobs,
   getMemories,
   getMemoryDetail,
   getRunDetail,
@@ -18,6 +19,7 @@ import {
   serializeDocumentChunk,
   serializeEvalResult,
   serializeEvalRun,
+  serializeJob,
   serializeRun,
   serializeToolCall,
   serializeWorkflow,
@@ -200,6 +202,18 @@ export async function listApprovalRequestsForAdmin(input: {
   const approvals = await getApprovalRequests(input);
 
   return approvals.map((approval) => serializeApprovalRequest(approval));
+}
+
+export async function listJobsForAdmin(input: {
+  runId?: number;
+  userId?: string;
+  status?: string;
+  type?: string;
+  limit: number;
+}) {
+  const jobs = await getJobs(input);
+
+  return jobs.map((job) => serializeJob(job));
 }
 
 export async function listEvalRunsForAdmin(input: { limit: number }) {

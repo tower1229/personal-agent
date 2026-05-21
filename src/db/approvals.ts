@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, desc, eq, gt, lte } from "drizzle-orm";
 import { db } from "./client.js";
 import {
   approvalRequests,
@@ -28,6 +28,8 @@ export async function createApprovalRequest(
       expiresAt:
         request.expiresAt ?? new Date(now.getTime() + defaultApprovalTtlMs),
       approvalCode: request.approvalCode ?? generateApprovalCode(),
+      executionError: request.executionError ?? null,
+      executionAttempts: request.executionAttempts ?? 0,
       status: "pending",
       createdAt: now,
       decidedAt: null,
@@ -43,6 +45,50 @@ export async function createApprovalRequest(
   }
 
   return approval;
+}
+
+export async function findPendingApprovalByCode(input: {
+  userId: string;
+  chatId: string;
+  code: string;
+}): Promise<ApprovalRequest | null> {
+  const approvals = await db
+    .select()
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.userId, input.userId),
+        eq(approvalRequests.chatId, input.chatId),
+        eq(approvalRequests.approvalCode, input.code),
+        eq(approvalRequests.status, "pending"),
+        gt(approvalRequests.expiresAt, new Date())
+      )
+    )
+    .orderBy(desc(approvalRequests.createdAt), desc(approvalRequests.id))
+    .limit(1);
+
+  return approvals[0] ?? null;
+}
+
+export async function getLatestApprovalForUserByCode(input: {
+  userId: string;
+  chatId: string;
+  code: string;
+}): Promise<ApprovalRequest | null> {
+  const approvals = await db
+    .select()
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.userId, input.userId),
+        eq(approvalRequests.chatId, input.chatId),
+        eq(approvalRequests.approvalCode, input.code)
+      )
+    )
+    .orderBy(desc(approvalRequests.createdAt), desc(approvalRequests.id))
+    .limit(1);
+
+  return approvals[0] ?? null;
 }
 
 export async function getLatestPendingApprovalForUser(input: {
@@ -84,23 +130,28 @@ export async function getLatestApprovalForUser(input: {
   return approvals[0] ?? null;
 }
 
-export async function approveRequest(input: {
+export async function markApprovalExecuting(input: {
   id: number;
   userId: string;
   chatId: string;
+  code: string;
 }): Promise<ApprovalRequest> {
   const updated = await db
     .update(approvalRequests)
     .set({
-      status: "approved",
-      decidedAt: new Date()
+      status: "executing",
+      decidedAt: new Date(),
+      executionError: null,
+      executionAttempts: 1
     })
     .where(
       and(
         eq(approvalRequests.id, input.id),
         eq(approvalRequests.userId, input.userId),
         eq(approvalRequests.chatId, input.chatId),
-        eq(approvalRequests.status, "pending")
+        eq(approvalRequests.approvalCode, input.code),
+        eq(approvalRequests.status, "pending"),
+        gt(approvalRequests.expiresAt, new Date())
       )
     )
     .returning();
@@ -108,7 +159,7 @@ export async function approveRequest(input: {
   const approval = updated[0];
 
   if (!approval) {
-    throw new Error("Pending approval request was not found");
+    throw new Error("Pending approval request was not found or is no longer executable");
   }
 
   return approval;
@@ -146,8 +197,6 @@ export async function rejectRequest(input: {
 
 export async function markApprovalExecuted(input: {
   id: number;
-  userId: string;
-  chatId: string;
   executedToolCallId?: number | null;
 }): Promise<ApprovalRequest> {
   const updated = await db
@@ -155,14 +204,13 @@ export async function markApprovalExecuted(input: {
     .set({
       status: "executed",
       executedAt: new Date(),
+      executionError: null,
       executedToolCallId: input.executedToolCallId ?? null
     })
     .where(
       and(
         eq(approvalRequests.id, input.id),
-        eq(approvalRequests.userId, input.userId),
-        eq(approvalRequests.chatId, input.chatId),
-        eq(approvalRequests.status, "approved")
+        eq(approvalRequests.status, "executing")
       )
     )
     .returning();
@@ -170,7 +218,35 @@ export async function markApprovalExecuted(input: {
   const approval = updated[0];
 
   if (!approval) {
-    throw new Error("Approved request was not found");
+    throw new Error("Executing approval request was not found");
+  }
+
+  return approval;
+}
+
+export async function markApprovalExecutionFailed(input: {
+  id: number;
+  error: string;
+}): Promise<ApprovalRequest> {
+  const updated = await db
+    .update(approvalRequests)
+    .set({
+      status: "execution_failed",
+      executedAt: new Date(),
+      executionError: input.error
+    })
+    .where(
+      and(
+        eq(approvalRequests.id, input.id),
+        eq(approvalRequests.status, "executing")
+      )
+    )
+    .returning();
+
+  const approval = updated[0];
+
+  if (!approval) {
+    throw new Error("Executing approval request was not found");
   }
 
   return approval;

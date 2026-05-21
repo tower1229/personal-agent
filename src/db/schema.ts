@@ -37,9 +37,10 @@ export type MemoryStatus = (typeof memoryStatuses)[number];
 
 export const approvalRequestStatuses = [
   "pending",
-  "approved",
   "rejected",
+  "executing",
   "executed",
+  "execution_failed",
   "expired"
 ] as const;
 export type ApprovalRequestStatus =
@@ -47,6 +48,30 @@ export type ApprovalRequestStatus =
 
 export const documentSourceTypes = ["text", "markdown"] as const;
 export type DocumentSourceType = (typeof documentSourceTypes)[number];
+
+export const documentIndexStatuses = [
+  "pending",
+  "indexed",
+  "failed"
+] as const;
+export type DocumentIndexStatus = (typeof documentIndexStatuses)[number];
+
+export const jobStatuses = [
+  "pending",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled"
+] as const;
+export type JobStatus = (typeof jobStatuses)[number];
+
+export const jobTypes = [
+  "handle_text_message",
+  "ingest_document",
+  "index_document_chunks",
+  "run_eval"
+] as const;
+export type JobType = (typeof jobTypes)[number];
 
 export const workflowTypes = ["daily_brief"] as const;
 export type WorkflowType = (typeof workflowTypes)[number];
@@ -170,6 +195,8 @@ export const approvalRequests = sqliteTable("approval_requests", {
   operationSummaryJson: text("operation_summary_json"),
   approvalCode: text("approval_code"),
   executedToolCallId: integer("executed_tool_call_id"),
+  executionError: text("execution_error"),
+  executionAttempts: integer("execution_attempts").notNull().default(0),
   status: text("status", { enum: approvalRequestStatuses }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
@@ -182,6 +209,11 @@ export const documents = sqliteTable("documents", {
   title: text("title").notNull(),
   sourceType: text("source_type", { enum: documentSourceTypes }).notNull(),
   contentHash: text("content_hash").notNull(),
+  indexStatus: text("index_status", { enum: documentIndexStatuses })
+    .notNull()
+    .default("pending"),
+  indexError: text("index_error"),
+  indexedAt: integer("indexed_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
@@ -253,6 +285,25 @@ export const evalResults = sqliteTable("eval_results", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 });
 
+export const jobs = sqliteTable("jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  type: text("type", { enum: jobTypes }).notNull(),
+  status: text("status", { enum: jobStatuses }).notNull(),
+  userId: text("user_id").notNull(),
+  chatId: text("chat_id").notNull(),
+  runId: integer("run_id"),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  payloadJson: text("payload_json").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  availableAt: integer("available_at", { mode: "timestamp_ms" }).notNull(),
+  lockedAt: integer("locked_at", { mode: "timestamp_ms" }),
+  lockedBy: text("locked_by"),
+  lastError: text("last_error"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
+});
+
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
 export type Todo = typeof todos.$inferSelect;
@@ -281,3 +332,5 @@ export type EvalRun = typeof evalRuns.$inferSelect;
 export type NewEvalRun = typeof evalRuns.$inferInsert;
 export type EvalResult = typeof evalResults.$inferSelect;
 export type NewEvalResult = typeof evalResults.$inferInsert;
+export type Job = typeof jobs.$inferSelect;
+export type NewJob = typeof jobs.$inferInsert;

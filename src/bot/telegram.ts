@@ -3,10 +3,10 @@ import { env } from "../config/env.js";
 import {
   createRunningRun,
   markRunFailed,
-  markRunSucceeded
 } from "../db/runs.js";
-import { ingestDocument } from "../services/documentIngestion.js";
-import { handleUserTextMessage } from "../services/messageHandler.js";
+import { createJob } from "../db/jobs.js";
+import { registerRunProgress } from "../jobs/progress.js";
+import { enqueueUserTextMessage } from "../services/messageHandler.js";
 import { createTelegramProgressUpdater } from "./progressUpdater.js";
 
 const documentImportErrorMessage = "抱歉，文档导入失败。请稍后再试。";
@@ -157,28 +157,25 @@ export function createTelegramBot(): Telegraf {
         return;
       }
 
-      const result = await ingestDocument({
-        userId,
-        title: fileName,
-        content,
-        sourceType: getSourceType(fileName),
-        metadata
+      const progressMessage = await ctx.reply("已收到文档，正在后台导入...");
+      const progressUpdater = createTelegramProgressUpdater({
+        ctx,
+        messageId: progressMessage.message_id
       });
-      const output = result.skippedDuplicate
-        ? "这个文档之前已经导入过，已跳过重复导入。"
-        : [
-            `已导入文档：${result.title}`,
-            `切分片段：${result.chunkCount}`,
-            "你现在可以问：根据我上传的文档，xxx 是什么？"
-          ].join("\n");
-      const latencyMs = Date.now() - startedAt;
 
-      await replySafely(ctx, output);
-      await markRunSucceeded({
-        id: run.id,
-        output,
-        latencyMs,
-        metadata
+      registerRunProgress(run.id, progressUpdater);
+      await createJob({
+        type: "ingest_document",
+        userId,
+        chatId,
+        runId: run.id,
+        idempotencyKey: `telegram-document:${chatId}:${ctx.message.message_id}`,
+        payload: {
+          title: fileName,
+          content,
+          sourceType: getSourceType(fileName),
+          metadata
+        }
       });
     } catch (error) {
       const latencyMs = Date.now() - startedAt;
@@ -221,16 +218,17 @@ export function createTelegramBot(): Telegraf {
     }
 
     try {
-      const result = await handleUserTextMessage({
+      const result = await enqueueUserTextMessage({
         input: message,
         userId,
         chatId,
         metadata,
-        onProgress: progressUpdater?.onProgress
+        onProgress: progressUpdater?.onProgress,
+        idempotencyKey: `telegram:${chatId}:${ctx.message.message_id}`
       });
 
       if (progressUpdater) {
-        await progressUpdater.finish(result.output);
+        registerRunProgress(result.runId, progressUpdater);
       } else {
         await replySafely(ctx, result.output);
       }

@@ -85,6 +85,13 @@
       "when": 1779277800000,
       "tag": "0011_memory_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1779366600000,
+      "tag": "0012_jobs_approval_rag",
+      "breakpoints": true
     }
   ]
 }

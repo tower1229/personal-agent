@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { searchDocumentChunks } from "../../db/documents.js";
+import { retriever } from "../../rag/index.js";
 import { type AgentTool } from "../types.js";
 
 const searchDocumentsInputSchema = z.object({
@@ -22,7 +22,7 @@ export const searchDocumentsTool: AgentTool<
   inputSchema: searchDocumentsInputSchema,
   riskLevel: "read",
   async execute(args, context) {
-    const chunks = await searchDocumentChunks({
+    const chunks = await retriever.search({
       userId: context.userId,
       query: args.query,
       limit: args.limit
