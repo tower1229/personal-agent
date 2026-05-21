@@ -49,6 +49,7 @@ export interface EnqueueUserTextMessageResult {
   output: string;
   runId: number;
   jobId: number;
+  reusedExistingJob: boolean;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -273,6 +274,7 @@ async function processRunningTextMessage(input: {
   metadata: Record<string, unknown>;
   onProgress?: ProgressHandler;
   llmClient?: LlmClient;
+  rethrowErrors?: boolean;
 }): Promise<HandleUserTextMessageResult> {
   const startedAt = input.run.createdAt.getTime();
   const initialMetadata = input.metadata;
@@ -374,6 +376,10 @@ async function processRunningTextMessage(input: {
       runId: input.run.id
     };
   } catch (error) {
+    if (input.rethrowErrors) {
+      throw error;
+    }
+
     const latencyMs = Date.now() - startedAt;
     const errorMessage = toErrorMessage(error);
     const output = sanitizeTelegramText(friendlyErrorMessage);
@@ -422,12 +428,15 @@ export async function processUserTextMessageJob(input: {
     chatId: input.chatId,
     metadata: input.metadata,
     onProgress: input.onProgress,
-    llmClient: input.llmClient
+    llmClient: input.llmClient,
+    rethrowErrors: true
   });
 }
 
 export async function enqueueUserTextMessage(input: HandleUserTextMessageInput & {
   idempotencyKey: string;
+  onRunCreated?: (runId: number) => void;
+  onRunDiscarded?: (runId: number) => void;
 }): Promise<EnqueueUserTextMessageResult> {
   const startedAt = Date.now();
   const run = await createRunningRun({
@@ -438,6 +447,9 @@ export async function enqueueUserTextMessage(input: HandleUserTextMessageInput &
     metadata: input.metadata,
     createdAt: new Date(startedAt)
   });
+
+  input.onRunCreated?.(run.id);
+
   const job = await createJob({
     type: "handle_text_message",
     userId: input.userId,
@@ -458,11 +470,13 @@ export async function enqueueUserTextMessage(input: HandleUserTextMessageInput &
       output: null,
       metadata: input.metadata
     });
+    input.onRunDiscarded?.(run.id);
 
     return {
       output: "已收到，正在处理。",
       runId: job.runId,
-      jobId: job.id
+      jobId: job.id,
+      reusedExistingJob: true
     };
   }
 
@@ -474,7 +488,8 @@ export async function enqueueUserTextMessage(input: HandleUserTextMessageInput &
   return {
     output: "已收到，正在处理。",
     runId: run.id,
-    jobId: job.id
+    jobId: job.id,
+    reusedExistingJob: false
   };
 }
 

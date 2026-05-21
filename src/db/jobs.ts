@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db, sqlite } from "./client.js";
 import { jobs, type Job, type JobType, type NewJob } from "./schema.js";
 
@@ -91,10 +91,15 @@ export async function claimNextJob(
         "    updated_at = ?",
         "WHERE id = (",
         "  SELECT id FROM jobs",
-        "  WHERE status = 'pending'",
+        "  WHERE (",
+        "    status = 'pending'",
         "    AND available_at <= ?",
-        "    AND (locked_at IS NULL OR locked_at <= ?)",
-        "  ORDER BY available_at ASC, id ASC",
+        "  ) OR (",
+        "    status = 'running'",
+        "    AND locked_at <= ?",
+        "    AND attempts < max_attempts",
+        "  )",
+        "  ORDER BY CASE WHEN status = 'running' THEN 0 ELSE 1 END, available_at ASC, id ASC",
         "  LIMIT 1",
         ")",
         "RETURNING id"
@@ -110,6 +115,36 @@ export async function claimNextJob(
 
   const claimed = await db.select().from(jobs).where(eq(jobs.id, row.id)).limit(1);
   return claimed[0] ?? null;
+}
+
+export async function failExpiredRunningJobs(
+  input: { lockTimeoutMs?: number } = {}
+): Promise<Job[]> {
+  const nowMs = Date.now();
+  const lockExpiredBeforeMs = nowMs - (input.lockTimeoutMs ?? defaultLockTimeoutMs);
+  const rows = sqlite
+    .prepare(
+      [
+        "UPDATE jobs",
+        "SET status = 'failed',",
+        "    locked_at = NULL,",
+        "    locked_by = NULL,",
+        "    last_error = 'Job lock expired after max attempts',",
+        "    updated_at = ?",
+        "WHERE status = 'running'",
+        "  AND locked_at <= ?",
+        "  AND attempts >= max_attempts",
+        "RETURNING id"
+      ].join(" ")
+    )
+    .all(nowMs, lockExpiredBeforeMs) as Array<{ id: number }>;
+  const ids = rows.map((row) => row.id);
+
+  if (!ids.length) {
+    return [];
+  }
+
+  return db.select().from(jobs).where(inArray(jobs.id, ids));
 }
 
 export async function markJobSucceeded(id: number): Promise<Job> {

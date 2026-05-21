@@ -87,7 +87,8 @@ Docker Compose 将本地 `./data` 挂载到容器 `/app/data`。这意味着：
 - 文档上传会创建 `ingest_document` job；导入成功后再创建 `index_document_chunks` job。
 - worker 通过 SQLite 条件更新领取 job，避免同一个 job 被重复执行。
 - 可重试错误会按 attempts 重新排队；超过 `max_attempts` 后进入 `failed`。
-- 进程重启后，SQLite 中的 pending/failed job 仍可在 Admin UI 查看；旧 Telegram progress message 的编辑上下文不会跨进程恢复。
+- 未耗尽 attempts 的 stale `running` job 会在锁超时后被重新领取；已耗尽 attempts 的 stale `running` job 会进入 `failed`，关联 run 也会失败。
+- 进程重启后，SQLite 中的 pending/running/failed job 仍可在 Admin UI 查看；旧 Telegram progress message 的编辑上下文不会跨进程恢复。
 - 当前仍是单实例模型，不要同时启动多个容器/进程消费同一个 SQLite 数据库。
 
 ## Admin API 安全注意事项

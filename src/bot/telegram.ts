@@ -5,7 +5,7 @@ import {
   markRunFailed,
 } from "../db/runs.js";
 import { createJob } from "../db/jobs.js";
-import { registerRunProgress } from "../jobs/progress.js";
+import { registerRunProgress, stopRunProgress } from "../jobs/progress.js";
 import { enqueueUserTextMessage } from "../services/messageHandler.js";
 import { createTelegramProgressUpdater } from "./progressUpdater.js";
 
@@ -224,11 +224,21 @@ export function createTelegramBot(): Telegraf {
         chatId,
         metadata,
         onProgress: progressUpdater?.onProgress,
-        idempotencyKey: `telegram:${chatId}:${ctx.message.message_id}`
+        idempotencyKey: `telegram:${chatId}:${ctx.message.message_id}`,
+        onRunCreated(runId) {
+          if (progressUpdater) {
+            registerRunProgress(runId, progressUpdater);
+          }
+        },
+        onRunDiscarded(runId) {
+          stopRunProgress(runId);
+        }
       });
 
       if (progressUpdater) {
-        registerRunProgress(result.runId, progressUpdater);
+        if (result.reusedExistingJob) {
+          await progressUpdater.finish(result.output);
+        }
       } else {
         await replySafely(ctx, result.output);
       }

@@ -28,7 +28,7 @@ export async function ingestDocument(
     metadata: input.metadata
   });
 
-  if (!result.duplicate) {
+  if (result.document.indexStatus !== "indexed") {
     await createJob({
       type: "index_document_chunks",
       userId: input.userId,

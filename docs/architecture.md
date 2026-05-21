@@ -64,7 +64,7 @@ flowchart TD
 5. 如果消息触发 `生成今日简报`、`今日简报` 或 `daily brief`，进入 workflow 分支。
 6. 其他消息进入 Agent runtime，LLM 可选择调用 tools。
 7. Tool registry 校验参数、判断风险、执行工具或创建 approval request。
-8. messageHandler 将 run 标记为 `succeeded` 或 `failed`，worker 将 job 标记为 `succeeded`、`failed` 或重新排队。
+8. messageHandler 将 run 标记为 `succeeded`；错误会交给 worker 判断是否重试，最终失败时再标记 run/job failed。
 9. Bot 用最终回复覆盖 progress message；如果进程重启导致内存 progress 丢失，run/job 状态仍保留在 SQLite。
 
 文档上传链路：
@@ -88,6 +88,7 @@ flowchart TD
 - 高风险工具创建 `approval_requests.run_id`。
 - 用户后续确认 approval 时，新确认消息也会创建一个新的 run；真正执行的 tool call 关联确认消息的 run，并通过 `executed_tool_call_id` 反查 approval。
 - `jobs.run_id` 关联后台任务和对应 run，便于查看 pending/running/failed job。
+- Worker 会回收未耗尽 attempts 的 stale `running` job；超过 `max_attempts` 的 stale job 会标记 failed，并终结关联 run。
 - `daily_brief` 写入 `workflows.run_id`，steps 写入 `workflow_steps.workflow_id`。
 - Eval scoring 优先使用 case 对应的 `runId` 查询 tool calls、approvals 和 workflow，避免被 setup 数据污染。
 
@@ -130,6 +131,7 @@ Admin Dashboard 的 run detail 将 run、tool calls、approval requests、workfl
 
 - `runs` 记录用户输入、输出、状态、耗时和错误。
 - `jobs` 记录后台任务类型、状态、attempts、锁、payload、错误和可重试时间。
+- 可重试错误进入 pending 并延后重试；终态失败才更新用户可见失败结果。
 - `tool_calls` 记录工具参数、结果、状态和耗时。
 - `approval_requests` 记录风险级别、确认码、过期时间、操作摘要和执行结果。
 - `workflows` / `workflow_steps` 记录 workflow 全链路。

@@ -1,5 +1,5 @@
 import { env } from "../config/env.js";
-import { markRunFailed, markRunSucceeded } from "../db/runs.js";
+import { markRunSucceeded } from "../db/runs.js";
 import { type DocumentSourceType, type Job } from "../db/schema.js";
 import { runEval } from "../eval/runEval.js";
 import { retriever } from "../rag/index.js";
@@ -7,8 +7,6 @@ import { ingestDocument } from "../services/documentIngestion.js";
 import { processUserTextMessageJob } from "../services/messageHandler.js";
 import { type LlmClient } from "../llm/types.js";
 import { finishRunProgress, getRunProgress } from "./progress.js";
-
-const documentImportErrorMessage = "抱歉，文档导入失败。请稍后再试。";
 
 function parsePayload(job: Job): Record<string, unknown> {
   const parsed = JSON.parse(job.payloadJson) as unknown;
@@ -78,44 +76,32 @@ export async function processJob(
       const startedAt = Date.now();
       const metadata = recordValue(payload.metadata);
 
-      try {
-        const result = await ingestDocument({
-          userId: job.userId,
-          title: stringValue(payload.title, "title"),
-          content: stringValue(payload.content, "content"),
-          sourceType: sourceTypeValue(payload.sourceType),
-          metadata: {
-            ...metadata,
-            chatId: job.chatId,
-            runId: job.runId
-          }
-        });
-        const output = result.skippedDuplicate
-          ? "这个文档之前已经导入过，已跳过重复导入。"
-          : [
-              `已导入文档：${result.title}`,
-              `切分片段：${result.chunkCount}`,
-              "文档索引已进入后台任务，完成前仍可使用关键词检索。"
-            ].join("\n");
+      const result = await ingestDocument({
+        userId: job.userId,
+        title: stringValue(payload.title, "title"),
+        content: stringValue(payload.content, "content"),
+        sourceType: sourceTypeValue(payload.sourceType),
+        metadata: {
+          ...metadata,
+          chatId: job.chatId,
+          runId: job.runId
+        }
+      });
+      const output = result.skippedDuplicate
+        ? "这个文档之前已经导入过，已跳过重复导入。"
+        : [
+            `已导入文档：${result.title}`,
+            `切分片段：${result.chunkCount}`,
+            "文档索引已进入后台任务，完成前仍可使用关键词检索。"
+          ].join("\n");
 
-        await markRunSucceeded({
-          id: job.runId,
-          output,
-          latencyMs: Date.now() - startedAt,
-          metadata
-        });
-        await finishRunProgress(job.runId, output);
-      } catch (error) {
-        await markRunFailed({
-          id: job.runId,
-          error: toErrorMessage(error),
-          latencyMs: Date.now() - startedAt,
-          output: null,
-          metadata
-        });
-        await finishRunProgress(job.runId, documentImportErrorMessage);
-        throw error;
-      }
+      await markRunSucceeded({
+        id: job.runId,
+        output,
+        latencyMs: Date.now() - startedAt,
+        metadata
+      });
+      await finishRunProgress(job.runId, output);
 
       return;
     }

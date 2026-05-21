@@ -1,9 +1,15 @@
 import {
   indexDocumentChunks,
   listDocuments,
-  searchDocumentChunks,
-  updateDocumentIndexStatus
+  searchDocumentChunks
 } from "../db/documents.js";
+import { db } from "../db/client.js";
+import {
+  documentChunkEmbeddings,
+  documentChunks,
+  documents
+} from "../db/schema.js";
+import { and, eq, inArray } from "drizzle-orm";
 import { type Retriever, type RetrievalResult } from "./retriever.js";
 
 export class SqliteRetriever implements Retriever {
@@ -26,13 +32,34 @@ export class SqliteRetriever implements Retriever {
     userId: string;
     documentId: number;
   }): Promise<void> {
-    await updateDocumentIndexStatus({
-      userId: input.userId,
-      documentId: input.documentId,
-      status: "failed",
-      error: "Document vector index deletion is not implemented for sqlite retriever.",
-      indexedAt: null
-    });
+    const chunks = await db
+      .select()
+      .from(documentChunks)
+      .where(
+        and(
+          eq(documentChunks.userId, input.userId),
+          eq(documentChunks.documentId, input.documentId)
+        )
+      );
+    const chunkIds = chunks.map((chunk) => chunk.id);
+
+    if (chunkIds.length) {
+      await db
+        .delete(documentChunkEmbeddings)
+        .where(inArray(documentChunkEmbeddings.documentChunkId, chunkIds));
+      await db
+        .delete(documentChunks)
+        .where(inArray(documentChunks.id, chunkIds));
+    }
+
+    await db
+      .delete(documents)
+      .where(
+        and(
+          eq(documents.userId, input.userId),
+          eq(documents.id, input.documentId)
+        )
+      );
   }
 
   async rebuildUserIndex(input: { userId: string }): Promise<void> {
