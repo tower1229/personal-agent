@@ -56,6 +56,97 @@ export const adminApiSuccessSchema = z.object({
 
 export type AdminApiSuccess = z.infer<typeof adminApiSuccessSchema>;
 
+export const adminHealthResponseSchema = z.object({
+  ok: z.literal(true),
+  service: z.literal("personal-agent-worker")
+});
+
+export type AdminHealthResponse = z.infer<typeof adminHealthResponseSchema>;
+
+export const adminUserSchema = z.object({
+  id: z.number().int().min(1),
+  username: z.string().optional(),
+  firstName: z.string().optional(),
+  photoUrl: z.string().url().optional()
+});
+
+export type AdminUser = z.infer<typeof adminUserSchema>;
+
+export const adminMeResponseSchema = z.discriminatedUnion("authenticated", [
+  z.object({
+    authenticated: z.literal(false)
+  }),
+  z.object({
+    authenticated: z.literal(true),
+    user: adminUserSchema
+  })
+]);
+
+export type AdminMeResponse = z.infer<typeof adminMeResponseSchema>;
+
+export const adminAuthConfigResponseSchema = z.object({
+  botUsername: z.string().min(1)
+});
+
+export type AdminAuthConfigResponse = z.infer<
+  typeof adminAuthConfigResponseSchema
+>;
+
+export const telegramLoginUserSchema = z.object({
+  id: z.coerce.number().int().min(1),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  username: z.string().optional(),
+  photo_url: z.string().url().optional(),
+  auth_date: z.coerce.number().int().min(1),
+  hash: z.string().min(1)
+});
+
+export type TelegramLoginUser = z.infer<typeof telegramLoginUserSchema>;
+
+export const telegramUserSchema = z.object({
+  id: z.number().int().min(1),
+  is_bot: z.boolean().optional(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  username: z.string().optional()
+});
+
+export const telegramWebhookUpdateSchema = z.object({
+  update_id: z.number().int(),
+  message: z
+    .object({
+      message_id: z.number().int(),
+      from: telegramUserSchema.optional(),
+      chat: z.object({
+        id: z.number().int()
+      }),
+      text: z.string().optional()
+    })
+    .optional(),
+  callback_query: z
+    .object({
+      id: z.string(),
+      from: telegramUserSchema,
+      data: z.string().optional()
+    })
+    .optional()
+});
+
+export type TelegramWebhookUpdate = z.infer<
+  typeof telegramWebhookUpdateSchema
+>;
+
+export const telegramWebhookResponseSchema = z.object({
+  ok: z.literal(true),
+  ignored: z.boolean().optional(),
+  accepted: z.boolean().optional()
+});
+
+export type TelegramWebhookResponse = z.infer<
+  typeof telegramWebhookResponseSchema
+>;
+
 export const evalSetupActionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_todo"),

@@ -6,15 +6,19 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "dev": "npm run build -w @personal-agent/admin && wrangler dev",
     "prebuild": "npm run build -w @personal-agent/shared",
     "build": "tsc -p tsconfig.json",
     "pretypecheck": "npm run build -w @personal-agent/shared",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@personal-agent/shared": "*"
+    "@personal-agent/shared": "*",
+    "hono": "^4.12.22"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@cloudflare/workers-types": "^4.20260522.1",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.94.0"
   }
 }

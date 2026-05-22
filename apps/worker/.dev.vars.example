@@ -1,0 +1,5 @@
+TELEGRAM_BOT_TOKEN=replace-with-bot-token
+TELEGRAM_WEBHOOK_SECRET=replace-with-webhook-secret
+ADMIN_SESSION_SECRET=replace-with-session-secret
+TELEGRAM_BOT_USERNAME=replace-with-bot-username
+OWNER_TG_USER_ID=1229

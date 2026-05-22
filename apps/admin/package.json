@@ -7,14 +7,21 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "prebuild": "npm run build -w @personal-agent/shared",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build",
+    "dev": "vite",
     "pretypecheck": "npm run build -w @personal-agent/shared",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@personal-agent/shared": "*"
+    "@personal-agent/shared": "*",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^5.8.3",
+    "vite": "^8.0.14"
   }
 }
