@@ -1,10 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "./client.js";
-import { type NewRun, type Run, runs } from "./schema.js";
-
-export async function createRun(run: NewRun): Promise<void> {
-  await db.insert(runs).values(run);
-}
+import { type Run, runs } from "./schema.js";
 
 export async function createRunningRun(input: {
   userId: string;

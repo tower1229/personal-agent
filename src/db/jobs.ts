@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { toErrorMessage } from "../utils/errors.js";
 import { db, sqlite } from "./client.js";
 import { jobs, type Job, type JobType, type NewJob } from "./schema.js";
 
@@ -23,10 +24,6 @@ export interface MarkJobFailedRetryPolicy {
 
 function backoffDelayMs(attempts: number): number {
   return Math.min(60_000, 1_000 * 2 ** Math.max(attempts - 1, 0));
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export async function createJob(input: CreateJobInput): Promise<Job> {

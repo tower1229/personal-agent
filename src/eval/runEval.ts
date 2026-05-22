@@ -8,20 +8,13 @@ import { type LlmClient } from "../llm/types.js";
 import { handleUserTextMessage } from "../services/messageHandler.js";
 import { executeRegisteredTool } from "../tools/registry.js";
 import { deleteMemory, searchMemoriesStrict } from "../db/memories.js";
+import { toErrorMessage } from "../utils/errors.js";
 import { scoreEvalCase } from "./scoring.js";
 import {
   type EvalCase,
   type EvalExecutionResult,
   type EvalSetupAction
 } from "./types.js";
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
-}
 
 async function loadCases(): Promise<EvalCase[]> {
   const filePath = resolve(process.cwd(), "eval/cases.json");

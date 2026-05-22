@@ -7,8 +7,6 @@ export function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#39;");
 }
 
-export const safeHtml = escapeHtml;
-
 export function formatDate(value: unknown): string {
   if (!value) {
     return "-";
@@ -49,8 +47,6 @@ export function prettyJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export const formatJson = prettyJson;
-
 export function htmlPre(value: unknown): string {
   const rendered = prettyJson(value);
 
@@ -60,8 +56,6 @@ export function htmlPre(value: unknown): string {
 
   return `<pre>${escapeHtml(rendered)}</pre>`;
 }
-
-export const renderJsonBlock = htmlPre;
 
 export function badge(value: unknown): string {
   const status = String(value ?? "-");

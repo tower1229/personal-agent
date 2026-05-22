@@ -5,6 +5,7 @@ import { listOpenTodos } from "../db/todos.js";
 import { createOpenAiClient } from "../llm/openaiClient.js";
 import { type LlmClient } from "../llm/types.js";
 import { emitProgress, type ProgressHandler } from "../services/progress.js";
+import { toErrorMessage } from "../utils/errors.js";
 import {
   completeWorkflowStep,
   createWorkflow,
@@ -27,14 +28,6 @@ export class DailyBriefWorkflowError extends Error {
     super(message);
     this.name = "DailyBriefWorkflowError";
   }
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
 }
 
 function toJson(value: unknown): string {

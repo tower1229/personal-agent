@@ -28,8 +28,6 @@ function table(headers: string[], rows: string[], emptyText: string): string {
     .join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
 }
 
-export const renderTable = table;
-
 function detailBlock(title: string, value: unknown): string {
   return `<section class="section"><h2>${escapeHtml(title)}</h2>${htmlPre(value)}</section>`;
 }
@@ -64,21 +62,6 @@ function valueFromPath(row: Row, path: string): unknown {
 
     return (current as Row)[key];
   }, row);
-}
-
-function queryString(filters: FilterValues): string {
-  const params = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(filters)) {
-    if (typeof value === "undefined" || value === "") {
-      continue;
-    }
-
-    params.set(key, String(value));
-  }
-
-  const rendered = params.toString();
-  return rendered ? `?${rendered}` : "";
 }
 
 function input(name: string, label: string, value: unknown): string {

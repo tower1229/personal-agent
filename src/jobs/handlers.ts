@@ -6,6 +6,7 @@ import { retriever } from "../rag/index.js";
 import { ingestDocument } from "../services/documentIngestion.js";
 import { processUserTextMessageJob } from "../services/messageHandler.js";
 import { type LlmClient } from "../llm/types.js";
+import { toErrorMessage } from "../utils/errors.js";
 import { finishRunProgress, getRunProgress } from "./progress.js";
 
 function parsePayload(job: Job): Record<string, unknown> {
@@ -36,10 +37,6 @@ function recordValue(value: unknown): Record<string, unknown> {
 
 function sourceTypeValue(value: unknown): DocumentSourceType {
   return value === "markdown" ? "markdown" : "text";
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export async function processJob(

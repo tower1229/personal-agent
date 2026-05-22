@@ -19,6 +19,7 @@ import {
 } from "../db/runs.js";
 import { type Run } from "../db/schema.js";
 import { executeRegisteredTool } from "../tools/registry.js";
+import { toErrorMessage } from "../utils/errors.js";
 import { sanitizeTelegramText } from "../utils/sanitizeTelegramText.js";
 import { emitProgress, type ProgressHandler } from "./progress.js";
 import {
@@ -50,14 +51,6 @@ export interface EnqueueUserTextMessageResult {
   runId: number;
   jobId: number;
   reusedExistingJob: boolean;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
 }
 
 function isDailyBriefTrigger(message: string): boolean {

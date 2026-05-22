@@ -9,6 +9,7 @@ import { searchMemoryTool } from "./memory/searchMemory.js";
 import { completeTodoTool } from "./todo/completeTodo.js";
 import { createTodoTool } from "./todo/createTodo.js";
 import { listTodosTool } from "./todo/listTodos.js";
+import { toErrorMessage } from "../utils/errors.js";
 import {
   type AgentTool,
   type ToolExecutionContext,
@@ -27,14 +28,6 @@ export const tools = [
 ] satisfies AgentTool[];
 
 const toolByName = new Map(tools.map((tool) => [tool.name, tool]));
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
-}
 
 function parseToolArgs(argsJson: string): unknown {
   if (!argsJson.trim()) {

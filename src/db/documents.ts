@@ -8,6 +8,7 @@ import {
 import { rerankDocumentChunks } from "../services/rerank.js";
 import { splitDocumentIntoChunks } from "../services/chunking.js";
 import { tokenizeRagQuery } from "../services/ragText.js";
+import { parseNumberArrayJson } from "../utils/json.js";
 import { db } from "./client.js";
 import {
   documentChunkEmbeddings,
@@ -98,23 +99,6 @@ export function calculateDocumentRetrievalScore(input: {
       : input.keywordScore;
 
   return roundScore(clampScore(score));
-}
-
-function parseEmbedding(value: string): number[] | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-
-    if (
-      Array.isArray(parsed) &&
-      parsed.every((item) => typeof item === "number" && Number.isFinite(item))
-    ) {
-      return parsed;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 function parseMetadata(value: string | null): Record<string, unknown> {
@@ -280,7 +264,7 @@ export async function createDocumentWithChunks(input: {
     throw new Error("Failed to create document");
   }
 
-  const createdChunks = await db
+  await db
     .insert(documentChunks)
     .values(chunks.map((chunk, index) => ({
       documentId: document.id,
@@ -430,7 +414,7 @@ export async function searchDocumentChunks(input: {
       )
       .map((embedding) => [
         embedding.documentChunkId,
-        parseEmbedding(embedding.embeddingJson)
+        parseNumberArrayJson(embedding.embeddingJson)
       ])
       .filter((entry): entry is [number, number[]] => Boolean(entry[1]))
   );

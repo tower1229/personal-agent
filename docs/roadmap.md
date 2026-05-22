@@ -21,11 +21,11 @@
 - 为 eval failure 增加更清晰的 case diff 和重跑入口。
 - 保持默认只读，避免 Admin UI 变成高风险操作面。
 
-## Message Queue / Background Jobs
+## Background Jobs Hardening
 
-- 将文档 embedding、长文档导入、eval、定时 workflow 等耗时任务移到后台。
-- 增加 job 状态、重试、失败原因和取消机制。
-- 避免 Telegram 请求链路被慢任务阻塞。
+- 为 job queue 增加取消入口和更清晰的失败恢复操作手册。
+- 增加 backlog、失败率、stale running job 的监控和告警。
+- 明确长文档导入、eval、定时 workflow 的排队策略和容量边界。
 
 ## Backup / Restore
 

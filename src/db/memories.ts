@@ -5,6 +5,7 @@ import {
   buildCanonicalKey,
   normalizeMemoryContent
 } from "../services/memoryNormalization.js";
+import { parseNumberArrayJson } from "../utils/json.js";
 import { db } from "./client.js";
 import {
   memories,
@@ -25,23 +26,6 @@ export interface UpsertMemoryResult {
   duplicateOfMemoryId?: number;
   mergedFromContent?: string;
   embeddingFailed?: boolean;
-}
-
-function parseEmbedding(value: string): number[] | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-
-    if (
-      Array.isArray(parsed) &&
-      parsed.every((item) => typeof item === "number" && Number.isFinite(item))
-    ) {
-      return parsed;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 async function recordMemoryEvent(input: {
@@ -293,7 +277,7 @@ export async function findSimilarMemories(input: {
 
   return rows
     .map(({ memory, embedding }) => {
-      const parsed = parseEmbedding(embedding.embeddingJson);
+      const parsed = parseNumberArrayJson(embedding.embeddingJson);
 
       if (!parsed) {
         return null;

@@ -7,6 +7,7 @@ import {
 import { createJob } from "../db/jobs.js";
 import { registerRunProgress, stopRunProgress } from "../jobs/progress.js";
 import { enqueueUserTextMessage } from "../services/messageHandler.js";
+import { toErrorMessage } from "../utils/errors.js";
 import { createTelegramProgressUpdater } from "./progressUpdater.js";
 
 const documentImportErrorMessage = "抱歉，文档导入失败。请稍后再试。";
@@ -18,14 +19,6 @@ const supportedDocumentExtensions = new Set([
   ".json",
   ".csv"
 ]);
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
-}
 
 function getFileExtension(fileName: string): string {
   const lastDotIndex = fileName.lastIndexOf(".");

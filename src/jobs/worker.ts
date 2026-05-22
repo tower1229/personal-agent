@@ -7,6 +7,7 @@ import {
 } from "../db/jobs.js";
 import { type Job } from "../db/schema.js";
 import { type LlmClient } from "../llm/types.js";
+import { toErrorMessage } from "../utils/errors.js";
 import { isRetryableJobError, processJob } from "./handlers.js";
 import { finishRunProgress } from "./progress.js";
 
@@ -14,10 +15,6 @@ export interface JobWorker {
   start(): void;
   stop(): void;
   processOnce(): Promise<boolean>;
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function markRunFailedIfTerminal(job: Job, error: unknown): Promise<void> {

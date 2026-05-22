@@ -10,9 +10,10 @@
 - Memory system：保存、搜索、软删除长期记忆；支持去重、访问统计、事件审计和 embedding fallback。
 - Approval：高风险/破坏性工具先创建 approval request；destructive 操作必须回复 `确认 <code>`。
 - Hybrid RAG：文档入库、Markdown/文本 chunking、keyword + embedding 混合检索、本地 rerank、来源引用。
+- Background jobs：SQLite job queue + 同进程 worker，后台处理文本消息、文档导入、RAG indexing 和 eval。
 - Workflow：`daily_brief` 代码编排工作流。
-- Observability：runs、tool_calls、approval_requests、workflows、workflow_steps、eval_runs、eval_results。
-- Hono Admin API + Dashboard：只读查看 run trace、tool calls、approvals、RAG debug、workflow steps、eval 结果。
+- Observability：runs、jobs、tool_calls、approval_requests、workflows、workflow_steps、eval_runs、eval_results。
+- Hono Admin API + Dashboard：只读查看 run trace、jobs、tool calls、approvals、RAG debug、workflow steps、eval 结果。
 - Eval：固定 case 回归，支持 mock LLM 和真实模型。
 - Docker / CI：容器化运行，GitHub Actions 执行 build/test/mock eval。
 
@@ -79,7 +80,7 @@ Dashboard 页面：
 http://localhost:3000/admin/ui?token=<ADMIN_TOKEN>
 ```
 
-页面包括 runs、run detail、trace timeline、RAG debug、approvals、memories、documents、workflows、evals。query token 仅用于本地调试，公网/生产环境不要使用。
+页面包括 runs、run detail、jobs、trace timeline、RAG debug、approvals、memories、documents、workflows、evals。query token 仅用于本地调试，公网/生产环境不要使用。
 
 ## Eval 使用
 
@@ -126,7 +127,7 @@ Compose 会读取 `.env`，将宿主机 `./data` 挂载到容器 `/app/data`，�
 - 将 RAG 迁移到专用向量数据库。
 - 引入更稳定的 reranker model。
 - 改进 Admin UI 的筛选、对比和 trace 复盘体验。
-- 增加 message queue / background jobs，承接耗时任务。
+- 增强 background jobs 的取消入口、backlog 监控和失败恢复演练。
 - 增加 backup / restore 工具。
 - 强化 production deployment：反向代理、HTTPS、secret 管理、日志轮转、监控告警。
 

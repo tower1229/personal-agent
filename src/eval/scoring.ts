@@ -1,6 +1,7 @@
 import { and, eq, gte } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { approvalRequests, toolCalls } from "../db/schema.js";
+import { parseJsonOrNull } from "../utils/json.js";
 import {
   type EvalCase,
   type EvalExecutionResult,
@@ -9,18 +10,6 @@ import {
 
 function includesIgnoreCase(output: string, keyword: string): boolean {
   return output.toLowerCase().includes(keyword.toLowerCase());
-}
-
-function parseJson(value: string | null): unknown {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return null;
-  }
 }
 
 function extractRetrievalModes(result: unknown): string[] {
@@ -220,10 +209,10 @@ export async function scoreEvalCase(input: {
     (toolCall) => toolCall.toolName === "search_documents"
   );
   const observedRetrievalModes = searchDocumentCalls.flatMap((toolCall) =>
-    extractRetrievalModes(parseJson(toolCall.resultJson))
+    extractRetrievalModes(parseJsonOrNull(toolCall.resultJson))
   );
   const observedRagResultShapeErrors = searchDocumentCalls.flatMap((toolCall) =>
-    validateSearchDocumentResultShape(parseJson(toolCall.resultJson))
+    validateSearchDocumentResultShape(parseJsonOrNull(toolCall.resultJson))
   );
   const retrievalModePassed =
     !input.evalCase.expectedTools.includes("search_documents") ||
