@@ -1,0 +1,20 @@
+{
+  "name": "@personal-agent/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "prebuild": "npm run build -w @personal-agent/shared",
+    "build": "tsc -p tsconfig.json",
+    "pretypecheck": "npm run build -w @personal-agent/shared",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@personal-agent/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

@@ -3,12 +3,19 @@
   "version": "0.5.1",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:workspaces": "npm run build -ws --if-present",
+    "typecheck:workspaces": "npm run typecheck -ws --if-present",
     "eval": "tsx src/eval/runEval.ts",
     "preeval:mock": "npm run db:migrate",
     "eval:mock": "tsx src/eval/runEval.ts --mock",
