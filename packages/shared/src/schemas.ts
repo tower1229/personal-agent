@@ -4,8 +4,11 @@ import {
   documentIndexStatuses,
   documentSourceTypes,
   evalCategories,
+  memoryStatuses,
   memoryTypes,
+  runStatuses,
   skillKinds,
+  todoStatuses,
   toolRiskLevels,
   workflowSkillStepTypes
 } from "./constants.js";
@@ -92,6 +95,77 @@ export type AdminAuthConfigResponse = z.infer<
   typeof adminAuthConfigResponseSchema
 >;
 
+export const adminRunSummarySchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(runStatuses),
+  messageText: z.string().nullable(),
+  responseText: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminRunSummary = z.infer<typeof adminRunSummarySchema>;
+
+export const adminRunsResponseSchema = z.object({
+  items: z.array(adminRunSummarySchema)
+});
+
+export type AdminRunsResponse = z.infer<typeof adminRunsResponseSchema>;
+
+export const adminTodoSchema = z.object({
+  id: z.number().int().min(1),
+  title: z.string().min(1),
+  status: z.enum(todoStatuses),
+  createdAt: z.number().int().min(0),
+  completedAt: z.number().int().min(0).nullable()
+});
+
+export type AdminTodo = z.infer<typeof adminTodoSchema>;
+
+export const adminTodosResponseSchema = z.object({
+  items: z.array(adminTodoSchema)
+});
+
+export type AdminTodosResponse = z.infer<typeof adminTodosResponseSchema>;
+
+export const adminMemorySchema = z.object({
+  id: z.number().int().min(1),
+  content: z.string().min(1),
+  status: z.enum(memoryStatuses),
+  createdAt: z.number().int().min(0),
+  deletedAt: z.number().int().min(0).nullable()
+});
+
+export type AdminMemory = z.infer<typeof adminMemorySchema>;
+
+export const adminMemoriesResponseSchema = z.object({
+  items: z.array(adminMemorySchema)
+});
+
+export type AdminMemoriesResponse = z.infer<
+  typeof adminMemoriesResponseSchema
+>;
+
+export const adminApprovalSchema = z.object({
+  id: z.string().min(1),
+  action: z.string().min(1),
+  status: z.enum(approvalRequestStatuses),
+  code: z.string().min(1),
+  createdAt: z.number().int().min(0),
+  decidedAt: z.number().int().min(0).nullable()
+});
+
+export type AdminApproval = z.infer<typeof adminApprovalSchema>;
+
+export const adminApprovalsResponseSchema = z.object({
+  items: z.array(adminApprovalSchema)
+});
+
+export type AdminApprovalsResponse = z.infer<
+  typeof adminApprovalsResponseSchema
+>;
+
 export const telegramLoginUserSchema = z.object({
   id: z.coerce.number().int().min(1),
   first_name: z.string().optional(),
@@ -140,7 +214,8 @@ export type TelegramWebhookUpdate = z.infer<
 export const telegramWebhookResponseSchema = z.object({
   ok: z.literal(true),
   ignored: z.boolean().optional(),
-  accepted: z.boolean().optional()
+  accepted: z.boolean().optional(),
+  runId: z.string().min(1).optional()
 });
 
 export type TelegramWebhookResponse = z.infer<
