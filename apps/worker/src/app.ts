@@ -51,6 +51,21 @@ function ownerId(env: WorkerEnv): number {
   return Number.parseInt(env.OWNER_TG_USER_ID, 10);
 }
 
+function telegramBotUsername(value: string | undefined): string | null {
+  const normalized = value?.trim().replace(/^@/, "") ?? "";
+
+  if (
+    normalized.length < 5 ||
+    normalized.length > 32 ||
+    !/^[A-Za-z0-9_]+$/.test(normalized) ||
+    !normalized.toLowerCase().endsWith("bot")
+  ) {
+    return null;
+  }
+
+  return normalized;
+}
+
 function defaultGenerateId(): string {
   return crypto.randomUUID();
 }
@@ -228,7 +243,8 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
   app.get("/api/admin/auth-config", (c) =>
     c.json(
       adminAuthConfigResponseSchema.parse({
-        botUsername: c.env.TELEGRAM_BOT_USERNAME
+        botUsername: telegramBotUsername(c.env.TELEGRAM_BOT_USERNAME),
+        configured: telegramBotUsername(c.env.TELEGRAM_BOT_USERNAME) !== null
       })
     )
   );
@@ -560,23 +576,48 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       reason: "admin test run",
       createdAt: rt.now()
     });
-    const result = await executeSkill({
-      runId: run.id,
-      ownerTgUserId: authenticatedOwnerId,
-      match: {
-        runnable,
-        inputText: body.data.input,
-        triggerType: "explicit_id",
-        reason: "admin test run"
-      },
-      runtime: rt
-    });
-    await rt.repositories.updateRun(run.id, {
-      status: "succeeded",
-      responseText: result.responseText,
-      error: null,
-      updatedAt: rt.now()
-    });
+    let result: Awaited<ReturnType<typeof executeSkill>>;
+    try {
+      result = await executeSkill({
+        runId: run.id,
+        ownerTgUserId: authenticatedOwnerId,
+        match: {
+          runnable,
+          inputText: body.data.input,
+          triggerType: "explicit_id",
+          reason: "admin test run"
+        },
+        runtime: rt
+      });
+      await rt.repositories.updateRun(run.id, {
+        status: "succeeded",
+        responseText: result.responseText,
+        error: null,
+        updatedAt: rt.now()
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Skill test run failed";
+      await rt.repositories.recordToolCall({
+        id: rt.generateId(),
+        runId: run.id,
+        ownerTgUserId: authenticatedOwnerId,
+        toolName: "skill_test_run",
+        riskLevel: "read",
+        status: "failed",
+        inputJson: JSON.stringify({ input: body.data.input }),
+        outputJson: null,
+        error: message,
+        createdAt: rt.now()
+      });
+      await rt.repositories.updateRun(run.id, {
+        status: "failed",
+        responseText: null,
+        error: message,
+        updatedAt: rt.now()
+      });
+      return c.json({ error: message }, 500);
+    }
 
     return c.json(
       adminSkillTestRunResponseSchema.parse({

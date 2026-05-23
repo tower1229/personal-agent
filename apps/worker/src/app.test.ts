@@ -45,7 +45,14 @@ function ownerUpdate(text: string, updateId = 1) {
 function chatSkillManifest(input: {
   id: string;
   triggerPhrases?: string[];
-  allowedTools?: string[];
+  allowedTools?: Array<
+    | "create_todo"
+    | "list_todos"
+    | "complete_todo"
+    | "save_memory"
+    | "search_memory"
+    | "delete_memory_request"
+  >;
   instructions?: string;
 }) {
   return {
@@ -62,6 +69,13 @@ function chatSkillManifest(input: {
     autoRunThreshold: 0.75,
     confirmThreshold: 0.45,
     workflowTemplate: []
+  };
+}
+
+function workflowSkillManifest(id: string) {
+  return {
+    ...chatSkillManifest({ id }),
+    kind: "workflow" as const
   };
 }
 
@@ -523,6 +537,40 @@ describe("worker app", () => {
     });
   });
 
+  it("serves normalized Telegram login config", async () => {
+    const { app } = createTestApp();
+    const response = await app.request(
+      "/api/admin/auth-config",
+      {},
+      {
+        ...env,
+        TELEGRAM_BOT_USERNAME: "@PersonalAgentBot"
+      }
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      botUsername: "PersonalAgentBot",
+      configured: true
+    });
+  });
+
+  it("does not expose invalid Telegram login config to the widget", async () => {
+    const { app } = createTestApp();
+    const response = await app.request(
+      "/api/admin/auth-config",
+      {},
+      {
+        ...env,
+        TELEGRAM_BOT_USERNAME: "configure_bot_username"
+      }
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      botUsername: null,
+      configured: false
+    });
+  });
+
   it("rejects webhook requests with invalid secret", async () => {
     const { app } = createTestApp();
     const response = await app.request(
@@ -782,6 +830,66 @@ describe("worker app", () => {
     expect(repositories.skills[0]?.deletedAt).not.toBeNull();
   });
 
+  it("allows workflow drafts but rejects publishing them", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+    const create = await app.request(
+      "/api/admin/skills",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          manifest: workflowSkillManifest("workflow-draft")
+        })
+      },
+      env
+    );
+    const publish = await app.request(
+      "/api/admin/skills/workflow-draft/publish",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+
+    expect(create.status).toBe(201);
+    expect(repositories.skills[0]?.draftManifest.kind).toBe("workflow");
+    expect(publish.status).toBe(400);
+    await expect(publish.json()).resolves.toEqual({
+      error: "Workflow skills cannot be published yet"
+    });
+  });
+
+  it("rejects skill manifests with unknown allowed tools", async () => {
+    const { app } = createTestApp();
+    const cookie = await ownerCookie();
+    const response = await app.request(
+      "/api/admin/skills",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          manifest: {
+            ...chatSkillManifest({ id: "invalid-tools" }),
+            allowedTools: ["list_todos", "unknown_tool"]
+          }
+        })
+      },
+      env
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   it("keeps published versions immutable after draft edits", async () => {
     const { repositories } = createTestApp();
     const original = await repositories.createSkill({
@@ -848,6 +956,58 @@ describe("worker app", () => {
     });
     expect(repositories.toolCalls[0]?.toolName).toBe("chat_skill_reply");
     expect(telegramClient.messages[0]?.text).toContain("像教练一样回答。");
+  });
+
+  it("marks admin test runs failed when skill execution fails", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+    await repositories.createSkill({
+      ownerTgUserId: 1229,
+      manifest: chatSkillManifest({
+        id: "failing-skill",
+        allowedTools: ["create_todo"]
+      }),
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: "failing-skill",
+      versionId: "failing-skill-v1",
+      createdAt: 1001
+    });
+    repositories.createTodo = async () => {
+      throw new Error("D1 write failed");
+    };
+
+    const response = await app.request(
+      "/api/admin/skills/failing-skill/test-run",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          input: "新增待办：失败"
+        })
+      },
+      env
+    );
+
+    expect(response.status).toBe(500);
+    expect(repositories.skillRuns.at(-1)).toMatchObject({
+      status: "failed",
+      error: "D1 write failed"
+    });
+    expect(repositories.runs.at(-1)).toMatchObject({
+      status: "failed",
+      error: "D1 write failed"
+    });
+    expect(repositories.toolCalls.at(-1)).toMatchObject({
+      toolName: "skill_test_run",
+      status: "failed",
+      error: "D1 write failed"
+    });
   });
 
   it("routes trigger phrases and falls back when skills are disabled", async () => {

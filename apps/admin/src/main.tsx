@@ -26,7 +26,9 @@ import {
   type AdminSkillRouteDecisionsResponse,
   type AdminSkillRunsResponse,
   type AdminSkillsResponse,
-  type AdminTodosResponse
+  type AdminTodosResponse,
+  type BuiltInToolName,
+  type SkillKind
 } from "@personal-agent/shared";
 
 async function fetchJson<T>(
@@ -46,9 +48,15 @@ async function fetchJson<T>(
 
 function TelegramLogin(props: { config: AdminAuthConfigResponse | null }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const host = window.location.hostname;
+  const isLocalHost =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host.endsWith(".local");
 
   useEffect(() => {
-    if (!props.config || !containerRef.current) {
+    if (!props.config?.botUsername || !containerRef.current || isLocalHost) {
       return;
     }
 
@@ -61,7 +69,27 @@ function TelegramLogin(props: { config: AdminAuthConfigResponse | null }) {
     script.dataset.authUrl = `${window.location.origin}/auth/telegram/callback`;
     script.dataset.requestAccess = "write";
     containerRef.current.append(script);
-  }, [props.config]);
+  }, [props.config, isLocalHost]);
+
+  if (props.config && !props.config.configured) {
+    return (
+      <p className="notice">
+        配置 TELEGRAM_BOT_USERNAME 为真实 bot username 后显示 Telegram 登录按钮。
+      </p>
+    );
+  }
+
+  if (props.config?.configured && isLocalHost) {
+    return (
+      <div className="notice">
+        <p>Telegram Login 不能在 localhost 或 127.0.0.1 上完成域名校验。</p>
+        <p>
+          部署到 Cloudflare 后，在 BotFather 执行 <code>/setdomain</code>，
+          绑定你的 Admin 域名，再打开线上 <code>/admin</code> 使用官方登录按钮。
+        </p>
+      </div>
+    );
+  }
 
   return <div className="telegram-login" ref={containerRef} />;
 }
@@ -80,9 +108,10 @@ interface SkillFormState {
   id: string;
   name: string;
   description: string;
+  kind: SkillKind;
   instructions: string;
   triggerPhrases: string;
-  allowedTools: string[];
+  allowedTools: BuiltInToolName[];
   enabled: boolean;
 }
 
@@ -102,6 +131,7 @@ const emptySkillForm: SkillFormState = {
   id: "",
   name: "",
   description: "",
+  kind: "chat",
   instructions: "",
   triggerPhrases: "",
   allowedTools: ["list_todos", "search_memory"],
@@ -130,11 +160,31 @@ async function sendJson<T>(
   return parse(await response.json());
 }
 
+async function sendEmpty(path: string, method: string): Promise<void> {
+  const response = await fetch(path, {
+    method,
+    credentials: "include"
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const message =
+      body &&
+      typeof body === "object" &&
+      "error" in body &&
+      typeof body.error === "string"
+        ? body.error
+        : `${path} returned ${response.status}`;
+    throw new Error(message);
+  }
+}
+
 function formFromSkill(skill: AdminSkillDetail): SkillFormState {
   return {
     id: skill.manifest.id,
     name: skill.manifest.name,
     description: skill.manifest.description,
+    kind: skill.manifest.kind,
     instructions: skill.manifest.instructions,
     triggerPhrases: skill.manifest.triggerPhrases.join("\n"),
     allowedTools: skill.manifest.allowedTools,
@@ -147,7 +197,7 @@ function manifestFromForm(form: SkillFormState) {
     id: form.id.trim(),
     name: form.name.trim(),
     description: form.description.trim(),
-    kind: "chat",
+    kind: form.kind,
     enabled: form.enabled,
     triggerPhrases: form.triggerPhrases
       .split("\n")
@@ -325,26 +375,24 @@ function App() {
   }
 
   async function publishSkill(id: string) {
-    await fetch(`/api/admin/skills/${id}/publish`, {
-      method: "POST",
-      credentials: "include"
-    });
+    await sendEmpty(`/api/admin/skills/${id}/publish`, "POST");
     reloadDashboard();
   }
 
   async function setSkillEnabled(id: string, enabled: boolean) {
-    await fetch(`/api/admin/skills/${id}/${enabled ? "enable" : "disable"}`, {
-      method: "POST",
-      credentials: "include"
+    await sendEmpty(
+      `/api/admin/skills/${id}/${enabled ? "enable" : "disable"}`,
+      "POST"
+    );
+    setSkillForm({
+      ...skillForm,
+      enabled
     });
     reloadDashboard();
   }
 
   async function deleteSkill(id: string) {
-    await fetch(`/api/admin/skills/${id}`, {
-      method: "DELETE",
-      credentials: "include"
-    });
+    await sendEmpty(`/api/admin/skills/${id}`, "DELETE");
     if (selectedSkillId === id) {
       setSelectedSkillId(null);
       setSkillForm(emptySkillForm);
@@ -397,7 +445,6 @@ function App() {
       {me && !me.authenticated ? (
         <section className="panel login-panel">
           <h2>Telegram 登录</h2>
-          <p>仅 owner Telegram 账号可以进入控制台。</p>
           <TelegramLogin config={config} />
         </section>
       ) : null}
@@ -511,6 +558,21 @@ function App() {
                       />
                     </label>
                     <label>
+                      Kind
+                      <select
+                        value={skillForm.kind}
+                        onChange={(event) =>
+                          setSkillForm({
+                            ...skillForm,
+                            kind: event.target.value as SkillKind
+                          })
+                        }
+                      >
+                        <option value="chat">chat</option>
+                        <option value="workflow">workflow draft</option>
+                      </select>
+                    </label>
+                    <label>
                       触发短语
                       <textarea
                         rows={3}
@@ -581,7 +643,17 @@ function App() {
                           <button
                             className="text-button"
                             type="button"
-                            onClick={() => void publishSkill(selectedSkillId)}
+                            onClick={() =>
+                              void publishSkill(selectedSkillId).catch(
+                                (publishError) => {
+                                  setError(
+                                    publishError instanceof Error
+                                      ? publishError.message
+                                      : "发布失败"
+                                  );
+                                }
+                              )
+                            }
                           >
                             发布
                           </button>
@@ -592,7 +664,13 @@ function App() {
                               void setSkillEnabled(
                                 selectedSkillId,
                                 !skillForm.enabled
-                              )
+                              ).catch((toggleError) => {
+                                setError(
+                                  toggleError instanceof Error
+                                    ? toggleError.message
+                                    : "启停失败"
+                                );
+                              })
                             }
                           >
                             {skillForm.enabled ? "停用" : "启用"}
@@ -600,7 +678,17 @@ function App() {
                           <button
                             className="text-button danger-button"
                             type="button"
-                            onClick={() => void deleteSkill(selectedSkillId)}
+                            onClick={() =>
+                              void deleteSkill(selectedSkillId).catch(
+                                (deleteError) => {
+                                  setError(
+                                    deleteError instanceof Error
+                                      ? deleteError.message
+                                      : "删除失败"
+                                  );
+                                }
+                              )
+                            }
                           >
                             删除
                           </button>
@@ -621,7 +709,15 @@ function App() {
                         <button
                           className="text-button"
                           type="button"
-                          onClick={() => void testSkill()}
+                          onClick={() =>
+                            void testSkill().catch((testError) => {
+                              setError(
+                                testError instanceof Error
+                                  ? testError.message
+                                  : "试运行失败"
+                              );
+                            })
+                          }
                         >
                           试运行
                         </button>

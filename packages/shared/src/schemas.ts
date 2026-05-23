@@ -40,7 +40,7 @@ export const skillManifestSchema = z.object({
   triggerPhrases: z.array(z.string().min(1)).default([]),
   intentExamples: z.array(z.string().min(1)).default([]),
   instructions: z.string().min(1),
-  allowedTools: z.array(z.string().min(1)).default([]),
+  allowedTools: z.array(builtInToolNameSchema).default([]),
   riskLevel: toolRiskLevelSchema.default("read"),
   autoRunThreshold: z.number().min(0).max(1).default(0.75),
   confirmThreshold: z.number().min(0).max(1).default(0.45),
@@ -217,7 +217,8 @@ export const adminMeResponseSchema = z.discriminatedUnion("authenticated", [
 export type AdminMeResponse = z.infer<typeof adminMeResponseSchema>;
 
 export const adminAuthConfigResponseSchema = z.object({
-  botUsername: z.string().min(1)
+  botUsername: z.string().min(1).nullable(),
+  configured: z.boolean()
 });
 
 export type AdminAuthConfigResponse = z.infer<

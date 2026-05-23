@@ -2,11 +2,13 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { env } from "../config/env.js";
 import { adminAuth } from "./auth.js";
+import { renderAdminLandingPage } from "./landing.js";
 import { adminRoutes } from "./routes.js";
 
 export function createAdminApp() {
   const app = new Hono().basePath("/admin");
 
+  app.get("/", (c) => c.html(renderAdminLandingPage()));
   app.use("*", adminAuth);
   app.route("/", adminRoutes);
 

@@ -14,5 +14,5 @@ database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
 [vars]
-TELEGRAM_BOT_USERNAME = "configure_bot_username"
+TELEGRAM_BOT_USERNAME = "taozang_agent_bot"
 OWNER_TG_USER_ID = "0"
