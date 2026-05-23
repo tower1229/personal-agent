@@ -6,8 +6,17 @@ import {
   adminMemoriesResponseSchema,
   adminMeResponseSchema,
   adminApiSuccessSchema,
+  adminSkillDetailResponseSchema,
+  adminSkillPublishResponseSchema,
+  adminSkillRouteDecisionsResponseSchema,
+  adminSkillRunsResponseSchema,
+  adminSkillsResponseSchema,
+  adminSkillTestRunRequestSchema,
+  adminSkillTestRunResponseSchema,
+  adminSkillUpsertRequestSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
+  skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
 import {
@@ -19,7 +28,7 @@ import {
   verifySession,
   verifyTelegramLogin
 } from "./auth.js";
-import { handleOwnerUpdate } from "./bot.js";
+import { executeSkill, handleOwnerUpdate, type BotRuntime } from "./bot.js";
 import { createD1Repositories } from "./d1Repositories.js";
 import {
   createTelegramClient,
@@ -32,6 +41,9 @@ import {
   type ApprovalRequestRecord,
   type MemoryRecord,
   type RunRecord,
+  type SkillRecord,
+  type SkillRouteDecisionRecord,
+  type SkillRunRecord,
   type TodoRecord
 } from "./repositories.js";
 
@@ -101,6 +113,60 @@ function toAdminApproval(approval: ApprovalRequestRecord) {
   };
 }
 
+function toAdminSkill(skill: SkillRecord) {
+  return {
+    id: skill.id,
+    name: skill.draftManifest.name,
+    description: skill.draftManifest.description,
+    kind: skill.draftManifest.kind,
+    enabled: skill.enabled,
+    deleted: skill.deletedAt !== null,
+    publishedVersionId: skill.publishedVersionId,
+    updatedAt: skill.updatedAt
+  };
+}
+
+function toAdminSkillDetail(skill: SkillRecord) {
+  return {
+    id: skill.id,
+    manifest: skill.draftManifest,
+    enabled: skill.enabled,
+    deleted: skill.deletedAt !== null,
+    publishedVersionId: skill.publishedVersionId,
+    publishedVersion: skill.publishedVersion,
+    createdAt: skill.createdAt,
+    updatedAt: skill.updatedAt
+  };
+}
+
+function toAdminSkillRun(skillRun: SkillRunRecord) {
+  return {
+    id: skillRun.id,
+    runId: skillRun.runId,
+    skillId: skillRun.skillId,
+    skillVersionId: skillRun.skillVersionId,
+    status: skillRun.status,
+    inputText: skillRun.inputText,
+    outputText: skillRun.outputText,
+    error: skillRun.error,
+    createdAt: skillRun.createdAt,
+    updatedAt: skillRun.updatedAt
+  };
+}
+
+function toAdminSkillRouteDecision(decision: SkillRouteDecisionRecord) {
+  return {
+    id: decision.id,
+    runId: decision.runId,
+    triggerType: decision.triggerType,
+    matchedSkillId: decision.matchedSkillId,
+    matchedSkillVersionId: decision.matchedSkillVersionId,
+    inputText: decision.inputText,
+    reason: decision.reason,
+    createdAt: decision.createdAt
+  };
+}
+
 interface WorkerAppOptions {
   repositories?: AgentRepositories;
   telegramClient?: ReturnType<typeof createTelegramClient>;
@@ -114,6 +180,21 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
 
   function repositories(env: WorkerEnv): AgentRepositories {
     return options.repositories ?? createD1Repositories(env.DB);
+  }
+
+  function runtime(env: WorkerEnv): BotRuntime {
+    return {
+      repositories: repositories(env),
+      telegramClient:
+        options.telegramClient ??
+        createTelegramClient({
+          botToken: env.TELEGRAM_BOT_TOKEN
+        }),
+      now: options.now ?? Date.now,
+      generateId: options.generateId ?? defaultGenerateId,
+      generateApprovalCode:
+        options.generateApprovalCode ?? defaultGenerateApprovalCode
+    };
   }
 
   async function adminOwnerId(c: {
@@ -245,6 +326,304 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
     );
   });
 
+  app.get("/api/admin/skills", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listSkills(
+      authenticatedOwnerId,
+      limitParam(c.req.query("limit"))
+    );
+
+    return c.json(
+      adminSkillsResponseSchema.parse({
+        items: items.map(toAdminSkill)
+      })
+    );
+  });
+
+  app.post("/api/admin/skills", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminSkillUpsertRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid skill manifest" }, 400);
+    }
+
+    const now = (options.now ?? Date.now)();
+    const skill = await repositories(c.env).createSkill({
+      ownerTgUserId: authenticatedOwnerId,
+      manifest: body.data.manifest,
+      createdAt: now
+    });
+
+    return c.json(
+      adminSkillDetailResponseSchema.parse({
+        skill: toAdminSkillDetail(skill)
+      }),
+      201
+    );
+  });
+
+  app.get("/api/admin/skills/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const skill = await repositories(c.env).getSkill({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!skill) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json(
+      adminSkillDetailResponseSchema.parse({
+        skill: toAdminSkillDetail(skill)
+      })
+    );
+  });
+
+  app.put("/api/admin/skills/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminSkillUpsertRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success || body.data.manifest.id !== c.req.param("id")) {
+      return c.json({ error: "Invalid skill manifest" }, 400);
+    }
+
+    const skill = await repositories(c.env).updateSkillDraft({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id"),
+      manifest: body.data.manifest,
+      updatedAt: (options.now ?? Date.now)()
+    });
+    if (!skill) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json(
+      adminSkillDetailResponseSchema.parse({
+        skill: toAdminSkillDetail(skill)
+      })
+    );
+  });
+
+  app.post("/api/admin/skills/:id/publish", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const skill = await repositories(c.env).getSkill({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!skill) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+    const manifest = skillManifestSchema.parse(skill.draftManifest);
+    if (manifest.kind !== "chat") {
+      return c.json({ error: "Workflow skills cannot be published yet" }, 400);
+    }
+
+    const version = await repositories(c.env).publishSkill({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id"),
+      versionId: (options.generateId ?? defaultGenerateId)(),
+      createdAt: (options.now ?? Date.now)()
+    });
+    if (!version) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json(
+      adminSkillPublishResponseSchema.parse({
+        ok: true,
+        versionId: version.id,
+        version: version.version
+      })
+    );
+  });
+
+  app.post("/api/admin/skills/:id/enable", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const skill = await repositories(c.env).setSkillEnabled({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id"),
+      enabled: true,
+      updatedAt: (options.now ?? Date.now)()
+    });
+    if (!skill) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
+
+  app.post("/api/admin/skills/:id/disable", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const skill = await repositories(c.env).setSkillEnabled({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id"),
+      enabled: false,
+      updatedAt: (options.now ?? Date.now)()
+    });
+    if (!skill) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
+
+  app.delete("/api/admin/skills/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const skill = await repositories(c.env).softDeleteSkill({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id"),
+      deletedAt: (options.now ?? Date.now)()
+    });
+    if (!skill) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
+
+  app.post("/api/admin/skills/:id/test-run", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminSkillTestRunRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid test input" }, 400);
+    }
+
+    const runnable = await repositories(c.env).getRunnableSkillById({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!runnable || runnable.version.manifest.kind !== "chat") {
+      return c.json({ error: "Runnable chat skill not found" }, 404);
+    }
+
+    const rt = runtime(c.env);
+    const now = rt.now();
+    const run = await rt.repositories.createRun({
+      id: rt.generateId(),
+      ownerTgUserId: authenticatedOwnerId,
+      chatId: authenticatedOwnerId,
+      updateId: null,
+      messageText: body.data.input,
+      createdAt: now,
+      updatedAt: now
+    });
+    await rt.repositories.createSkillRouteDecision({
+      id: rt.generateId(),
+      runId: run.id,
+      ownerTgUserId: authenticatedOwnerId,
+      inputText: body.data.input,
+      triggerType: "explicit_id",
+      matchedSkillId: runnable.skill.id,
+      matchedSkillVersionId: runnable.version.id,
+      confidence: 1,
+      reason: "admin test run",
+      createdAt: rt.now()
+    });
+    const result = await executeSkill({
+      runId: run.id,
+      ownerTgUserId: authenticatedOwnerId,
+      match: {
+        runnable,
+        inputText: body.data.input,
+        triggerType: "explicit_id",
+        reason: "admin test run"
+      },
+      runtime: rt
+    });
+    await rt.repositories.updateRun(run.id, {
+      status: "succeeded",
+      responseText: result.responseText,
+      error: null,
+      updatedAt: rt.now()
+    });
+
+    return c.json(
+      adminSkillTestRunResponseSchema.parse({
+        ok: true,
+        runId: run.id,
+        skillRunId: result.skillRunId,
+        output: result.responseText
+      })
+    );
+  });
+
+  app.get("/api/admin/skill-runs", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listSkillRuns(
+      authenticatedOwnerId,
+      limitParam(c.req.query("limit"))
+    );
+
+    return c.json(
+      adminSkillRunsResponseSchema.parse({
+        items: items.map(toAdminSkillRun)
+      })
+    );
+  });
+
+  app.get("/api/admin/skill-route-decisions", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listSkillRouteDecisions(
+      authenticatedOwnerId,
+      limitParam(c.req.query("limit"))
+    );
+
+    return c.json(
+      adminSkillRouteDecisionsResponseSchema.parse({
+        items: items.map(toAdminSkillRouteDecision)
+      })
+    );
+  });
+
   app.post("/api/admin/logout", (c) => {
     c.header("Set-Cookie", buildExpiredSessionCookie());
     return c.json(adminApiSuccessSchema.parse({ ok: true }));
@@ -299,18 +678,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
     const result = await handleOwnerUpdate({
       update,
       ownerTgUserId: userId,
-      runtime: {
-        repositories: repositories(c.env),
-        telegramClient:
-          options.telegramClient ??
-          createTelegramClient({
-            botToken: c.env.TELEGRAM_BOT_TOKEN
-          }),
-        now: options.now ?? Date.now,
-        generateId: options.generateId ?? defaultGenerateId,
-        generateApprovalCode:
-          options.generateApprovalCode ?? defaultGenerateApprovalCode
-      }
+      runtime: runtime(c.env)
     });
 
     return c.json(

@@ -2,6 +2,9 @@ import {
   type ApprovalRequestStatus,
   type MemoryStatus,
   type RunStatus,
+  type SkillManifest,
+  type SkillRouteTriggerType,
+  type SkillRunStatus,
   type TodoStatus,
   type ToolCallStatus,
   type ToolRiskLevel
@@ -61,6 +64,59 @@ export interface ApprovalRequestRecord {
   code: string;
   createdAt: number;
   decidedAt: number | null;
+}
+
+export interface SkillRecord {
+  id: string;
+  ownerTgUserId: number;
+  draftManifest: SkillManifest;
+  enabled: boolean;
+  deletedAt: number | null;
+  publishedVersionId: string | null;
+  publishedVersion: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SkillVersionRecord {
+  id: string;
+  skillId: string;
+  ownerTgUserId: number;
+  version: number;
+  manifest: SkillManifest;
+  createdAt: number;
+}
+
+export interface RunnableSkillRecord {
+  skill: SkillRecord;
+  version: SkillVersionRecord;
+}
+
+export interface SkillRouteDecisionRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  inputText: string;
+  triggerType: SkillRouteTriggerType;
+  matchedSkillId: string | null;
+  matchedSkillVersionId: string | null;
+  confidence: number | null;
+  reason: string;
+  createdAt: number;
+}
+
+export interface SkillRunRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  skillId: string;
+  skillVersionId: string;
+  status: SkillRunStatus;
+  inputText: string;
+  outputText: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface AgentRepositories {
@@ -130,4 +186,58 @@ export interface AgentRepositories {
     ownerTgUserId: number,
     limit: number
   ): Promise<ApprovalRequestRecord[]>;
+  createSkill(input: {
+    ownerTgUserId: number;
+    manifest: SkillManifest;
+    createdAt: number;
+  }): Promise<SkillRecord>;
+  updateSkillDraft(input: {
+    ownerTgUserId: number;
+    id: string;
+    manifest: SkillManifest;
+    updatedAt: number;
+  }): Promise<SkillRecord | null>;
+  listSkills(ownerTgUserId: number, limit: number): Promise<SkillRecord[]>;
+  getSkill(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<SkillRecord | null>;
+  setSkillEnabled(input: {
+    ownerTgUserId: number;
+    id: string;
+    enabled: boolean;
+    updatedAt: number;
+  }): Promise<SkillRecord | null>;
+  softDeleteSkill(input: {
+    ownerTgUserId: number;
+    id: string;
+    deletedAt: number;
+  }): Promise<SkillRecord | null>;
+  publishSkill(input: {
+    ownerTgUserId: number;
+    id: string;
+    versionId: string;
+    createdAt: number;
+  }): Promise<SkillVersionRecord | null>;
+  getRunnableSkillById(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<RunnableSkillRecord | null>;
+  listRunnableSkills(ownerTgUserId: number): Promise<RunnableSkillRecord[]>;
+  createSkillRouteDecision(
+    input: SkillRouteDecisionRecord
+  ): Promise<SkillRouteDecisionRecord>;
+  listSkillRouteDecisions(
+    ownerTgUserId: number,
+    limit: number
+  ): Promise<SkillRouteDecisionRecord[]>;
+  createSkillRun(input: SkillRunRecord): Promise<SkillRunRecord>;
+  updateSkillRun(input: {
+    id: string;
+    status: SkillRunStatus;
+    outputText?: string | null;
+    error?: string | null;
+    updatedAt: number;
+  }): Promise<void>;
+  listSkillRuns(ownerTgUserId: number, limit: number): Promise<SkillRunRecord[]>;
 }

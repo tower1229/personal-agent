@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   approvalRequestStatuses,
+  builtInToolNames,
   documentIndexStatuses,
   documentSourceTypes,
   evalCategories,
@@ -8,12 +9,15 @@ import {
   memoryTypes,
   runStatuses,
   skillKinds,
+  skillRouteTriggerTypes,
+  skillRunStatuses,
   todoStatuses,
   toolRiskLevels,
   workflowSkillStepTypes
 } from "./constants.js";
 
 export const toolRiskLevelSchema = z.enum(toolRiskLevels);
+export const builtInToolNameSchema = z.enum(builtInToolNames);
 export const skillKindSchema = z.enum(skillKinds);
 export const workflowSkillStepTypeSchema = z.enum(workflowSkillStepTypes);
 
@@ -44,6 +48,131 @@ export const skillManifestSchema = z.object({
 });
 
 export type SkillManifest = z.infer<typeof skillManifestSchema>;
+
+export const adminSkillListItemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  kind: skillKindSchema,
+  enabled: z.boolean(),
+  deleted: z.boolean(),
+  publishedVersionId: z.string().min(1).nullable(),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminSkillListItem = z.infer<typeof adminSkillListItemSchema>;
+
+export const adminSkillsResponseSchema = z.object({
+  items: z.array(adminSkillListItemSchema)
+});
+
+export type AdminSkillsResponse = z.infer<typeof adminSkillsResponseSchema>;
+
+export const adminSkillDetailSchema = z.object({
+  id: z.string().min(1),
+  manifest: skillManifestSchema,
+  enabled: z.boolean(),
+  deleted: z.boolean(),
+  publishedVersionId: z.string().min(1).nullable(),
+  publishedVersion: z.number().int().min(1).nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminSkillDetail = z.infer<typeof adminSkillDetailSchema>;
+
+export const adminSkillDetailResponseSchema = z.object({
+  skill: adminSkillDetailSchema
+});
+
+export type AdminSkillDetailResponse = z.infer<
+  typeof adminSkillDetailResponseSchema
+>;
+
+export const adminSkillUpsertRequestSchema = z.object({
+  manifest: skillManifestSchema
+});
+
+export type AdminSkillUpsertRequest = z.infer<
+  typeof adminSkillUpsertRequestSchema
+>;
+
+export const adminSkillPublishResponseSchema = z.object({
+  ok: z.literal(true),
+  versionId: z.string().min(1),
+  version: z.number().int().min(1)
+});
+
+export type AdminSkillPublishResponse = z.infer<
+  typeof adminSkillPublishResponseSchema
+>;
+
+export const adminSkillTestRunRequestSchema = z.object({
+  input: z.string().min(1)
+});
+
+export type AdminSkillTestRunRequest = z.infer<
+  typeof adminSkillTestRunRequestSchema
+>;
+
+export const adminSkillTestRunResponseSchema = z.object({
+  ok: z.literal(true),
+  runId: z.string().min(1),
+  skillRunId: z.string().min(1),
+  output: z.string()
+});
+
+export type AdminSkillTestRunResponse = z.infer<
+  typeof adminSkillTestRunResponseSchema
+>;
+
+export const adminSkillRunSummarySchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  skillId: z.string().min(1),
+  skillVersionId: z.string().min(1),
+  status: z.enum(skillRunStatuses),
+  inputText: z.string(),
+  outputText: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminSkillRunSummary = z.infer<
+  typeof adminSkillRunSummarySchema
+>;
+
+export const adminSkillRunsResponseSchema = z.object({
+  items: z.array(adminSkillRunSummarySchema)
+});
+
+export type AdminSkillRunsResponse = z.infer<
+  typeof adminSkillRunsResponseSchema
+>;
+
+export const adminSkillRouteDecisionSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  triggerType: z.enum(skillRouteTriggerTypes),
+  matchedSkillId: z.string().min(1).nullable(),
+  matchedSkillVersionId: z.string().min(1).nullable(),
+  inputText: z.string(),
+  reason: z.string(),
+  createdAt: z.number().int().min(0)
+});
+
+export type AdminSkillRouteDecision = z.infer<
+  typeof adminSkillRouteDecisionSchema
+>;
+
+export const adminSkillRouteDecisionsResponseSchema = z.object({
+  items: z.array(adminSkillRouteDecisionSchema)
+});
+
+export type AdminSkillRouteDecisionsResponse = z.infer<
+  typeof adminSkillRouteDecisionsResponseSchema
+>;
 
 export const adminApiErrorSchema = z.object({
   error: z.string().min(1),

@@ -1,4 +1,9 @@
-import { type ToolRiskLevel } from "@personal-agent/shared";
+import {
+  builtInToolNames,
+  type SkillManifest,
+  type SkillRouteTriggerType,
+  type ToolRiskLevel
+} from "@personal-agent/shared";
 import { type AgentRepositories } from "./repositories.js";
 import {
   getTelegramChatId,
@@ -6,8 +11,9 @@ import {
   type TelegramClient
 } from "./telegram.js";
 import { type TelegramWebhookUpdate } from "@personal-agent/shared";
+import { type RunnableSkillRecord } from "./repositories.js";
 
-interface BotRuntime {
+export interface BotRuntime {
   repositories: AgentRepositories;
   telegramClient: TelegramClient;
   now: () => number;
@@ -21,19 +27,29 @@ interface HandleOwnerUpdateInput {
   runtime: BotRuntime;
 }
 
-interface CommandContext {
+export interface CommandContext {
   runId: string;
   ownerTgUserId: number;
   text: string;
   runtime: BotRuntime;
+  allowedTools?: Set<string>;
+  fallbackResponse?: string;
+  fallbackToolName?: string;
 }
 
-interface CommandResult {
+export interface CommandResult {
   responseText: string;
   toolName: string;
   riskLevel: ToolRiskLevel;
   input: unknown;
   output: unknown;
+}
+
+export interface SkillMatch {
+  runnable: RunnableSkillRecord;
+  inputText: string;
+  triggerType: SkillRouteTriggerType;
+  reason: string;
 }
 
 const CREATE_TODO_PATTERN = /^(新增待办|创建待办)[:：]\s*(.+)$/u;
@@ -42,6 +58,8 @@ const REMEMBER_PATTERN = /^记住[:：]\s*(.+)$/u;
 const SEARCH_MEMORY_PATTERN = /^(搜索记忆|你记得)\s*(.+)$/u;
 const DELETE_MEMORY_PATTERN = /^删除记忆\s+(\d+)$/u;
 const APPROVAL_PATTERN = /^(确认|取消)\s+([A-Za-z0-9-]+)$/u;
+const EXPLICIT_SKILL_PATTERN = /^\/skill\s+([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/u;
+const APPROVAL_CODE_ATTEMPTS = 3;
 
 export function normalizeMemoryContent(content: string): string {
   return content.trim().toLocaleLowerCase();
@@ -78,6 +96,20 @@ function formatMemories(
   ].join("\n");
 }
 
+function isToolAllowed(context: CommandContext, toolName: string): boolean {
+  return !context.allowedTools || context.allowedTools.has(toolName);
+}
+
+function blockedToolResult(toolName: string): CommandResult {
+  return {
+    responseText: `这个 skill 不允许使用工具 ${toolName}。`,
+    toolName: "skill_tool_blocked",
+    riskLevel: "read",
+    input: { requestedTool: toolName },
+    output: { blocked: true }
+  };
+}
+
 async function recordToolCall(
   context: CommandContext,
   result: CommandResult,
@@ -98,7 +130,56 @@ async function recordToolCall(
   });
 }
 
-async function executeCommand(context: CommandContext): Promise<CommandResult> {
+async function recordFailedToolCall(
+  context: CommandContext,
+  error: string
+): Promise<void> {
+  await context.runtime.repositories.recordToolCall({
+    id: context.runtime.generateId(),
+    runId: context.runId,
+    ownerTgUserId: context.ownerTgUserId,
+    toolName: "command_execution",
+    riskLevel: "read",
+    status: "failed",
+    inputJson: JSON.stringify({ text: context.text }),
+    outputJson: null,
+    error,
+    createdAt: context.runtime.now()
+  });
+}
+
+async function createApprovalWithRetry(
+  context: CommandContext,
+  input: {
+    action: string;
+    payloadJson: string;
+  }
+) {
+  for (let attempt = 0; attempt < APPROVAL_CODE_ATTEMPTS; attempt += 1) {
+    try {
+      return await context.runtime.repositories.createApproval({
+        id: context.runtime.generateId(),
+        ownerTgUserId: context.ownerTgUserId,
+        action: input.action,
+        payloadJson: input.payloadJson,
+        status: "pending",
+        code: context.runtime.generateApprovalCode(),
+        createdAt: context.runtime.now(),
+        decidedAt: null
+      });
+    } catch (error) {
+      if (attempt === APPROVAL_CODE_ATTEMPTS - 1) {
+        return null;
+      }
+    }
+  }
+
+  return null;
+}
+
+export async function executeCommand(
+  context: CommandContext
+): Promise<CommandResult> {
   const text = context.text.trim();
   const repositories = context.runtime.repositories;
 
@@ -115,6 +196,10 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
 
   const createTodo = CREATE_TODO_PATTERN.exec(text);
   if (createTodo) {
+    if (!isToolAllowed(context, "create_todo")) {
+      return blockedToolResult("create_todo");
+    }
+
     const title = trimRequired(createTodo[2] ?? "");
     if (!title) {
       return {
@@ -142,6 +227,10 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
   }
 
   if (text === "列出我的待办") {
+    if (!isToolAllowed(context, "list_todos")) {
+      return blockedToolResult("list_todos");
+    }
+
     const todos = await repositories.listOpenTodos(context.ownerTgUserId, 20);
 
     return {
@@ -155,6 +244,10 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
 
   const completeTodo = COMPLETE_TODO_PATTERN.exec(text);
   if (completeTodo) {
+    if (!isToolAllowed(context, "complete_todo")) {
+      return blockedToolResult("complete_todo");
+    }
+
     const id = Number.parseInt(completeTodo[1] ?? "", 10);
     const todo = await repositories.completeTodo({
       ownerTgUserId: context.ownerTgUserId,
@@ -175,6 +268,10 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
 
   const remember = REMEMBER_PATTERN.exec(text);
   if (remember) {
+    if (!isToolAllowed(context, "save_memory")) {
+      return blockedToolResult("save_memory");
+    }
+
     const content = trimRequired(remember[1] ?? "");
     if (!content) {
       return {
@@ -212,6 +309,10 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
 
   const searchMemory = SEARCH_MEMORY_PATTERN.exec(text);
   if (searchMemory) {
+    if (!isToolAllowed(context, "search_memory")) {
+      return blockedToolResult("search_memory");
+    }
+
     const keyword = trimRequired(searchMemory[2] ?? "");
     if (!keyword) {
       return {
@@ -240,6 +341,10 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
 
   const deleteMemory = DELETE_MEMORY_PATTERN.exec(text);
   if (deleteMemory) {
+    if (!isToolAllowed(context, "delete_memory_request")) {
+      return blockedToolResult("delete_memory_request");
+    }
+
     const id = Number.parseInt(deleteMemory[1] ?? "", 10);
     const memory = await repositories.getActiveMemory({
       ownerTgUserId: context.ownerTgUserId,
@@ -256,16 +361,20 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
       };
     }
 
-    const approval = await repositories.createApproval({
-      id: context.runtime.generateId(),
-      ownerTgUserId: context.ownerTgUserId,
+    const approval = await createApprovalWithRetry(context, {
       action: "delete_memory",
-      payloadJson: JSON.stringify({ memoryId: id }),
-      status: "pending",
-      code: context.runtime.generateApprovalCode(),
-      createdAt: context.runtime.now(),
-      decidedAt: null
+      payloadJson: JSON.stringify({ memoryId: id })
     });
+
+    if (!approval) {
+      return {
+        responseText: "创建删除确认码失败，请稍后重试。",
+        toolName: "delete_memory_request",
+        riskLevel: "destructive",
+        input: { id },
+        output: { approvalCreated: false }
+      };
+    }
 
     return {
       responseText: `删除记忆 #${id} 需要确认。发送：确认 ${approval.code}`,
@@ -377,12 +486,187 @@ async function executeCommand(context: CommandContext): Promise<CommandResult> {
   }
 
   return {
-    responseText: "Cloudflare 核心 Bot 已接入，LLM/skill 将在后续阶段开启。",
-    toolName: "fallback",
+    responseText:
+      context.fallbackResponse ??
+      "Cloudflare 核心 Bot 已接入，LLM/skill 将在后续阶段开启。",
+    toolName: context.fallbackToolName ?? "fallback",
     riskLevel: "read",
     input: { text },
     output: { handled: false }
   };
+}
+
+function buildSkillFallback(
+  manifest: SkillManifest,
+  inputText: string
+): string {
+  return [
+    `【${manifest.name}】`,
+    manifest.instructions,
+    "",
+    inputText ? `输入：${inputText}` : "已触发该 skill。"
+  ].join("\n");
+}
+
+async function findSkillMatch(input: {
+  ownerTgUserId: number;
+  text: string;
+  runtime: BotRuntime;
+}): Promise<SkillMatch | null> {
+  const explicit = EXPLICIT_SKILL_PATTERN.exec(input.text.trim());
+
+  if (explicit) {
+    const skillId = explicit[1] ?? "";
+    const runnable = await input.runtime.repositories.getRunnableSkillById({
+      ownerTgUserId: input.ownerTgUserId,
+      id: skillId
+    });
+
+    if (!runnable || runnable.version.manifest.kind !== "chat") {
+      return null;
+    }
+
+    return {
+      runnable,
+      inputText: (explicit[2] ?? "").trim(),
+      triggerType: "explicit_id",
+      reason: `explicit skill id ${skillId}`
+    };
+  }
+
+  const runnableSkills = await input.runtime.repositories.listRunnableSkills(
+    input.ownerTgUserId
+  );
+  const text = input.text.trim();
+
+  for (const runnable of runnableSkills) {
+    if (runnable.version.manifest.kind !== "chat") {
+      continue;
+    }
+
+    for (const phrase of runnable.version.manifest.triggerPhrases) {
+      const trigger = phrase.trim();
+      if (!trigger) {
+        continue;
+      }
+
+      if (text === trigger) {
+        return {
+          runnable,
+          inputText: "",
+          triggerType: "trigger_phrase",
+          reason: `exact trigger phrase ${trigger}`
+        };
+      }
+
+      for (const separator of [" ", "：", ":"]) {
+        const prefix = `${trigger}${separator}`;
+        if (text.startsWith(prefix)) {
+          return {
+            runnable,
+            inputText: text.slice(prefix.length).trim(),
+            triggerType: "trigger_phrase",
+            reason: `prefix trigger phrase ${trigger}`
+          };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+async function recordRouteDecision(input: {
+  runId: string;
+  ownerTgUserId: number;
+  text: string;
+  runtime: BotRuntime;
+  match: SkillMatch | null;
+}): Promise<void> {
+  await input.runtime.repositories.createSkillRouteDecision({
+    id: input.runtime.generateId(),
+    runId: input.runId,
+    ownerTgUserId: input.ownerTgUserId,
+    inputText: input.text,
+    triggerType: input.match?.triggerType ?? "none",
+    matchedSkillId: input.match?.runnable.skill.id ?? null,
+    matchedSkillVersionId: input.match?.runnable.version.id ?? null,
+    confidence: input.match ? 1 : null,
+    reason: input.match?.reason ?? "no explicit skill matched",
+    createdAt: input.runtime.now()
+  });
+}
+
+export async function executeSkill(input: {
+  runId: string;
+  ownerTgUserId: number;
+  match: SkillMatch;
+  runtime: BotRuntime;
+}): Promise<CommandResult & { skillRunId: string }> {
+  const manifest = input.match.runnable.version.manifest;
+  const skillRun = await input.runtime.repositories.createSkillRun({
+    id: input.runtime.generateId(),
+    runId: input.runId,
+    ownerTgUserId: input.ownerTgUserId,
+    skillId: input.match.runnable.skill.id,
+    skillVersionId: input.match.runnable.version.id,
+    status: "running",
+    inputText: input.match.inputText,
+    outputText: null,
+    error: null,
+    createdAt: input.runtime.now(),
+    updatedAt: input.runtime.now()
+  });
+  const allowedTools = new Set(
+    manifest.allowedTools.filter((tool) =>
+      builtInToolNames.includes(tool as (typeof builtInToolNames)[number])
+    )
+  );
+
+  try {
+    const result = await executeCommand({
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      text: input.match.inputText,
+      runtime: input.runtime,
+      allowedTools,
+      fallbackResponse: buildSkillFallback(manifest, input.match.inputText),
+      fallbackToolName: "chat_skill_reply"
+    });
+    await recordToolCall(
+      {
+        runId: input.runId,
+        ownerTgUserId: input.ownerTgUserId,
+        text: input.match.inputText,
+        runtime: input.runtime
+      },
+      result,
+      "succeeded"
+    );
+
+    await input.runtime.repositories.updateSkillRun({
+      id: skillRun.id,
+      status: "succeeded",
+      outputText: result.responseText,
+      error: null,
+      updatedAt: input.runtime.now()
+    });
+
+    return {
+      ...result,
+      skillRunId: skillRun.id
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Skill run failed";
+    await input.runtime.repositories.updateSkillRun({
+      id: skillRun.id,
+      status: "failed",
+      outputText: null,
+      error: message,
+      updatedAt: input.runtime.now()
+    });
+    throw error;
+  }
 }
 
 export async function handleOwnerUpdate(
@@ -408,23 +692,45 @@ export async function handleOwnerUpdate(
   });
 
   try {
-    const result = await executeCommand({
-      runId: run.id,
+    const match = await findSkillMatch({
       ownerTgUserId: input.ownerTgUserId,
       text: text ?? "",
       runtime: input.runtime
     });
+    await recordRouteDecision({
+      runId: run.id,
+      ownerTgUserId: input.ownerTgUserId,
+      text: text ?? "",
+      runtime: input.runtime,
+      match
+    });
 
-    await recordToolCall(
-      {
-        runId: run.id,
-        ownerTgUserId: input.ownerTgUserId,
-        text: text ?? "",
-        runtime: input.runtime
-      },
-      result,
-      "succeeded"
-    );
+    const result = match
+      ? await executeSkill({
+          runId: run.id,
+          ownerTgUserId: input.ownerTgUserId,
+          match,
+          runtime: input.runtime
+        })
+      : await executeCommand({
+          runId: run.id,
+          ownerTgUserId: input.ownerTgUserId,
+          text: text ?? "",
+          runtime: input.runtime
+        });
+
+    if (!match) {
+      await recordToolCall(
+        {
+          runId: run.id,
+          ownerTgUserId: input.ownerTgUserId,
+          text: text ?? "",
+          runtime: input.runtime
+        },
+        result,
+        "succeeded"
+      );
+    }
 
     try {
       await input.runtime.telegramClient.sendMessage({
@@ -451,6 +757,15 @@ export async function handleOwnerUpdate(
   } catch (commandError) {
     const error =
       commandError instanceof Error ? commandError.message : "Command failed";
+    await recordFailedToolCall(
+      {
+        runId: run.id,
+        ownerTgUserId: input.ownerTgUserId,
+        text: text ?? "",
+        runtime: input.runtime
+      },
+      error
+    );
     await input.runtime.repositories.updateRun(run.id, {
       status: "failed",
       responseText: null,

@@ -14,6 +14,20 @@ button {
   font: inherit;
 }
 
+input,
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #c7d0dd;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
 .shell {
   max-width: 1120px;
   margin: 0 auto;
@@ -101,6 +115,94 @@ h2 {
   min-height: 44px;
 }
 
+.section-title,
+.button-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skills-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.skill-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.skill-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-row.active {
+  border-color: #476fbd;
+  background: #f1f5ff;
+}
+
+.skill-row small {
+  color: #687789;
+}
+
+.skill-form {
+  display: grid;
+  gap: 12px;
+}
+
+.skill-form label,
+.test-run {
+  display: grid;
+  gap: 6px;
+}
+
+.skill-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 0;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.checkbox-row {
+  display: flex !important;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.danger-button {
+  color: #8a1f1f;
+  border-color: #efb6b6;
+}
+
+.output {
+  margin: 0;
+  overflow: auto;
+  border-radius: 8px;
+  background: #172033;
+  color: #f3f7ff;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
 .list-panel {
   min-height: 220px;
 }
@@ -137,6 +239,10 @@ h2 {
   }
 
   .data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skills-layout {
     grid-template-columns: 1fr;
   }
 }

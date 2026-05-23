@@ -6,6 +6,10 @@ import {
   type ApprovalRequestRecord,
   type MemoryRecord,
   type RunRecord,
+  type SkillRecord,
+  type SkillRouteDecisionRecord,
+  type SkillRunRecord,
+  type SkillVersionRecord,
   type TodoRecord,
   type ToolCallRecord
 } from "./repositories.js";
@@ -38,12 +42,39 @@ function ownerUpdate(text: string, updateId = 1) {
   };
 }
 
+function chatSkillManifest(input: {
+  id: string;
+  triggerPhrases?: string[];
+  allowedTools?: string[];
+  instructions?: string;
+}) {
+  return {
+    id: input.id,
+    name: input.id,
+    description: `${input.id} description`,
+    kind: "chat" as const,
+    enabled: true,
+    triggerPhrases: input.triggerPhrases ?? [],
+    intentExamples: [],
+    instructions: input.instructions ?? "用简洁中文回应。",
+    allowedTools: input.allowedTools ?? [],
+    riskLevel: "read" as const,
+    autoRunThreshold: 0.75,
+    confirmThreshold: 0.45,
+    workflowTemplate: []
+  };
+}
+
 function createFakeRepositories(): AgentRepositories & {
   runs: RunRecord[];
   toolCalls: ToolCallRecord[];
   todos: TodoRecord[];
   memories: MemoryRecord[];
   approvals: ApprovalRequestRecord[];
+  skills: SkillRecord[];
+  skillVersions: SkillVersionRecord[];
+  skillRouteDecisions: SkillRouteDecisionRecord[];
+  skillRuns: SkillRunRecord[];
 } {
   const state = {
     runs: [] as RunRecord[],
@@ -51,6 +82,10 @@ function createFakeRepositories(): AgentRepositories & {
     todos: [] as TodoRecord[],
     memories: [] as MemoryRecord[],
     approvals: [] as ApprovalRequestRecord[],
+    skills: [] as SkillRecord[],
+    skillVersions: [] as SkillVersionRecord[],
+    skillRouteDecisions: [] as SkillRouteDecisionRecord[],
+    skillRuns: [] as SkillRunRecord[],
     nextTodoId: 1,
     nextMemoryId: 1
   };
@@ -70,6 +105,18 @@ function createFakeRepositories(): AgentRepositories & {
     },
     get approvals() {
       return state.approvals;
+    },
+    get skills() {
+      return state.skills;
+    },
+    get skillVersions() {
+      return state.skillVersions;
+    },
+    get skillRouteDecisions() {
+      return state.skillRouteDecisions;
+    },
+    get skillRuns() {
+      return state.skillRuns;
     },
     async createRun(input) {
       const run: RunRecord = {
@@ -228,6 +275,172 @@ function createFakeRepositories(): AgentRepositories & {
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
+    },
+    async createSkill(input) {
+      const skill: SkillRecord = {
+        id: input.manifest.id,
+        ownerTgUserId: input.ownerTgUserId,
+        draftManifest: input.manifest,
+        enabled: input.manifest.enabled,
+        deletedAt: null,
+        publishedVersionId: null,
+        publishedVersion: null,
+        createdAt: input.createdAt,
+        updatedAt: input.createdAt
+      };
+      state.skills.push(skill);
+      return skill;
+    },
+    async updateSkillDraft(input) {
+      const skill = state.skills.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.deletedAt === null
+      );
+      if (!skill) {
+        return null;
+      }
+      skill.draftManifest = input.manifest;
+      skill.enabled = input.manifest.enabled;
+      skill.updatedAt = input.updatedAt;
+      return skill;
+    },
+    async listSkills(ownerTgUserId, limit) {
+      return state.skills
+        .filter((skill) => skill.ownerTgUserId === ownerTgUserId)
+        .slice()
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, limit);
+    },
+    async getSkill(input) {
+      return (
+        state.skills.find(
+          (skill) =>
+            skill.ownerTgUserId === input.ownerTgUserId && skill.id === input.id
+        ) ?? null
+      );
+    },
+    async setSkillEnabled(input) {
+      const skill = state.skills.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.deletedAt === null
+      );
+      if (!skill) {
+        return null;
+      }
+      skill.enabled = input.enabled;
+      skill.draftManifest = {
+        ...skill.draftManifest,
+        enabled: input.enabled
+      };
+      skill.updatedAt = input.updatedAt;
+      return skill;
+    },
+    async softDeleteSkill(input) {
+      const skill = state.skills.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.deletedAt === null
+      );
+      if (!skill) {
+        return null;
+      }
+      skill.enabled = false;
+      skill.deletedAt = input.deletedAt;
+      skill.updatedAt = input.deletedAt;
+      return skill;
+    },
+    async publishSkill(input) {
+      const skill = state.skills.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.deletedAt === null
+      );
+      if (!skill) {
+        return null;
+      }
+      const versionNumber = (skill.publishedVersion ?? 0) + 1;
+      const version: SkillVersionRecord = {
+        id: input.versionId,
+        skillId: skill.id,
+        ownerTgUserId: input.ownerTgUserId,
+        version: versionNumber,
+        manifest: skill.draftManifest,
+        createdAt: input.createdAt
+      };
+      state.skillVersions.push(version);
+      skill.publishedVersionId = version.id;
+      skill.publishedVersion = version.version;
+      skill.updatedAt = input.createdAt;
+      return version;
+    },
+    async getRunnableSkillById(input) {
+      const skill = state.skills.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.enabled &&
+          item.deletedAt === null &&
+          item.publishedVersionId
+      );
+      const version = skill
+        ? state.skillVersions.find((item) => item.id === skill.publishedVersionId)
+        : null;
+
+      return skill && version ? { skill, version } : null;
+    },
+    async listRunnableSkills(ownerTgUserId) {
+      return state.skills
+        .filter(
+          (skill) =>
+            skill.ownerTgUserId === ownerTgUserId &&
+            skill.enabled &&
+            skill.deletedAt === null &&
+            skill.publishedVersionId
+        )
+        .flatMap((skill) => {
+          const version = state.skillVersions.find(
+            (item) => item.id === skill.publishedVersionId
+          );
+          return version ? [{ skill, version }] : [];
+        });
+    },
+    async createSkillRouteDecision(input) {
+      state.skillRouteDecisions.push(input);
+      return input;
+    },
+    async listSkillRouteDecisions(ownerTgUserId, limit) {
+      return state.skillRouteDecisions
+        .filter((decision) => decision.ownerTgUserId === ownerTgUserId)
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, limit);
+    },
+    async createSkillRun(input) {
+      state.skillRuns.push(input);
+      return input;
+    },
+    async updateSkillRun(input) {
+      const skillRun = state.skillRuns.find((item) => item.id === input.id);
+      if (!skillRun) {
+        return;
+      }
+      skillRun.status = input.status;
+      skillRun.outputText = input.outputText ?? null;
+      skillRun.error = input.error ?? null;
+      skillRun.updatedAt = input.updatedAt;
+    },
+    async listSkillRuns(ownerTgUserId, limit) {
+      return state.skillRuns
+        .filter((skillRun) => skillRun.ownerTgUserId === ownerTgUserId)
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, limit);
     }
   };
 }
@@ -280,6 +493,19 @@ async function postWebhook(app: ReturnType<typeof createWorkerApp>, body: unknow
     },
     env
   );
+}
+
+async function ownerCookie() {
+  const session = await signSession({
+    user: {
+      id: 1229,
+      username: "shixiong",
+      firstName: "Shixiong"
+    },
+    secret: env.ADMIN_SESSION_SECRET
+  });
+
+  return buildSessionCookie({ value: session });
 }
 
 describe("worker app", () => {
@@ -468,10 +694,259 @@ describe("worker app", () => {
           id: 1,
           title: "从 Admin 查看",
           status: "open",
-          createdAt: 1001,
+          createdAt: 1002,
           completedAt: null
         }
       ]
+    });
+  });
+
+  it("creates, updates, publishes, disables, and deletes skills", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+    const manifest = chatSkillManifest({
+      id: "brief",
+      triggerPhrases: ["简报"]
+    });
+    const create = await app.request(
+      "/api/admin/skills",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({ manifest })
+      },
+      env
+    );
+
+    expect(create.status).toBe(201);
+    const updatedManifest = {
+      ...manifest,
+      name: "brief updated",
+      instructions: "新版指令"
+    };
+    const update = await app.request(
+      "/api/admin/skills/brief",
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({ manifest: updatedManifest })
+      },
+      env
+    );
+    const publish = await app.request(
+      "/api/admin/skills/brief/publish",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+
+    expect(update.status).toBe(200);
+    await expect(publish.json()).resolves.toMatchObject({
+      ok: true,
+      version: 1
+    });
+    expect(repositories.skillVersions[0]?.manifest.name).toBe("brief updated");
+
+    await app.request(
+      "/api/admin/skills/brief/disable",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(repositories.skills[0]?.enabled).toBe(false);
+
+    await app.request(
+      "/api/admin/skills/brief",
+      {
+        method: "DELETE",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(repositories.skills[0]?.deletedAt).not.toBeNull();
+  });
+
+  it("keeps published versions immutable after draft edits", async () => {
+    const { repositories } = createTestApp();
+    const original = await repositories.createSkill({
+      ownerTgUserId: 1229,
+      manifest: chatSkillManifest({
+        id: "immutable",
+        instructions: "原始指令"
+      }),
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: original.id,
+      versionId: "version-1",
+      createdAt: 1001
+    });
+    await repositories.updateSkillDraft({
+      ownerTgUserId: 1229,
+      id: original.id,
+      manifest: chatSkillManifest({
+        id: "immutable",
+        instructions: "草稿新指令"
+      }),
+      updatedAt: 1002
+    });
+
+    expect(repositories.skillVersions[0]?.manifest.instructions).toBe(
+      "原始指令"
+    );
+    expect(repositories.skills[0]?.draftManifest.instructions).toBe(
+      "草稿新指令"
+    );
+  });
+
+  it("routes explicit skill messages and records skill trace", async () => {
+    const { app, repositories, telegramClient } = createTestApp();
+    await repositories.createSkill({
+      ownerTgUserId: 1229,
+      manifest: chatSkillManifest({
+        id: "coach",
+        instructions: "像教练一样回答。"
+      }),
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: "coach",
+      versionId: "coach-v1",
+      createdAt: 1001
+    });
+
+    const response = await postWebhook(app, ownerUpdate("/skill coach 今天怎么做"));
+
+    expect(response.status).toBe(200);
+    expect(repositories.skillRouteDecisions[0]).toMatchObject({
+      triggerType: "explicit_id",
+      matchedSkillId: "coach",
+      matchedSkillVersionId: "coach-v1"
+    });
+    expect(repositories.skillRuns[0]).toMatchObject({
+      skillId: "coach",
+      skillVersionId: "coach-v1",
+      status: "succeeded"
+    });
+    expect(repositories.toolCalls[0]?.toolName).toBe("chat_skill_reply");
+    expect(telegramClient.messages[0]?.text).toContain("像教练一样回答。");
+  });
+
+  it("routes trigger phrases and falls back when skills are disabled", async () => {
+    const { app, repositories, telegramClient } = createTestApp();
+    const skill = await repositories.createSkill({
+      ownerTgUserId: 1229,
+      manifest: chatSkillManifest({
+        id: "planner",
+        triggerPhrases: ["规划"]
+      }),
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: skill.id,
+      versionId: "planner-v1",
+      createdAt: 1001
+    });
+
+    await postWebhook(app, ownerUpdate("规划 明天任务", 1));
+    await repositories.setSkillEnabled({
+      ownerTgUserId: 1229,
+      id: skill.id,
+      enabled: false,
+      updatedAt: 1002
+    });
+    await postWebhook(app, ownerUpdate("规划 后天任务", 2));
+
+    expect(repositories.skillRouteDecisions[0]).toMatchObject({
+      triggerType: "trigger_phrase",
+      matchedSkillId: "planner"
+    });
+    expect(repositories.skillRouteDecisions[1]).toMatchObject({
+      triggerType: "none",
+      matchedSkillId: null
+    });
+    expect(telegramClient.messages[1]?.text).toBe(
+      "Cloudflare 核心 Bot 已接入，LLM/skill 将在后续阶段开启。"
+    );
+  });
+
+  it("blocks tools outside skill allowlists and keeps destructive approval required", async () => {
+    const { app, repositories, telegramClient } = createTestApp();
+    await repositories.createSkill({
+      ownerTgUserId: 1229,
+      manifest: chatSkillManifest({
+        id: "memory-safe",
+        allowedTools: ["search_memory"]
+      }),
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: "memory-safe",
+      versionId: "memory-safe-v1",
+      createdAt: 1001
+    });
+
+    await postWebhook(app, ownerUpdate("记住：不能保存", 1));
+    await postWebhook(app, ownerUpdate("/skill memory-safe 删除记忆 1", 2));
+
+    expect(repositories.memories).toHaveLength(1);
+    expect(repositories.memories[0]?.content).toBe("不能保存");
+    expect(repositories.approvals).toHaveLength(0);
+    expect(telegramClient.messages[1]?.text).toBe(
+      "这个 skill 不允许使用工具 delete_memory_request。"
+    );
+  });
+
+  it("ignores unsupported Telegram updates and records failed tool calls on command errors", async () => {
+    const { app, repositories } = createTestApp();
+    const ignored = await postWebhook(app, {
+      update_id: 88,
+      my_chat_member: {
+        chat: {
+          id: 1229
+        }
+      }
+    });
+
+    await expect(ignored.json()).resolves.toEqual({
+      ok: true,
+      ignored: true
+    });
+
+    repositories.createTodo = async () => {
+      throw new Error("D1 write failed");
+    };
+    const failed = await postWebhook(app, ownerUpdate("新增待办：失败路径", 89));
+
+    expect(failed.status).toBe(200);
+    expect(repositories.runs.at(-1)).toMatchObject({
+      status: "failed",
+      error: "D1 write failed"
+    });
+    expect(repositories.toolCalls.at(-1)).toMatchObject({
+      toolName: "command_execution",
+      status: "failed",
+      error: "D1 write failed"
     });
   });
 });

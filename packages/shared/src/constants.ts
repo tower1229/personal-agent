@@ -103,6 +103,27 @@ export const skillStatuses = [
 ] as const;
 export type SkillStatus = (typeof skillStatuses)[number];
 
+export const skillRouteTriggerTypes = [
+  "explicit_id",
+  "trigger_phrase",
+  "none"
+] as const;
+export type SkillRouteTriggerType =
+  (typeof skillRouteTriggerTypes)[number];
+
+export const skillRunStatuses = ["running", "succeeded", "failed"] as const;
+export type SkillRunStatus = (typeof skillRunStatuses)[number];
+
+export const builtInToolNames = [
+  "create_todo",
+  "list_todos",
+  "complete_todo",
+  "save_memory",
+  "search_memory",
+  "delete_memory_request"
+] as const;
+export type BuiltInToolName = (typeof builtInToolNames)[number];
+
 export const workflowSkillStepTypes = [
   "llm",
   "tool",
