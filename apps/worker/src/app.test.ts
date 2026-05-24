@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { buildSessionCookie, signSession } from "./auth.js";
-import { createWorkerApp } from "./app.js";
+import { createWorkerApp, runScheduled } from "./app.js";
+import { executeWorkflowSkillRun } from "./workflowExecutor.js";
 import {
   type AgentRepositories,
   type ApprovalRequestRecord,
   type MemoryRecord,
   type RunRecord,
+  type ScheduleExecutionRecord,
+  type ScheduleRecord,
   type SkillRecord,
   type SkillRouteDecisionRecord,
   type SkillRunRecord,
   type SkillVersionRecord,
   type TodoRecord,
-  type ToolCallRecord
+  type ToolCallRecord,
+  type WorkflowRunRecord,
+  type WorkflowStepRecord
 } from "./repositories.js";
 import { type TelegramClient } from "./telegram.js";
 import { type WorkerEnv } from "./types.js";
@@ -72,10 +77,22 @@ function chatSkillManifest(input: {
   };
 }
 
-function workflowSkillManifest(id: string) {
+function workflowSkillManifest(
+  id: string,
+  workflowTemplate = [
+    {
+      id: "reply",
+      type: "tool" as const,
+      input: {
+        text: "列出我的待办"
+      }
+    }
+  ]
+) {
   return {
     ...chatSkillManifest({ id }),
-    kind: "workflow" as const
+    kind: "workflow" as const,
+    workflowTemplate
   };
 }
 
@@ -89,6 +106,10 @@ function createFakeRepositories(): AgentRepositories & {
   skillVersions: SkillVersionRecord[];
   skillRouteDecisions: SkillRouteDecisionRecord[];
   skillRuns: SkillRunRecord[];
+  workflowRuns: WorkflowRunRecord[];
+  workflowSteps: WorkflowStepRecord[];
+  schedules: ScheduleRecord[];
+  scheduleExecutions: ScheduleExecutionRecord[];
 } {
   const state = {
     runs: [] as RunRecord[],
@@ -100,6 +121,10 @@ function createFakeRepositories(): AgentRepositories & {
     skillVersions: [] as SkillVersionRecord[],
     skillRouteDecisions: [] as SkillRouteDecisionRecord[],
     skillRuns: [] as SkillRunRecord[],
+    workflowRuns: [] as WorkflowRunRecord[],
+    workflowSteps: [] as WorkflowStepRecord[],
+    schedules: [] as ScheduleRecord[],
+    scheduleExecutions: [] as ScheduleExecutionRecord[],
     nextTodoId: 1,
     nextMemoryId: 1
   };
@@ -131,6 +156,18 @@ function createFakeRepositories(): AgentRepositories & {
     },
     get skillRuns() {
       return state.skillRuns;
+    },
+    get workflowRuns() {
+      return state.workflowRuns;
+    },
+    get workflowSteps() {
+      return state.workflowSteps;
+    },
+    get schedules() {
+      return state.schedules;
+    },
+    get scheduleExecutions() {
+      return state.scheduleExecutions;
     },
     async createRun(input) {
       const run: RunRecord = {
@@ -455,6 +492,192 @@ function createFakeRepositories(): AgentRepositories & {
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
+    },
+    async createWorkflowRun(input) {
+      state.workflowRuns.push(input);
+      return input;
+    },
+    async updateWorkflowRun(input) {
+      const workflowRun = state.workflowRuns.find((item) => item.id === input.id);
+      if (!workflowRun) {
+        return;
+      }
+      workflowRun.status = input.status;
+      workflowRun.outputText = input.outputText ?? null;
+      workflowRun.error = input.error ?? null;
+      workflowRun.cloudflareWorkflowInstanceId =
+        input.cloudflareWorkflowInstanceId ??
+        workflowRun.cloudflareWorkflowInstanceId;
+      workflowRun.updatedAt = input.updatedAt;
+    },
+    async getWorkflowRun(input) {
+      return (
+        state.workflowRuns.find(
+          (item) =>
+            item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+        ) ?? null
+      );
+    },
+    async listWorkflowRuns(ownerTgUserId, limit) {
+      return state.workflowRuns
+        .filter((workflowRun) => workflowRun.ownerTgUserId === ownerTgUserId)
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, limit);
+    },
+    async createWorkflowStep(input) {
+      state.workflowSteps.push(input);
+      return input;
+    },
+    async updateWorkflowStep(input) {
+      const workflowStep = state.workflowSteps.find((item) => item.id === input.id);
+      if (!workflowStep) {
+        return;
+      }
+      workflowStep.status = input.status;
+      workflowStep.outputJson = input.outputJson ?? null;
+      workflowStep.error = input.error ?? null;
+      workflowStep.completedAt = input.completedAt ?? null;
+    },
+    async listWorkflowSteps(workflowRunId) {
+      return state.workflowSteps.filter(
+        (workflowStep) => workflowStep.workflowRunId === workflowRunId
+      );
+    },
+    async createSchedule(input) {
+      state.schedules.push(input);
+      return input;
+    },
+    async updateSchedule(input) {
+      const schedule = state.schedules.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.deletedAt === null
+      );
+      if (!schedule) {
+        return null;
+      }
+      Object.assign(schedule, {
+        name: input.name,
+        commandText: input.commandText,
+        enabled: input.enabled,
+        timezone: input.timezone,
+        cadence: input.cadence,
+        timeOfDay: input.timeOfDay,
+        daysOfWeek: input.daysOfWeek,
+        nextRunAt: input.nextRunAt,
+        updatedAt: input.updatedAt
+      });
+      return schedule;
+    },
+    async setScheduleEnabled(input) {
+      const schedule = state.schedules.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.deletedAt === null
+      );
+      if (!schedule) {
+        return null;
+      }
+      schedule.enabled = input.enabled;
+      schedule.nextRunAt = input.nextRunAt;
+      schedule.updatedAt = input.updatedAt;
+      return schedule;
+    },
+    async softDeleteSchedule(input) {
+      const schedule = state.schedules.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id &&
+          item.deletedAt === null
+      );
+      if (!schedule) {
+        return null;
+      }
+      schedule.enabled = false;
+      schedule.deletedAt = input.deletedAt;
+      schedule.updatedAt = input.deletedAt;
+      return schedule;
+    },
+    async getSchedule(input) {
+      return (
+        state.schedules.find(
+          (item) =>
+            item.ownerTgUserId === input.ownerTgUserId &&
+            item.id === input.id &&
+            item.deletedAt === null
+        ) ?? null
+      );
+    },
+    async listSchedules(ownerTgUserId, limit) {
+      return state.schedules
+        .filter(
+          (schedule) =>
+            schedule.ownerTgUserId === ownerTgUserId &&
+            schedule.deletedAt === null
+        )
+        .slice()
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, limit);
+    },
+    async listDueSchedules(now, limit) {
+      return state.schedules
+        .filter(
+          (schedule) =>
+            schedule.enabled &&
+            schedule.deletedAt === null &&
+            schedule.nextRunAt <= now
+        )
+        .slice()
+        .sort((left, right) => left.nextRunAt - right.nextRunAt)
+        .slice(0, limit);
+    },
+    async createScheduleExecution(input) {
+      const existing = state.scheduleExecutions.find(
+        (item) =>
+          item.scheduleId === input.scheduleId &&
+          item.scheduledFor === input.scheduledFor
+      );
+      if (existing) {
+        return null;
+      }
+      state.scheduleExecutions.push(input);
+      return input;
+    },
+    async updateScheduleExecution(input) {
+      const execution = state.scheduleExecutions.find(
+        (item) => item.id === input.id
+      );
+      if (!execution) {
+        return;
+      }
+      execution.runId = input.runId ?? execution.runId;
+      execution.status = input.status;
+      execution.outputText = input.outputText ?? null;
+      execution.error = input.error ?? null;
+      execution.updatedAt = input.updatedAt;
+    },
+    async markScheduleExecuted(input) {
+      const schedule = state.schedules.find((item) => item.id === input.id);
+      if (!schedule) {
+        return;
+      }
+      schedule.lastRunAt = input.lastRunAt;
+      schedule.nextRunAt = input.nextRunAt;
+      schedule.updatedAt = input.updatedAt;
+    },
+    async listScheduleExecutions(input) {
+      return state.scheduleExecutions
+        .filter(
+          (execution) =>
+            execution.ownerTgUserId === input.ownerTgUserId &&
+            (!input.scheduleId || execution.scheduleId === input.scheduleId)
+        )
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, input.limit);
     }
   };
 }
@@ -479,10 +702,17 @@ function createTestApp(options: { telegramFails?: boolean } = {}) {
   const telegramClient = createFakeTelegramClient({
     fail: options.telegramFails
   });
+  const workflowCreates: Array<{ id: string; params: unknown }> = [];
   let id = 0;
   const app = createWorkerApp({
     repositories,
     telegramClient,
+    workflowStarter: {
+      async create(input) {
+        workflowCreates.push(input);
+        return {};
+      }
+    },
     now: () => 1000 + id,
     generateId: () => {
       id += 1;
@@ -491,7 +721,7 @@ function createTestApp(options: { telegramFails?: boolean } = {}) {
     generateApprovalCode: () => "123456"
   });
 
-  return { app, repositories, telegramClient };
+  return { app, repositories, telegramClient, workflowCreates };
 }
 
 async function postWebhook(app: ReturnType<typeof createWorkerApp>, body: unknown) {
@@ -749,6 +979,137 @@ describe("worker app", () => {
     });
   });
 
+  it("creates schedules and runs them on demand", async () => {
+    const { app, repositories, telegramClient } = createTestApp();
+    const cookie = await ownerCookie();
+    const create = await app.request(
+      "/api/admin/schedules",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          name: "daily todos",
+          commandText: "列出我的待办",
+          enabled: true,
+          timezone: "Asia/Shanghai",
+          cadence: "daily",
+          timeOfDay: "09:30",
+          daysOfWeek: []
+        })
+      },
+      env
+    );
+
+    expect(create.status).toBe(201);
+    expect(repositories.schedules).toHaveLength(1);
+
+    const runNow = await app.request(
+      `/api/admin/schedules/${repositories.schedules[0]?.id}/run-now`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+
+    expect(runNow.status).toBe(200);
+    expect(repositories.scheduleExecutions[0]).toMatchObject({
+      status: "succeeded"
+    });
+    expect(telegramClient.messages[0]?.text).toBe("当前没有未完成待办。");
+  });
+
+  it("rejects weekly schedules without selected days", async () => {
+    const { app, repositories } = createTestApp();
+    const response = await app.request(
+      "/api/admin/schedules",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: await ownerCookie()
+        },
+        body: JSON.stringify({
+          name: "weekly todos",
+          commandText: "列出我的待办",
+          enabled: true,
+          timezone: "Asia/Shanghai",
+          cadence: "weekly",
+          timeOfDay: "09:30",
+          daysOfWeek: []
+        })
+      },
+      env
+    );
+
+    expect(response.status).toBe(400);
+    expect(repositories.schedules).toHaveLength(0);
+  });
+
+  it("polls due schedules once and skips disabled schedules", async () => {
+    const repositories = createFakeRepositories();
+    const telegramClient = createFakeTelegramClient();
+    repositories.schedules.push(
+      {
+        id: "due",
+        ownerTgUserId: 1229,
+        name: "due",
+        commandText: "列出我的待办",
+        enabled: true,
+        timezone: "Asia/Shanghai",
+        cadence: "daily",
+        timeOfDay: "09:00",
+        daysOfWeek: [],
+        nextRunAt: 1000,
+        lastRunAt: null,
+        deletedAt: null,
+        createdAt: 900,
+        updatedAt: 900
+      },
+      {
+        id: "disabled",
+        ownerTgUserId: 1229,
+        name: "disabled",
+        commandText: "列出我的待办",
+        enabled: false,
+        timezone: "Asia/Shanghai",
+        cadence: "daily",
+        timeOfDay: "09:00",
+        daysOfWeek: [],
+        nextRunAt: 1000,
+        lastRunAt: null,
+        deletedAt: null,
+        createdAt: 900,
+        updatedAt: 900
+      }
+    );
+    let id = 0;
+    const options = {
+      repositories,
+      telegramClient,
+      now: () => 1000,
+      generateId: () => {
+        id += 1;
+        return `schedule-id-${id}`;
+      },
+      generateApprovalCode: () => "123456"
+    };
+
+    const first = await runScheduled(env, options, 1000);
+    const second = await runScheduled(env, options, 1000);
+
+    expect(first).toEqual({ checked: 1, started: 1 });
+    expect(second).toEqual({ checked: 0, started: 0 });
+    expect(repositories.scheduleExecutions).toHaveLength(1);
+    expect(repositories.runs).toHaveLength(1);
+    expect(telegramClient.messages).toHaveLength(1);
+  });
+
   it("creates, updates, publishes, disables, and deletes skills", async () => {
     const { app, repositories } = createTestApp();
     const cookie = await ownerCookie();
@@ -830,7 +1191,7 @@ describe("worker app", () => {
     expect(repositories.skills[0]?.deletedAt).not.toBeNull();
   });
 
-  it("allows workflow drafts but rejects publishing them", async () => {
+  it("allows workflow drafts and publishes supported workflow steps", async () => {
     const { app, repositories } = createTestApp();
     const cookie = await ownerCookie();
     const create = await app.request(
@@ -860,9 +1221,178 @@ describe("worker app", () => {
 
     expect(create.status).toBe(201);
     expect(repositories.skills[0]?.draftManifest.kind).toBe("workflow");
+    expect(publish.status).toBe(200);
+    await expect(publish.json()).resolves.toMatchObject({
+      ok: true,
+      version: 1
+    });
+  });
+
+  it("rejects publishing workflow skills with unsupported steps", async () => {
+    const { app } = createTestApp();
+    const cookie = await ownerCookie();
+    await app.request(
+      "/api/admin/skills",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          manifest: workflowSkillManifest("unsupported-workflow", [
+            {
+              id: "think",
+              type: "llm",
+              input: {
+                prompt: "hello"
+              }
+            }
+          ])
+        })
+      },
+      env
+    );
+    const publish = await app.request(
+      "/api/admin/skills/unsupported-workflow/publish",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+
     expect(publish.status).toBe(400);
     await expect(publish.json()).resolves.toEqual({
-      error: "Workflow skills cannot be published yet"
+      error: "Unsupported workflow step types: llm"
+    });
+  });
+
+  it("starts published workflow skills from Telegram without inline execution", async () => {
+    const { app, repositories, workflowCreates, telegramClient } =
+      createTestApp();
+    const skill = await repositories.createSkill({
+      ownerTgUserId: 1229,
+      manifest: workflowSkillManifest("morning-flow", [
+        {
+          id: "list",
+          type: "tool",
+          input: {
+            text: "列出我的待办"
+          }
+        }
+      ]),
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: skill.id,
+      versionId: "workflow-version",
+      createdAt: 1001
+    });
+
+    const response = await postWebhook(
+      app,
+      ownerUpdate("/skill morning-flow hello")
+    );
+
+    expect(response.status).toBe(200);
+    expect(repositories.workflowRuns).toHaveLength(1);
+    expect(workflowCreates).toHaveLength(1);
+    expect(repositories.workflowSteps).toHaveLength(0);
+    expect(telegramClient.messages[0]?.text).toContain("已开始执行 workflow");
+  });
+
+  it("executes workflow runner steps and records workflow trace", async () => {
+    const repositories = createFakeRepositories();
+    const telegramClient = createFakeTelegramClient();
+    const manifest = {
+      ...workflowSkillManifest("runner-flow", [
+        {
+          id: "create",
+          type: "tool",
+          input: {
+            text: "新增待办：跑 workflow"
+          }
+        },
+        {
+          id: "wait",
+          type: "wait",
+          input: {
+            durationMs: 1
+          }
+        },
+        {
+          id: "notify",
+          type: "send_telegram",
+          input: {
+            text: "workflow done"
+          }
+        }
+      ]),
+      allowedTools: ["create_todo" as const]
+    };
+    await repositories.createRun({
+      id: "run-workflow",
+      ownerTgUserId: 1229,
+      chatId: 1229,
+      updateId: null,
+      messageText: "workflow",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+    await repositories.createWorkflowRun({
+      id: "workflow-run",
+      runId: "run-workflow",
+      ownerTgUserId: 1229,
+      skillId: "runner-flow",
+      skillVersionId: "version-1",
+      cloudflareWorkflowInstanceId: "workflow-run",
+      source: "telegram",
+      status: "running",
+      inputText: "workflow",
+      outputText: null,
+      error: null,
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+    let id = 0;
+
+    await executeWorkflowSkillRun({
+      payload: {
+        workflowRunId: "workflow-run",
+        runId: "run-workflow",
+        ownerTgUserId: 1229,
+        skillId: "runner-flow",
+        skillVersionId: "version-1",
+        manifest,
+        inputText: "workflow"
+      },
+      runtime: {
+        repositories,
+        telegramClient,
+        now: () => 2000 + id,
+        generateId: () => {
+          id += 1;
+          return `workflow-id-${id}`;
+        },
+        generateApprovalCode: () => "123456"
+      }
+    });
+
+    expect(repositories.workflowSteps).toHaveLength(3);
+    expect(repositories.workflowRuns[0]).toMatchObject({
+      status: "succeeded"
+    });
+    expect(repositories.toolCalls[0]).toMatchObject({
+      toolName: "create_todo",
+      status: "succeeded"
+    });
+    expect(telegramClient.messages[0]).toEqual({
+      chatId: 1229,
+      text: "workflow done"
     });
   });
 

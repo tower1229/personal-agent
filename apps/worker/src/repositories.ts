@@ -2,12 +2,18 @@ import {
   type ApprovalRequestStatus,
   type MemoryStatus,
   type RunStatus,
+  type ScheduleCadence,
+  type ScheduleExecutionStatus,
   type SkillManifest,
   type SkillRouteTriggerType,
   type SkillRunStatus,
   type TodoStatus,
   type ToolCallStatus,
-  type ToolRiskLevel
+  type ToolRiskLevel,
+  type WorkflowRunSource,
+  type WorkflowSkillStepType,
+  type WorkflowStatus,
+  type WorkflowStepStatus
 } from "@personal-agent/shared";
 
 export interface RunRecord {
@@ -113,6 +119,67 @@ export interface SkillRunRecord {
   skillVersionId: string;
   status: SkillRunStatus;
   inputText: string;
+  outputText: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface WorkflowRunRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  skillId: string;
+  skillVersionId: string;
+  cloudflareWorkflowInstanceId: string | null;
+  source: WorkflowRunSource;
+  status: WorkflowStatus;
+  inputText: string;
+  outputText: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface WorkflowStepRecord {
+  id: string;
+  workflowRunId: string;
+  ownerTgUserId: number;
+  stepId: string;
+  stepType: WorkflowSkillStepType;
+  status: WorkflowStepStatus;
+  inputJson: string;
+  outputJson: string | null;
+  error: string | null;
+  startedAt: number | null;
+  completedAt: number | null;
+  createdAt: number;
+}
+
+export interface ScheduleRecord {
+  id: string;
+  ownerTgUserId: number;
+  name: string;
+  commandText: string;
+  enabled: boolean;
+  timezone: "Asia/Shanghai";
+  cadence: ScheduleCadence;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  nextRunAt: number;
+  lastRunAt: number | null;
+  deletedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ScheduleExecutionRecord {
+  id: string;
+  scheduleId: string;
+  ownerTgUserId: number;
+  runId: string | null;
+  scheduledFor: number;
+  status: ScheduleExecutionStatus;
   outputText: string | null;
   error: string | null;
   createdAt: number;
@@ -240,4 +307,84 @@ export interface AgentRepositories {
     updatedAt: number;
   }): Promise<void>;
   listSkillRuns(ownerTgUserId: number, limit: number): Promise<SkillRunRecord[]>;
+  createWorkflowRun(input: WorkflowRunRecord): Promise<WorkflowRunRecord>;
+  updateWorkflowRun(input: {
+    id: string;
+    status: WorkflowStatus;
+    outputText?: string | null;
+    error?: string | null;
+    cloudflareWorkflowInstanceId?: string | null;
+    updatedAt: number;
+  }): Promise<void>;
+  getWorkflowRun(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<WorkflowRunRecord | null>;
+  listWorkflowRuns(
+    ownerTgUserId: number,
+    limit: number
+  ): Promise<WorkflowRunRecord[]>;
+  createWorkflowStep(input: WorkflowStepRecord): Promise<WorkflowStepRecord>;
+  updateWorkflowStep(input: {
+    id: string;
+    status: WorkflowStepStatus;
+    outputJson?: string | null;
+    error?: string | null;
+    completedAt?: number | null;
+  }): Promise<void>;
+  listWorkflowSteps(workflowRunId: string): Promise<WorkflowStepRecord[]>;
+  createSchedule(input: ScheduleRecord): Promise<ScheduleRecord>;
+  updateSchedule(input: {
+    ownerTgUserId: number;
+    id: string;
+    name: string;
+    commandText: string;
+    enabled: boolean;
+    timezone: "Asia/Shanghai";
+    cadence: ScheduleCadence;
+    timeOfDay: string;
+    daysOfWeek: number[];
+    nextRunAt: number;
+    updatedAt: number;
+  }): Promise<ScheduleRecord | null>;
+  setScheduleEnabled(input: {
+    ownerTgUserId: number;
+    id: string;
+    enabled: boolean;
+    nextRunAt: number;
+    updatedAt: number;
+  }): Promise<ScheduleRecord | null>;
+  softDeleteSchedule(input: {
+    ownerTgUserId: number;
+    id: string;
+    deletedAt: number;
+  }): Promise<ScheduleRecord | null>;
+  getSchedule(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<ScheduleRecord | null>;
+  listSchedules(ownerTgUserId: number, limit: number): Promise<ScheduleRecord[]>;
+  listDueSchedules(now: number, limit: number): Promise<ScheduleRecord[]>;
+  createScheduleExecution(
+    input: ScheduleExecutionRecord
+  ): Promise<ScheduleExecutionRecord | null>;
+  updateScheduleExecution(input: {
+    id: string;
+    runId?: string | null;
+    status: ScheduleExecutionStatus;
+    outputText?: string | null;
+    error?: string | null;
+    updatedAt: number;
+  }): Promise<void>;
+  markScheduleExecuted(input: {
+    id: string;
+    lastRunAt: number;
+    nextRunAt: number;
+    updatedAt: number;
+  }): Promise<void>;
+  listScheduleExecutions(input: {
+    ownerTgUserId: number;
+    scheduleId?: string;
+    limit: number;
+  }): Promise<ScheduleExecutionRecord[]>;
 }

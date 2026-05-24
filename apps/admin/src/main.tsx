@@ -14,7 +14,12 @@ import {
   adminSkillTestRunRequestSchema,
   adminSkillTestRunResponseSchema,
   adminSkillUpsertRequestSchema,
+  adminScheduleExecutionsResponseSchema,
+  adminScheduleSchema,
+  adminScheduleUpsertRequestSchema,
+  adminSchedulesResponseSchema,
   adminTodosResponseSchema,
+  adminWorkflowRunsResponseSchema,
   builtInToolNames,
   skillManifestSchema,
   type AdminAuthConfigResponse,
@@ -26,7 +31,10 @@ import {
   type AdminSkillRouteDecisionsResponse,
   type AdminSkillRunsResponse,
   type AdminSkillsResponse,
+  type AdminScheduleExecutionsResponse,
+  type AdminSchedulesResponse,
   type AdminTodosResponse,
+  type AdminWorkflowRunsResponse,
   type BuiltInToolName,
   type SkillKind
 } from "@personal-agent/shared";
@@ -102,6 +110,9 @@ interface DashboardData {
   skills: AdminSkillsResponse;
   skillRuns: AdminSkillRunsResponse;
   routeDecisions: AdminSkillRouteDecisionsResponse;
+  workflowRuns: AdminWorkflowRunsResponse;
+  schedules: AdminSchedulesResponse;
+  scheduleExecutions: AdminScheduleExecutionsResponse;
 }
 
 interface SkillFormState {
@@ -112,7 +123,18 @@ interface SkillFormState {
   instructions: string;
   triggerPhrases: string;
   allowedTools: BuiltInToolName[];
+  workflowTemplate: string;
   enabled: boolean;
+}
+
+interface ScheduleFormState {
+  id: string | null;
+  name: string;
+  commandText: string;
+  enabled: boolean;
+  cadence: "daily" | "weekly";
+  timeOfDay: string;
+  daysOfWeek: number[];
 }
 
 function formatTime(value: number | null): string {
@@ -135,7 +157,18 @@ const emptySkillForm: SkillFormState = {
   instructions: "",
   triggerPhrases: "",
   allowedTools: ["list_todos", "search_memory"],
+  workflowTemplate: "[]",
   enabled: true
+};
+
+const emptyScheduleForm: ScheduleFormState = {
+  id: null,
+  name: "",
+  commandText: "",
+  enabled: true,
+  cadence: "daily",
+  timeOfDay: "09:00",
+  daysOfWeek: [1]
 };
 
 async function sendJson<T>(
@@ -188,6 +221,7 @@ function formFromSkill(skill: AdminSkillDetail): SkillFormState {
     instructions: skill.manifest.instructions,
     triggerPhrases: skill.manifest.triggerPhrases.join("\n"),
     allowedTools: skill.manifest.allowedTools,
+    workflowTemplate: JSON.stringify(skill.manifest.workflowTemplate, null, 2),
     enabled: skill.enabled
   };
 }
@@ -209,7 +243,7 @@ function manifestFromForm(form: SkillFormState) {
     riskLevel: "read",
     autoRunThreshold: 0.75,
     confirmThreshold: 0.45,
-    workflowTemplate: []
+    workflowTemplate: JSON.parse(form.workflowTemplate || "[]") as unknown
   });
 }
 
@@ -218,6 +252,8 @@ function App() {
   const [config, setConfig] = useState<AdminAuthConfigResponse | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [skillForm, setSkillForm] = useState<SkillFormState>(emptySkillForm);
+  const [scheduleForm, setScheduleForm] =
+    useState<ScheduleFormState>(emptyScheduleForm);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [skillTestInput, setSkillTestInput] = useState("");
   const [skillTestOutput, setSkillTestOutput] = useState<string | null>(null);
@@ -266,6 +302,15 @@ function App() {
       ),
       fetchJson("/api/admin/skill-route-decisions", (input) =>
         adminSkillRouteDecisionsResponseSchema.parse(input)
+      ),
+      fetchJson("/api/admin/workflow-runs", (input) =>
+        adminWorkflowRunsResponseSchema.parse(input)
+      ),
+      fetchJson("/api/admin/schedules", (input) =>
+        adminSchedulesResponseSchema.parse(input)
+      ),
+      fetchJson("/api/admin/schedule-executions", (input) =>
+        adminScheduleExecutionsResponseSchema.parse(input)
       )
     ])
       .then(
@@ -276,7 +321,10 @@ function App() {
           approvals,
           skills,
           skillRuns,
-          routeDecisions
+          routeDecisions,
+          workflowRuns,
+          schedules,
+          scheduleExecutions
         ]) => {
           setDashboard({
             runs,
@@ -285,7 +333,10 @@ function App() {
             approvals,
             skills,
             skillRuns,
-            routeDecisions
+            routeDecisions,
+            workflowRuns,
+            schedules,
+            scheduleExecutions
           });
         }
       )
@@ -320,6 +371,15 @@ function App() {
       ),
       fetchJson("/api/admin/skill-route-decisions", (input) =>
         adminSkillRouteDecisionsResponseSchema.parse(input)
+      ),
+      fetchJson("/api/admin/workflow-runs", (input) =>
+        adminWorkflowRunsResponseSchema.parse(input)
+      ),
+      fetchJson("/api/admin/schedules", (input) =>
+        adminSchedulesResponseSchema.parse(input)
+      ),
+      fetchJson("/api/admin/schedule-executions", (input) =>
+        adminScheduleExecutionsResponseSchema.parse(input)
       )
     ])
       .then(
@@ -330,7 +390,10 @@ function App() {
           approvals,
           skills,
           skillRuns,
-          routeDecisions
+          routeDecisions,
+          workflowRuns,
+          schedules,
+          scheduleExecutions
         ]) => {
           setDashboard({
             runs,
@@ -339,7 +402,10 @@ function App() {
             approvals,
             skills,
             skillRuns,
-            routeDecisions
+            routeDecisions,
+            workflowRuns,
+            schedules,
+            scheduleExecutions
           });
         }
       )
@@ -412,6 +478,76 @@ function App() {
       (input) => adminSkillTestRunResponseSchema.parse(input)
     );
     setSkillTestOutput(response.output);
+    reloadDashboard();
+  }
+
+  function loadSchedule(id: string) {
+    const schedule = dashboard?.schedules.items.find((item) => item.id === id);
+    if (!schedule) {
+      return;
+    }
+    setScheduleForm({
+      id: schedule.id,
+      name: schedule.name,
+      commandText: schedule.commandText,
+      enabled: schedule.enabled,
+      cadence: schedule.cadence,
+      timeOfDay: schedule.timeOfDay,
+      daysOfWeek: schedule.daysOfWeek
+    });
+  }
+
+  async function saveSchedule() {
+    const request = adminScheduleUpsertRequestSchema.parse({
+      name: scheduleForm.name,
+      commandText: scheduleForm.commandText,
+      enabled: scheduleForm.enabled,
+      timezone: "Asia/Shanghai",
+      cadence: scheduleForm.cadence,
+      timeOfDay: scheduleForm.timeOfDay,
+      daysOfWeek: scheduleForm.daysOfWeek
+    });
+    const response = await sendJson(
+      scheduleForm.id
+        ? `/api/admin/schedules/${scheduleForm.id}`
+        : "/api/admin/schedules",
+      scheduleForm.id ? "PUT" : "POST",
+      request,
+      (input) => adminScheduleSchema.parse(input)
+    );
+    setScheduleForm({
+      id: response.id,
+      name: response.name,
+      commandText: response.commandText,
+      enabled: response.enabled,
+      cadence: response.cadence,
+      timeOfDay: response.timeOfDay,
+      daysOfWeek: response.daysOfWeek
+    });
+    reloadDashboard();
+  }
+
+  async function setScheduleEnabled(id: string, enabled: boolean) {
+    await sendEmpty(
+      `/api/admin/schedules/${id}/${enabled ? "enable" : "disable"}`,
+      "POST"
+    );
+    if (scheduleForm.id === id) {
+      setScheduleForm({ ...scheduleForm, enabled });
+    }
+    reloadDashboard();
+  }
+
+  async function runScheduleNow(id: string) {
+    await sendEmpty(`/api/admin/schedules/${id}/run-now`, "POST");
+    reloadDashboard();
+  }
+
+  async function deleteSchedule(id: string) {
+    await sendEmpty(`/api/admin/schedules/${id}`, "DELETE");
+    if (scheduleForm.id === id) {
+      setScheduleForm(emptyScheduleForm);
+    }
     reloadDashboard();
   }
 
@@ -598,6 +734,19 @@ function App() {
                         }
                       />
                     </label>
+                    <label>
+                      Workflow template JSON
+                      <textarea
+                        rows={6}
+                        value={skillForm.workflowTemplate}
+                        onChange={(event) =>
+                          setSkillForm({
+                            ...skillForm,
+                            workflowTemplate: event.target.value
+                          })
+                        }
+                      />
+                    </label>
                     <fieldset>
                       <legend>Allowed tools</legend>
                       {builtInToolNames.map((tool) => (
@@ -730,6 +879,215 @@ function App() {
                 </div>
               </section>
 
+              <section className="panel schedule-editor">
+                <div className="section-title">
+                  <h2>Schedules</h2>
+                  <button
+                    className="text-button"
+                    onClick={() => setScheduleForm(emptyScheduleForm)}
+                  >
+                    新建
+                  </button>
+                </div>
+                <div className="skills-layout">
+                  <div className="skill-list">
+                    {dashboard.schedules.items.length === 0 ? <EmptyList /> : null}
+                    {dashboard.schedules.items.map((schedule) => (
+                      <button
+                        className={
+                          scheduleForm.id === schedule.id
+                            ? "skill-row active"
+                            : "skill-row"
+                        }
+                        key={schedule.id}
+                        onClick={() => loadSchedule(schedule.id)}
+                      >
+                        <span>{schedule.name}</span>
+                        <small>
+                          {schedule.enabled ? "enabled" : "disabled"} ·{" "}
+                          {schedule.cadence} · {schedule.timeOfDay}
+                        </small>
+                      </button>
+                    ))}
+                  </div>
+                  <form
+                    className="skill-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void saveSchedule().catch((saveError) => {
+                        setError(
+                          saveError instanceof Error
+                            ? saveError.message
+                            : "保存定时任务失败"
+                        );
+                      });
+                    }}
+                  >
+                    <label>
+                      名称
+                      <input
+                        value={scheduleForm.name}
+                        onChange={(event) =>
+                          setScheduleForm({
+                            ...scheduleForm,
+                            name: event.target.value
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Command text
+                      <input
+                        value={scheduleForm.commandText}
+                        onChange={(event) =>
+                          setScheduleForm({
+                            ...scheduleForm,
+                            commandText: event.target.value
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Cadence
+                      <select
+                        value={scheduleForm.cadence}
+                        onChange={(event) =>
+                          setScheduleForm({
+                            ...scheduleForm,
+                            cadence: event.target.value as "daily" | "weekly"
+                          })
+                        }
+                      >
+                        <option value="daily">daily</option>
+                        <option value="weekly">weekly</option>
+                      </select>
+                    </label>
+                    <label>
+                      Time
+                      <input
+                        type="time"
+                        value={scheduleForm.timeOfDay}
+                        onChange={(event) =>
+                          setScheduleForm({
+                            ...scheduleForm,
+                            timeOfDay: event.target.value
+                          })
+                        }
+                      />
+                    </label>
+                    {scheduleForm.cadence === "weekly" ? (
+                      <fieldset>
+                        <legend>Days</legend>
+                        {[
+                          [1, "Mon"],
+                          [2, "Tue"],
+                          [3, "Wed"],
+                          [4, "Thu"],
+                          [5, "Fri"],
+                          [6, "Sat"],
+                          [7, "Sun"]
+                        ].map(([day, label]) => (
+                          <label className="checkbox-row" key={day}>
+                            <input
+                              type="checkbox"
+                              checked={scheduleForm.daysOfWeek.includes(
+                                day as number
+                              )}
+                              onChange={(event) => {
+                                const daysOfWeek = event.target.checked
+                                  ? [...scheduleForm.daysOfWeek, day as number]
+                                  : scheduleForm.daysOfWeek.filter(
+                                      (item) => item !== day
+                                    );
+                                setScheduleForm({
+                                  ...scheduleForm,
+                                  daysOfWeek
+                                });
+                              }}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </fieldset>
+                    ) : null}
+                    <label className="checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={scheduleForm.enabled}
+                        onChange={(event) =>
+                          setScheduleForm({
+                            ...scheduleForm,
+                            enabled: event.target.checked
+                          })
+                        }
+                      />
+                      Enabled
+                    </label>
+                    <div className="button-row">
+                      <button className="text-button" type="submit">
+                        保存
+                      </button>
+                      {scheduleForm.id ? (
+                        <>
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() =>
+                              void setScheduleEnabled(
+                                scheduleForm.id as string,
+                                !scheduleForm.enabled
+                              ).catch((toggleError) => {
+                                setError(
+                                  toggleError instanceof Error
+                                    ? toggleError.message
+                                    : "启停定时任务失败"
+                                );
+                              })
+                            }
+                          >
+                            {scheduleForm.enabled ? "停用" : "启用"}
+                          </button>
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() =>
+                              void runScheduleNow(
+                                scheduleForm.id as string
+                              ).catch((runError) => {
+                                setError(
+                                  runError instanceof Error
+                                    ? runError.message
+                                    : "立即运行失败"
+                                );
+                              })
+                            }
+                          >
+                            Run now
+                          </button>
+                          <button
+                            className="text-button danger-button"
+                            type="button"
+                            onClick={() =>
+                              void deleteSchedule(
+                                scheduleForm.id as string
+                              ).catch((deleteError) => {
+                                setError(
+                                  deleteError instanceof Error
+                                    ? deleteError.message
+                                    : "删除定时任务失败"
+                                );
+                              })
+                            }
+                          >
+                            删除
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </form>
+                </div>
+              </section>
+
               <section className="data-grid">
               <article className="panel list-panel">
                 <h2>Runs</h2>
@@ -812,6 +1170,35 @@ function App() {
                       <p>{decision.reason}</p>
                     </div>
                     <span>{decision.matchedSkillId ?? "-"}</span>
+                  </div>
+                ))}
+              </article>
+              <article className="panel list-panel">
+                <h2>Workflow Runs</h2>
+                {dashboard.workflowRuns.items.length === 0 ? <EmptyList /> : null}
+                {dashboard.workflowRuns.items.map((workflowRun) => (
+                  <div className="list-row" key={workflowRun.id}>
+                    <div>
+                      <strong>{workflowRun.skillId}</strong>
+                      <p>{workflowRun.inputText || "(empty)"}</p>
+                    </div>
+                    <span>{workflowRun.status}</span>
+                  </div>
+                ))}
+              </article>
+
+              <article className="panel list-panel">
+                <h2>Schedule Executions</h2>
+                {dashboard.scheduleExecutions.items.length === 0 ? (
+                  <EmptyList />
+                ) : null}
+                {dashboard.scheduleExecutions.items.map((execution) => (
+                  <div className="list-row" key={execution.id}>
+                    <div>
+                      <strong>{execution.scheduleId}</strong>
+                      <p>{execution.outputText ?? execution.error ?? "(empty)"}</p>
+                    </div>
+                    <span>{execution.status}</span>
                   </div>
                 ))}
               </article>

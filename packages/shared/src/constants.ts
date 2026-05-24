@@ -65,6 +65,24 @@ export const workflowStepStatuses = [
 ] as const;
 export type WorkflowStepStatus = (typeof workflowStepStatuses)[number];
 
+export const workflowRunSources = [
+  "telegram",
+  "admin_test",
+  "schedule"
+] as const;
+export type WorkflowRunSource = (typeof workflowRunSources)[number];
+
+export const scheduleCadences = ["daily", "weekly"] as const;
+export type ScheduleCadence = (typeof scheduleCadences)[number];
+
+export const scheduleExecutionStatuses = [
+  "running",
+  "succeeded",
+  "failed"
+] as const;
+export type ScheduleExecutionStatus =
+  (typeof scheduleExecutionStatuses)[number];
+
 export const evalCategories = [
   "casual_chat",
   "todo_create",

@@ -14,8 +14,14 @@ import {
   adminSkillTestRunRequestSchema,
   adminSkillTestRunResponseSchema,
   adminSkillUpsertRequestSchema,
+  adminScheduleExecutionsResponseSchema,
+  adminScheduleSchema,
+  adminScheduleUpsertRequestSchema,
+  adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
+  adminWorkflowRunDetailResponseSchema,
+  adminWorkflowRunsResponseSchema,
   skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
@@ -37,14 +43,25 @@ import {
 } from "./telegram.js";
 import { type WorkerEnv } from "./types.js";
 import {
+  executeScheduleCommand,
+  nextScheduleRunAt,
+  normalizeScheduleRequest,
+  pollDueSchedules
+} from "./schedules.js";
+import { unsupportedWorkflowStepTypes } from "./workflowValidation.js";
+import {
   type AgentRepositories,
   type ApprovalRequestRecord,
   type MemoryRecord,
   type RunRecord,
+  type ScheduleExecutionRecord,
+  type ScheduleRecord,
   type SkillRecord,
   type SkillRouteDecisionRecord,
   type SkillRunRecord,
-  type TodoRecord
+  type TodoRecord,
+  type WorkflowRunRecord,
+  type WorkflowStepRecord
 } from "./repositories.js";
 
 function ownerId(env: WorkerEnv): number {
@@ -182,9 +199,73 @@ function toAdminSkillRouteDecision(decision: SkillRouteDecisionRecord) {
   };
 }
 
+function toAdminWorkflowRun(workflowRun: WorkflowRunRecord) {
+  return {
+    id: workflowRun.id,
+    runId: workflowRun.runId,
+    skillId: workflowRun.skillId,
+    skillVersionId: workflowRun.skillVersionId,
+    source: workflowRun.source,
+    status: workflowRun.status,
+    inputText: workflowRun.inputText,
+    outputText: workflowRun.outputText,
+    error: workflowRun.error,
+    createdAt: workflowRun.createdAt,
+    updatedAt: workflowRun.updatedAt
+  };
+}
+
+function toAdminWorkflowStep(workflowStep: WorkflowStepRecord) {
+  return {
+    id: workflowStep.id,
+    workflowRunId: workflowStep.workflowRunId,
+    stepId: workflowStep.stepId,
+    stepType: workflowStep.stepType,
+    status: workflowStep.status,
+    inputJson: workflowStep.inputJson,
+    outputJson: workflowStep.outputJson,
+    error: workflowStep.error,
+    startedAt: workflowStep.startedAt,
+    completedAt: workflowStep.completedAt,
+    createdAt: workflowStep.createdAt
+  };
+}
+
+function toAdminSchedule(schedule: ScheduleRecord) {
+  return {
+    id: schedule.id,
+    name: schedule.name,
+    commandText: schedule.commandText,
+    enabled: schedule.enabled,
+    timezone: schedule.timezone,
+    cadence: schedule.cadence,
+    timeOfDay: schedule.timeOfDay,
+    daysOfWeek: schedule.daysOfWeek,
+    nextRunAt: schedule.nextRunAt,
+    lastRunAt: schedule.lastRunAt,
+    createdAt: schedule.createdAt,
+    updatedAt: schedule.updatedAt
+  };
+}
+
+function toAdminScheduleExecution(execution: ScheduleExecutionRecord) {
+  return {
+    id: execution.id,
+    scheduleId: execution.scheduleId,
+    runId: execution.runId,
+    scheduledFor: execution.scheduledFor,
+    status: execution.status,
+    outputText: execution.outputText,
+    error: execution.error,
+    createdAt: execution.createdAt,
+    updatedAt: execution.updatedAt
+  };
+}
+
 interface WorkerAppOptions {
   repositories?: AgentRepositories;
   telegramClient?: ReturnType<typeof createTelegramClient>;
+  workflowStarter?: BotRuntime["workflowStarter"];
   now?: () => number;
   generateId?: () => string;
   generateApprovalCode?: () => string;
@@ -208,7 +289,8 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       now: options.now ?? Date.now,
       generateId: options.generateId ?? defaultGenerateId,
       generateApprovalCode:
-        options.generateApprovalCode ?? defaultGenerateApprovalCode
+        options.generateApprovalCode ?? defaultGenerateApprovalCode,
+      workflowStarter: options.workflowStarter ?? env.WORKFLOW_SKILL_RUNNER
     };
   }
 
@@ -453,8 +535,14 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       return c.json({ error: "Skill not found" }, 404);
     }
     const manifest = skillManifestSchema.parse(skill.draftManifest);
-    if (manifest.kind !== "chat") {
-      return c.json({ error: "Workflow skills cannot be published yet" }, 400);
+    if (manifest.kind === "workflow") {
+      const unsupported = unsupportedWorkflowStepTypes(manifest);
+      if (unsupported.length > 0) {
+        return c.json(
+          { error: `Unsupported workflow step types: ${unsupported.join(", ")}` },
+          400
+        );
+      }
     }
 
     const version = await repositories(c.env).publishSkill({
@@ -665,6 +753,279 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
     );
   });
 
+  app.get("/api/admin/workflow-runs", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listWorkflowRuns(
+      authenticatedOwnerId,
+      limitParam(c.req.query("limit"))
+    );
+
+    return c.json(
+      adminWorkflowRunsResponseSchema.parse({
+        items: items.map(toAdminWorkflowRun)
+      })
+    );
+  });
+
+  app.get("/api/admin/workflow-runs/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const workflowRun = await repositories(c.env).getWorkflowRun({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!workflowRun) {
+      return c.json({ error: "Workflow run not found" }, 404);
+    }
+
+    const steps = await repositories(c.env).listWorkflowSteps(workflowRun.id);
+
+    return c.json(
+      adminWorkflowRunDetailResponseSchema.parse({
+        workflowRun: toAdminWorkflowRun(workflowRun),
+        steps: steps.map(toAdminWorkflowStep)
+      })
+    );
+  });
+
+  app.get("/api/admin/schedules", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listSchedules(
+      authenticatedOwnerId,
+      limitParam(c.req.query("limit"))
+    );
+
+    return c.json(
+      adminSchedulesResponseSchema.parse({
+        items: items.map(toAdminSchedule)
+      })
+    );
+  });
+
+  app.post("/api/admin/schedules", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminScheduleUpsertRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid schedule" }, 400);
+    }
+
+    const normalized = normalizeScheduleRequest(body.data);
+    const now = (options.now ?? Date.now)();
+    const schedule = await repositories(c.env).createSchedule({
+      id: (options.generateId ?? defaultGenerateId)(),
+      ownerTgUserId: authenticatedOwnerId,
+      name: normalized.name,
+      commandText: normalized.commandText,
+      enabled: normalized.enabled,
+      timezone: normalized.timezone,
+      cadence: normalized.cadence,
+      timeOfDay: normalized.timeOfDay,
+      daysOfWeek: normalized.daysOfWeek,
+      nextRunAt: nextScheduleRunAt({
+        cadence: normalized.cadence,
+        timeOfDay: normalized.timeOfDay,
+        daysOfWeek: normalized.daysOfWeek,
+        after: now
+      }),
+      lastRunAt: null,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    return c.json(
+      adminScheduleSchema.parse(toAdminSchedule(schedule)),
+      201
+    );
+  });
+
+  app.put("/api/admin/schedules/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminScheduleUpsertRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid schedule" }, 400);
+    }
+
+    const normalized = normalizeScheduleRequest(body.data);
+    const now = (options.now ?? Date.now)();
+    const schedule = await repositories(c.env).updateSchedule({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id"),
+      name: normalized.name,
+      commandText: normalized.commandText,
+      enabled: normalized.enabled,
+      timezone: normalized.timezone,
+      cadence: normalized.cadence,
+      timeOfDay: normalized.timeOfDay,
+      daysOfWeek: normalized.daysOfWeek,
+      nextRunAt: nextScheduleRunAt({
+        cadence: normalized.cadence,
+        timeOfDay: normalized.timeOfDay,
+        daysOfWeek: normalized.daysOfWeek,
+        after: now
+      }),
+      updatedAt: now
+    });
+    if (!schedule) {
+      return c.json({ error: "Schedule not found" }, 404);
+    }
+
+    return c.json(adminScheduleSchema.parse(toAdminSchedule(schedule)));
+  });
+
+  app.post("/api/admin/schedules/:id/enable", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const current = await repositories(c.env).getSchedule({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!current) {
+      return c.json({ error: "Schedule not found" }, 404);
+    }
+    const now = (options.now ?? Date.now)();
+    await repositories(c.env).setScheduleEnabled({
+      ownerTgUserId: authenticatedOwnerId,
+      id: current.id,
+      enabled: true,
+      nextRunAt: nextScheduleRunAt({
+        cadence: current.cadence,
+        timeOfDay: current.timeOfDay,
+        daysOfWeek: current.daysOfWeek,
+        after: now
+      }),
+      updatedAt: now
+    });
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
+
+  app.post("/api/admin/schedules/:id/disable", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const current = await repositories(c.env).getSchedule({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!current) {
+      return c.json({ error: "Schedule not found" }, 404);
+    }
+    await repositories(c.env).setScheduleEnabled({
+      ownerTgUserId: authenticatedOwnerId,
+      id: current.id,
+      enabled: false,
+      nextRunAt: current.nextRunAt,
+      updatedAt: (options.now ?? Date.now)()
+    });
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
+
+  app.post("/api/admin/schedules/:id/run-now", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const schedule = await repositories(c.env).getSchedule({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!schedule) {
+      return c.json({ error: "Schedule not found" }, 404);
+    }
+    const rt = runtime(c.env);
+    const execution = await rt.repositories.createScheduleExecution({
+      id: rt.generateId(),
+      scheduleId: schedule.id,
+      ownerTgUserId: authenticatedOwnerId,
+      runId: null,
+      scheduledFor: rt.now(),
+      status: "running",
+      outputText: null,
+      error: null,
+      createdAt: rt.now(),
+      updatedAt: rt.now()
+    });
+    if (!execution) {
+      return c.json({ error: "Schedule execution already exists" }, 409);
+    }
+
+    await executeScheduleCommand({
+      schedule,
+      execution,
+      runtime: rt
+    });
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
+
+  app.delete("/api/admin/schedules/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const schedule = await repositories(c.env).softDeleteSchedule({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id"),
+      deletedAt: (options.now ?? Date.now)()
+    });
+    if (!schedule) {
+      return c.json({ error: "Schedule not found" }, 404);
+    }
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
+
+  app.get("/api/admin/schedule-executions", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listScheduleExecutions({
+      ownerTgUserId: authenticatedOwnerId,
+      scheduleId: c.req.query("scheduleId"),
+      limit: limitParam(c.req.query("limit"))
+    });
+
+    return c.json(
+      adminScheduleExecutionsResponseSchema.parse({
+        items: items.map(toAdminScheduleExecution)
+      })
+    );
+  });
+
   app.post("/api/admin/logout", (c) => {
     c.header("Set-Cookie", buildExpiredSessionCookie());
     return c.json(adminApiSuccessSchema.parse({ ok: true }));
@@ -740,4 +1101,27 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
   });
 
   return app;
+}
+
+export async function runScheduled(
+  env: WorkerEnv,
+  options: WorkerAppOptions = {},
+  scheduledTime = Date.now()
+) {
+  return pollDueSchedules({
+    now: scheduledTime,
+    runtime: {
+      repositories: options.repositories ?? createD1Repositories(env.DB),
+      telegramClient:
+        options.telegramClient ??
+        createTelegramClient({
+          botToken: env.TELEGRAM_BOT_TOKEN
+        }),
+      now: options.now ?? Date.now,
+      generateId: options.generateId ?? defaultGenerateId,
+      generateApprovalCode:
+        options.generateApprovalCode ?? defaultGenerateApprovalCode,
+      workflowStarter: options.workflowStarter ?? env.WORKFLOW_SKILL_RUNNER
+    }
+  });
 }

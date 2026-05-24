@@ -8,11 +8,14 @@ import {
   memoryStatuses,
   memoryTypes,
   runStatuses,
+  scheduleCadences,
+  scheduleExecutionStatuses,
   skillKinds,
   skillRouteTriggerTypes,
   skillRunStatuses,
   todoStatuses,
   toolRiskLevels,
+  workflowRunSources,
   workflowSkillStepTypes
 } from "./constants.js";
 
@@ -20,6 +23,7 @@ export const toolRiskLevelSchema = z.enum(toolRiskLevels);
 export const builtInToolNameSchema = z.enum(builtInToolNames);
 export const skillKindSchema = z.enum(skillKinds);
 export const workflowSkillStepTypeSchema = z.enum(workflowSkillStepTypes);
+export const scheduleCadenceSchema = z.enum(scheduleCadences);
 
 export const workflowSkillStepSchema = z.object({
   id: z.string().min(1),
@@ -223,6 +227,128 @@ export const adminAuthConfigResponseSchema = z.object({
 
 export type AdminAuthConfigResponse = z.infer<
   typeof adminAuthConfigResponseSchema
+>;
+
+export const adminWorkflowStepSchema = z.object({
+  id: z.string().min(1),
+  workflowRunId: z.string().min(1),
+  stepId: z.string().min(1),
+  stepType: workflowSkillStepTypeSchema,
+  status: z.enum(["running", "succeeded", "failed", "skipped"]),
+  inputJson: z.string(),
+  outputJson: z.string().nullable(),
+  error: z.string().nullable(),
+  startedAt: z.number().int().min(0).nullable(),
+  completedAt: z.number().int().min(0).nullable(),
+  createdAt: z.number().int().min(0)
+});
+
+export type AdminWorkflowStep = z.infer<typeof adminWorkflowStepSchema>;
+
+export const adminWorkflowRunSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  skillId: z.string().min(1),
+  skillVersionId: z.string().min(1),
+  source: z.enum(workflowRunSources),
+  status: z.enum(["running", "succeeded", "failed"]),
+  inputText: z.string(),
+  outputText: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminWorkflowRun = z.infer<typeof adminWorkflowRunSchema>;
+
+export const adminWorkflowRunsResponseSchema = z.object({
+  items: z.array(adminWorkflowRunSchema)
+});
+
+export type AdminWorkflowRunsResponse = z.infer<
+  typeof adminWorkflowRunsResponseSchema
+>;
+
+export const adminWorkflowRunDetailResponseSchema = z.object({
+  workflowRun: adminWorkflowRunSchema,
+  steps: z.array(adminWorkflowStepSchema)
+});
+
+export type AdminWorkflowRunDetailResponse = z.infer<
+  typeof adminWorkflowRunDetailResponseSchema
+>;
+
+export const adminScheduleSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  commandText: z.string().min(1),
+  enabled: z.boolean(),
+  timezone: z.literal("Asia/Shanghai"),
+  cadence: scheduleCadenceSchema,
+  timeOfDay: z.string().regex(/^\d{2}:\d{2}$/),
+  daysOfWeek: z.array(z.number().int().min(1).max(7)),
+  nextRunAt: z.number().int().min(0),
+  lastRunAt: z.number().int().min(0).nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminSchedule = z.infer<typeof adminScheduleSchema>;
+
+export const adminSchedulesResponseSchema = z.object({
+  items: z.array(adminScheduleSchema)
+});
+
+export type AdminSchedulesResponse = z.infer<
+  typeof adminSchedulesResponseSchema
+>;
+
+export const adminScheduleUpsertRequestSchema = z
+  .object({
+    name: z.string().min(1),
+    commandText: z.string().min(1),
+    enabled: z.boolean(),
+    timezone: z.literal("Asia/Shanghai").default("Asia/Shanghai"),
+    cadence: scheduleCadenceSchema,
+    timeOfDay: z.string().regex(/^\d{2}:\d{2}$/),
+    daysOfWeek: z.array(z.number().int().min(1).max(7)).default([])
+  })
+  .superRefine((value, ctx) => {
+    if (value.cadence === "weekly" && value.daysOfWeek.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["daysOfWeek"],
+        message: "Weekly schedules require at least one day"
+      });
+    }
+  });
+
+export type AdminScheduleUpsertRequest = z.infer<
+  typeof adminScheduleUpsertRequestSchema
+>;
+
+export const adminScheduleExecutionSchema = z.object({
+  id: z.string().min(1),
+  scheduleId: z.string().min(1),
+  runId: z.string().min(1).nullable(),
+  scheduledFor: z.number().int().min(0),
+  status: z.enum(scheduleExecutionStatuses),
+  outputText: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminScheduleExecution = z.infer<
+  typeof adminScheduleExecutionSchema
+>;
+
+export const adminScheduleExecutionsResponseSchema = z.object({
+  items: z.array(adminScheduleExecutionSchema)
+});
+
+export type AdminScheduleExecutionsResponse = z.infer<
+  typeof adminScheduleExecutionsResponseSchema
 >;
 
 export const adminRunSummarySchema = z.object({

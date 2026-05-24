@@ -2,13 +2,19 @@ import {
   type ApprovalRequestStatus,
   type MemoryStatus,
   type RunStatus,
+  type ScheduleCadence,
+  type ScheduleExecutionStatus,
   skillManifestSchema,
   type SkillManifest,
   type SkillRouteTriggerType,
   type SkillRunStatus,
   type TodoStatus,
   type ToolCallStatus,
-  type ToolRiskLevel
+  type ToolRiskLevel,
+  type WorkflowRunSource,
+  type WorkflowSkillStepType,
+  type WorkflowStatus,
+  type WorkflowStepStatus
 } from "@personal-agent/shared";
 import {
   type AgentRepositories,
@@ -20,8 +26,12 @@ import {
   type SkillRouteDecisionRecord,
   type SkillRunRecord,
   type SkillVersionRecord,
+  type ScheduleExecutionRecord,
+  type ScheduleRecord,
   type TodoRecord,
-  type ToolCallRecord
+  type ToolCallRecord,
+  type WorkflowRunRecord,
+  type WorkflowStepRecord
 } from "./repositories.js";
 
 interface RunRow {
@@ -122,6 +132,67 @@ interface SkillRunRow {
   skill_version_id: string;
   status: SkillRunStatus;
   input_text: string;
+  output_text: string | null;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface WorkflowRunRow {
+  id: string;
+  run_id: string;
+  owner_tg_user_id: number;
+  skill_id: string;
+  skill_version_id: string;
+  cloudflare_workflow_instance_id: string | null;
+  source: WorkflowRunSource;
+  status: WorkflowStatus;
+  input_text: string;
+  output_text: string | null;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface WorkflowStepRow {
+  id: string;
+  workflow_run_id: string;
+  owner_tg_user_id: number;
+  step_id: string;
+  step_type: WorkflowSkillStepType;
+  status: WorkflowStepStatus;
+  input_json: string;
+  output_json: string | null;
+  error: string | null;
+  started_at: number | null;
+  completed_at: number | null;
+  created_at: number;
+}
+
+interface ScheduleRow {
+  id: string;
+  owner_tg_user_id: number;
+  name: string;
+  command_text: string;
+  enabled: number;
+  timezone: "Asia/Shanghai";
+  cadence: ScheduleCadence;
+  time_of_day: string;
+  days_of_week_json: string;
+  next_run_at: number;
+  last_run_at: number | null;
+  deleted_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface ScheduleExecutionRow {
+  id: string;
+  schedule_id: string;
+  owner_tg_user_id: number;
+  run_id: string | null;
+  scheduled_for: number;
+  status: ScheduleExecutionStatus;
   output_text: string | null;
   error: string | null;
   created_at: number;
@@ -249,6 +320,77 @@ function toSkillRun(row: SkillRunRow): SkillRunRecord {
     skillVersionId: row.skill_version_id,
     status: row.status,
     inputText: row.input_text,
+    outputText: row.output_text,
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toWorkflowRun(row: WorkflowRunRow): WorkflowRunRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    skillId: row.skill_id,
+    skillVersionId: row.skill_version_id,
+    cloudflareWorkflowInstanceId: row.cloudflare_workflow_instance_id,
+    source: row.source,
+    status: row.status,
+    inputText: row.input_text,
+    outputText: row.output_text,
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toWorkflowStep(row: WorkflowStepRow): WorkflowStepRecord {
+  return {
+    id: row.id,
+    workflowRunId: row.workflow_run_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    stepId: row.step_id,
+    stepType: row.step_type,
+    status: row.status,
+    inputJson: row.input_json,
+    outputJson: row.output_json,
+    error: row.error,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at
+  };
+}
+
+function toSchedule(row: ScheduleRow): ScheduleRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    name: row.name,
+    commandText: row.command_text,
+    enabled: row.enabled === 1,
+    timezone: row.timezone,
+    cadence: row.cadence,
+    timeOfDay: row.time_of_day,
+    daysOfWeek: JSON.parse(row.days_of_week_json) as number[],
+    nextRunAt: row.next_run_at,
+    lastRunAt: row.last_run_at,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toScheduleExecution(
+  row: ScheduleExecutionRow
+): ScheduleExecutionRecord {
+  return {
+    id: row.id,
+    scheduleId: row.schedule_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    runId: row.run_id,
+    scheduledFor: row.scheduled_for,
+    status: row.status,
     outputText: row.output_text,
     error: row.error,
     createdAt: row.created_at,
@@ -932,6 +1074,374 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
         .all<SkillRunRow>();
 
       return (results ?? []).map(toSkillRun);
+    },
+
+    async createWorkflowRun(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO workflow_runs (
+            id, run_id, owner_tg_user_id, skill_id, skill_version_id,
+            cloudflare_workflow_instance_id, source, status, input_text,
+            output_text, error, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.runId,
+          input.ownerTgUserId,
+          input.skillId,
+          input.skillVersionId,
+          input.cloudflareWorkflowInstanceId,
+          input.source,
+          input.status,
+          input.inputText,
+          input.outputText,
+          input.error,
+          input.createdAt,
+          input.updatedAt
+        )
+        .first<WorkflowRunRow>();
+
+      if (!row) {
+        throw new Error("Failed to create workflow run");
+      }
+
+      return toWorkflowRun(row);
+    },
+
+    async updateWorkflowRun(input) {
+      await db
+        .prepare(
+          `UPDATE workflow_runs
+          SET status = ?,
+            output_text = ?,
+            error = ?,
+            cloudflare_workflow_instance_id =
+              COALESCE(?, cloudflare_workflow_instance_id),
+            updated_at = ?
+          WHERE id = ?`
+        )
+        .bind(
+          input.status,
+          input.outputText ?? null,
+          input.error ?? null,
+          input.cloudflareWorkflowInstanceId ?? null,
+          input.updatedAt,
+          input.id
+        )
+        .run();
+    },
+
+    async getWorkflowRun(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM workflow_runs
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .first<WorkflowRunRow>();
+
+      return row ? toWorkflowRun(row) : null;
+    },
+
+    async listWorkflowRuns(ownerTgUserId, limit) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM workflow_runs
+          WHERE owner_tg_user_id = ?
+          ORDER BY created_at DESC
+          LIMIT ?`
+        )
+        .bind(ownerTgUserId, limit)
+        .all<WorkflowRunRow>();
+
+      return (results ?? []).map(toWorkflowRun);
+    },
+
+    async createWorkflowStep(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO workflow_steps (
+            id, workflow_run_id, owner_tg_user_id, step_id, step_type,
+            status, input_json, output_json, error, started_at,
+            completed_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.workflowRunId,
+          input.ownerTgUserId,
+          input.stepId,
+          input.stepType,
+          input.status,
+          input.inputJson,
+          input.outputJson,
+          input.error,
+          input.startedAt,
+          input.completedAt,
+          input.createdAt
+        )
+        .first<WorkflowStepRow>();
+
+      if (!row) {
+        throw new Error("Failed to create workflow step");
+      }
+
+      return toWorkflowStep(row);
+    },
+
+    async updateWorkflowStep(input) {
+      await db
+        .prepare(
+          `UPDATE workflow_steps
+          SET status = ?, output_json = ?, error = ?, completed_at = ?
+          WHERE id = ?`
+        )
+        .bind(
+          input.status,
+          input.outputJson ?? null,
+          input.error ?? null,
+          input.completedAt ?? null,
+          input.id
+        )
+        .run();
+    },
+
+    async listWorkflowSteps(workflowRunId) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM workflow_steps
+          WHERE workflow_run_id = ?
+          ORDER BY created_at ASC`
+        )
+        .bind(workflowRunId)
+        .all<WorkflowStepRow>();
+
+      return (results ?? []).map(toWorkflowStep);
+    },
+
+    async createSchedule(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO schedules (
+            id, owner_tg_user_id, name, command_text, enabled, timezone,
+            cadence, time_of_day, days_of_week_json, next_run_at,
+            last_run_at, deleted_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.ownerTgUserId,
+          input.name,
+          input.commandText,
+          input.enabled ? 1 : 0,
+          input.timezone,
+          input.cadence,
+          input.timeOfDay,
+          JSON.stringify(input.daysOfWeek),
+          input.nextRunAt,
+          input.lastRunAt,
+          input.deletedAt,
+          input.createdAt,
+          input.updatedAt
+        )
+        .first<ScheduleRow>();
+
+      if (!row) {
+        throw new Error("Failed to create schedule");
+      }
+
+      return toSchedule(row);
+    },
+
+    async updateSchedule(input) {
+      const row = await db
+        .prepare(
+          `UPDATE schedules
+          SET name = ?, command_text = ?, enabled = ?, timezone = ?,
+            cadence = ?, time_of_day = ?, days_of_week_json = ?,
+            next_run_at = ?, updated_at = ?
+          WHERE owner_tg_user_id = ? AND id = ? AND deleted_at IS NULL
+          RETURNING *`
+        )
+        .bind(
+          input.name,
+          input.commandText,
+          input.enabled ? 1 : 0,
+          input.timezone,
+          input.cadence,
+          input.timeOfDay,
+          JSON.stringify(input.daysOfWeek),
+          input.nextRunAt,
+          input.updatedAt,
+          input.ownerTgUserId,
+          input.id
+        )
+        .first<ScheduleRow>();
+
+      return row ? toSchedule(row) : null;
+    },
+
+    async setScheduleEnabled(input) {
+      const row = await db
+        .prepare(
+          `UPDATE schedules
+          SET enabled = ?, next_run_at = ?, updated_at = ?
+          WHERE owner_tg_user_id = ? AND id = ? AND deleted_at IS NULL
+          RETURNING *`
+        )
+        .bind(
+          input.enabled ? 1 : 0,
+          input.nextRunAt,
+          input.updatedAt,
+          input.ownerTgUserId,
+          input.id
+        )
+        .first<ScheduleRow>();
+
+      return row ? toSchedule(row) : null;
+    },
+
+    async softDeleteSchedule(input) {
+      const row = await db
+        .prepare(
+          `UPDATE schedules
+          SET enabled = 0, deleted_at = ?, updated_at = ?
+          WHERE owner_tg_user_id = ? AND id = ? AND deleted_at IS NULL
+          RETURNING *`
+        )
+        .bind(input.deletedAt, input.deletedAt, input.ownerTgUserId, input.id)
+        .first<ScheduleRow>();
+
+      return row ? toSchedule(row) : null;
+    },
+
+    async getSchedule(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM schedules
+          WHERE owner_tg_user_id = ? AND id = ? AND deleted_at IS NULL`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .first<ScheduleRow>();
+
+      return row ? toSchedule(row) : null;
+    },
+
+    async listSchedules(ownerTgUserId, limit) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM schedules
+          WHERE owner_tg_user_id = ? AND deleted_at IS NULL
+          ORDER BY updated_at DESC
+          LIMIT ?`
+        )
+        .bind(ownerTgUserId, limit)
+        .all<ScheduleRow>();
+
+      return (results ?? []).map(toSchedule);
+    },
+
+    async listDueSchedules(now, limit) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM schedules
+          WHERE enabled = 1
+            AND deleted_at IS NULL
+            AND next_run_at <= ?
+          ORDER BY next_run_at ASC
+          LIMIT ?`
+        )
+        .bind(now, limit)
+        .all<ScheduleRow>();
+
+      return (results ?? []).map(toSchedule);
+    },
+
+    async createScheduleExecution(input) {
+      const row = await db
+        .prepare(
+          `INSERT OR IGNORE INTO schedule_executions (
+            id, schedule_id, owner_tg_user_id, run_id, scheduled_for,
+            status, output_text, error, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.scheduleId,
+          input.ownerTgUserId,
+          input.runId,
+          input.scheduledFor,
+          input.status,
+          input.outputText,
+          input.error,
+          input.createdAt,
+          input.updatedAt
+        )
+        .first<ScheduleExecutionRow>();
+
+      return row ? toScheduleExecution(row) : null;
+    },
+
+    async updateScheduleExecution(input) {
+      await db
+        .prepare(
+          `UPDATE schedule_executions
+          SET run_id = COALESCE(?, run_id),
+            status = ?,
+            output_text = ?,
+            error = ?,
+            updated_at = ?
+          WHERE id = ?`
+        )
+        .bind(
+          input.runId ?? null,
+          input.status,
+          input.outputText ?? null,
+          input.error ?? null,
+          input.updatedAt,
+          input.id
+        )
+        .run();
+    },
+
+    async markScheduleExecuted(input) {
+      await db
+        .prepare(
+          `UPDATE schedules
+          SET last_run_at = ?, next_run_at = ?, updated_at = ?
+          WHERE id = ?`
+        )
+        .bind(input.lastRunAt, input.nextRunAt, input.updatedAt, input.id)
+        .run();
+    },
+
+    async listScheduleExecutions(input) {
+      const { results } = input.scheduleId
+        ? await db
+            .prepare(
+              `SELECT * FROM schedule_executions
+              WHERE owner_tg_user_id = ? AND schedule_id = ?
+              ORDER BY created_at DESC
+              LIMIT ?`
+            )
+            .bind(input.ownerTgUserId, input.scheduleId, input.limit)
+            .all<ScheduleExecutionRow>()
+        : await db
+            .prepare(
+              `SELECT * FROM schedule_executions
+              WHERE owner_tg_user_id = ?
+              ORDER BY created_at DESC
+              LIMIT ?`
+            )
+            .bind(input.ownerTgUserId, input.limit)
+            .all<ScheduleExecutionRow>();
+
+      return (results ?? []).map(toScheduleExecution);
     }
   };
 }

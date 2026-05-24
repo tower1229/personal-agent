@@ -12,10 +12,17 @@ import {
 } from "./telegram.js";
 import { type TelegramWebhookUpdate } from "@personal-agent/shared";
 import { type RunnableSkillRecord } from "./repositories.js";
+import { type WorkflowSkillPayload } from "./types.js";
 
 export interface BotRuntime {
   repositories: AgentRepositories;
   telegramClient: TelegramClient;
+  workflowStarter?: {
+    create(input: {
+      id: string;
+      params: WorkflowSkillPayload;
+    }): Promise<{ id?: string } | unknown>;
+  };
   now: () => number;
   generateId: () => string;
   generateApprovalCode: () => string;
@@ -522,7 +529,7 @@ async function findSkillMatch(input: {
       id: skillId
     });
 
-    if (!runnable || runnable.version.manifest.kind !== "chat") {
+    if (!runnable) {
       return null;
     }
 
@@ -540,10 +547,6 @@ async function findSkillMatch(input: {
   const text = input.text.trim();
 
   for (const runnable of runnableSkills) {
-    if (runnable.version.manifest.kind !== "chat") {
-      continue;
-    }
-
     for (const phrase of runnable.version.manifest.triggerPhrases) {
       const trigger = phrase.trim();
       if (!trigger) {
@@ -669,6 +672,59 @@ export async function executeSkill(input: {
   }
 }
 
+async function startWorkflowSkill(input: {
+  runId: string;
+  ownerTgUserId: number;
+  match: SkillMatch;
+  runtime: BotRuntime;
+}): Promise<CommandResult> {
+  if (!input.runtime.workflowStarter) {
+    throw new Error("Workflow runner binding is not configured");
+  }
+
+  const workflowRunId = input.runtime.generateId();
+  const now = input.runtime.now();
+  await input.runtime.repositories.createWorkflowRun({
+    id: workflowRunId,
+    runId: input.runId,
+    ownerTgUserId: input.ownerTgUserId,
+    skillId: input.match.runnable.skill.id,
+    skillVersionId: input.match.runnable.version.id,
+    cloudflareWorkflowInstanceId: workflowRunId,
+    source: "telegram",
+    status: "running",
+    inputText: input.match.inputText,
+    outputText: null,
+    error: null,
+    createdAt: now,
+    updatedAt: now
+  });
+
+  await input.runtime.workflowStarter.create({
+    id: workflowRunId,
+    params: {
+      workflowRunId,
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      skillId: input.match.runnable.skill.id,
+      skillVersionId: input.match.runnable.version.id,
+      manifest: input.match.runnable.version.manifest,
+      inputText: input.match.inputText
+    }
+  });
+
+  return {
+    responseText: `已开始执行 workflow：${input.match.runnable.version.manifest.name}`,
+    toolName: "workflow_skill_start",
+    riskLevel: "read",
+    input: {
+      skillId: input.match.runnable.skill.id,
+      skillVersionId: input.match.runnable.version.id
+    },
+    output: { workflowRunId }
+  };
+}
+
 export async function handleOwnerUpdate(
   input: HandleOwnerUpdateInput
 ): Promise<{ runId: string }> {
@@ -706,12 +762,19 @@ export async function handleOwnerUpdate(
     });
 
     const result = match
-      ? await executeSkill({
-          runId: run.id,
-          ownerTgUserId: input.ownerTgUserId,
-          match,
-          runtime: input.runtime
-        })
+      ? match.runnable.version.manifest.kind === "workflow"
+        ? await startWorkflowSkill({
+            runId: run.id,
+            ownerTgUserId: input.ownerTgUserId,
+            match,
+            runtime: input.runtime
+          })
+        : await executeSkill({
+            runId: run.id,
+            ownerTgUserId: input.ownerTgUserId,
+            match,
+            runtime: input.runtime
+          })
       : await executeCommand({
           runId: run.id,
           ownerTgUserId: input.ownerTgUserId,
@@ -719,7 +782,7 @@ export async function handleOwnerUpdate(
           runtime: input.runtime
         });
 
-    if (!match) {
+    if (!match || match.runnable.version.manifest.kind === "workflow") {
       await recordToolCall(
         {
           runId: run.id,
