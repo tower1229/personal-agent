@@ -142,13 +142,13 @@ Telegram Login 不能在 localhost 完整验证，必须使用线上域名。
 用你的真实 token、worker URL 和 webhook secret 执行：
 
 ```bash
-curl.exe -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" -d "url=<WORKER_URL>/telegram/webhook" -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+curl.exe -X POST "https://api.telegram.org/bot8966479686:AAH-wXkTI9VfkKCihaWbC-bsvbr78FMDV_s/setWebhook" -d "url=https://personal-agent-worker.refined-x.workers.dev/telegram/webhook" -d "secret_token=bf91448ad8d7583ac598c9aae56d9127701ef0b58f81098ffc80d8857ed944c3"
 ```
 
 检查 webhook：
 
 ```bash
-curl.exe "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
+curl.exe "https://api.telegram.org/bot8966479686:AAH-wXkTI9VfkKCihaWbC-bsvbr78FMDV_s/getWebhookInfo"
 ```
 
 期望：
