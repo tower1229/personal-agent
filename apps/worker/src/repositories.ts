@@ -198,7 +198,15 @@ export interface AgentRepositories {
     }
   ): Promise<void>;
   listRuns(ownerTgUserId: number, limit: number): Promise<RunRecord[]>;
+  getRun(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<RunRecord | null>;
   recordToolCall(input: ToolCallRecord): Promise<void>;
+  listToolCallsForRun(input: {
+    ownerTgUserId: number;
+    runId: string;
+  }): Promise<ToolCallRecord[]>;
   createTodo(input: {
     ownerTgUserId: number;
     title: string;
@@ -298,6 +306,10 @@ export interface AgentRepositories {
     ownerTgUserId: number,
     limit: number
   ): Promise<SkillRouteDecisionRecord[]>;
+  getSkillRouteDecisionForRun(input: {
+    ownerTgUserId: number;
+    runId: string;
+  }): Promise<SkillRouteDecisionRecord | null>;
   createSkillRun(input: SkillRunRecord): Promise<SkillRunRecord>;
   updateSkillRun(input: {
     id: string;
@@ -307,6 +319,10 @@ export interface AgentRepositories {
     updatedAt: number;
   }): Promise<void>;
   listSkillRuns(ownerTgUserId: number, limit: number): Promise<SkillRunRecord[]>;
+  getSkillRunForRun(input: {
+    ownerTgUserId: number;
+    runId: string;
+  }): Promise<SkillRunRecord | null>;
   createWorkflowRun(input: WorkflowRunRecord): Promise<WorkflowRunRecord>;
   updateWorkflowRun(input: {
     id: string;
@@ -324,6 +340,10 @@ export interface AgentRepositories {
     ownerTgUserId: number,
     limit: number
   ): Promise<WorkflowRunRecord[]>;
+  getWorkflowRunForRun(input: {
+    ownerTgUserId: number;
+    runId: string;
+  }): Promise<WorkflowRunRecord | null>;
   createWorkflowStep(input: WorkflowStepRecord): Promise<WorkflowStepRecord>;
   updateWorkflowStep(input: {
     id: string;
@@ -387,4 +407,8 @@ export interface AgentRepositories {
     scheduleId?: string;
     limit: number;
   }): Promise<ScheduleExecutionRecord[]>;
+  getScheduleExecutionForRun(input: {
+    ownerTgUserId: number;
+    runId: string;
+  }): Promise<ScheduleExecutionRecord | null>;
 }

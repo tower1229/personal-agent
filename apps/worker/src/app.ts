@@ -11,6 +11,7 @@ import {
   adminMemoriesResponseSchema,
   adminMeResponseSchema,
   adminApiSuccessSchema,
+  adminRunDetailResponseSchema,
   adminSkillDetailResponseSchema,
   adminSkillPublishResponseSchema,
   adminSkillRouteDecisionsResponseSchema,
@@ -81,6 +82,7 @@ import {
   type SkillRouteDecisionRecord,
   type SkillRunRecord,
   type TodoRecord,
+  type ToolCallRecord,
   type WorkflowRunRecord,
   type WorkflowStepRecord
 } from "./repositories.js";
@@ -132,6 +134,20 @@ function toAdminRun(run: RunRecord) {
     error: run.error,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt
+  };
+}
+
+function toAdminToolCall(toolCall: ToolCallRecord) {
+  return {
+    id: toolCall.id,
+    runId: toolCall.runId,
+    toolName: toolCall.toolName,
+    riskLevel: toolCall.riskLevel,
+    status: toolCall.status,
+    inputJson: toolCall.inputJson,
+    outputJson: toolCall.outputJson,
+    error: toolCall.error,
+    createdAt: toolCall.createdAt
   };
 }
 
@@ -546,6 +562,67 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
     return c.json(
       adminRunsResponseSchema.parse({
         items: items.map(toAdminRun)
+      })
+    );
+  });
+
+  app.get("/api/admin/runs/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const repo = repositories(c.env);
+    const run = await repo.getRun({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+
+    if (!run) {
+      return c.json({ error: "Run not found" }, 404);
+    }
+
+    const [
+      toolCalls,
+      skillRouteDecision,
+      skillRun,
+      workflowRun,
+      scheduleExecution
+    ] = await Promise.all([
+      repo.listToolCallsForRun({
+        ownerTgUserId: authenticatedOwnerId,
+        runId: run.id
+      }),
+      repo.getSkillRouteDecisionForRun({
+        ownerTgUserId: authenticatedOwnerId,
+        runId: run.id
+      }),
+      repo.getSkillRunForRun({
+        ownerTgUserId: authenticatedOwnerId,
+        runId: run.id
+      }),
+      repo.getWorkflowRunForRun({
+        ownerTgUserId: authenticatedOwnerId,
+        runId: run.id
+      }),
+      repo.getScheduleExecutionForRun({
+        ownerTgUserId: authenticatedOwnerId,
+        runId: run.id
+      })
+    ]);
+
+    return c.json(
+      adminRunDetailResponseSchema.parse({
+        run: toAdminRun(run),
+        toolCalls: toolCalls.map(toAdminToolCall),
+        skillRouteDecision: skillRouteDecision
+          ? toAdminSkillRouteDecision(skillRouteDecision)
+          : null,
+        skillRun: skillRun ? toAdminSkillRun(skillRun) : null,
+        workflowRun: workflowRun ? toAdminWorkflowRun(workflowRun) : null,
+        scheduleExecution: scheduleExecution
+          ? toAdminScheduleExecution(scheduleExecution)
+          : null
       })
     );
   });

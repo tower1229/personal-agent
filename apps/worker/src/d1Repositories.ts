@@ -462,6 +462,18 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
       return (results ?? []).map(toRun);
     },
 
+    async getRun(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM runs
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .first<RunRow>();
+
+      return row ? toRun(row) : null;
+    },
+
     async recordToolCall(input) {
       await db
         .prepare(
@@ -483,6 +495,19 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
           input.createdAt
         )
         .run();
+    },
+
+    async listToolCallsForRun(input) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM tool_calls
+          WHERE owner_tg_user_id = ? AND run_id = ?
+          ORDER BY created_at ASC`
+        )
+        .bind(input.ownerTgUserId, input.runId)
+        .all<ToolCallRow>();
+
+      return (results ?? []).map(toToolCall);
     },
 
     async createTodo(input) {
@@ -1014,6 +1039,20 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
       return (results ?? []).map(toSkillRouteDecision);
     },
 
+    async getSkillRouteDecisionForRun(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM skill_route_decisions
+          WHERE owner_tg_user_id = ? AND run_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1`
+        )
+        .bind(input.ownerTgUserId, input.runId)
+        .first<SkillRouteDecisionRow>();
+
+      return row ? toSkillRouteDecision(row) : null;
+    },
+
     async createSkillRun(input) {
       const row = await db
         .prepare(
@@ -1074,6 +1113,20 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
         .all<SkillRunRow>();
 
       return (results ?? []).map(toSkillRun);
+    },
+
+    async getSkillRunForRun(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM skill_runs
+          WHERE owner_tg_user_id = ? AND run_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1`
+        )
+        .bind(input.ownerTgUserId, input.runId)
+        .first<SkillRunRow>();
+
+      return row ? toSkillRun(row) : null;
     },
 
     async createWorkflowRun(input) {
@@ -1157,6 +1210,20 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
         .all<WorkflowRunRow>();
 
       return (results ?? []).map(toWorkflowRun);
+    },
+
+    async getWorkflowRunForRun(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM workflow_runs
+          WHERE owner_tg_user_id = ? AND run_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1`
+        )
+        .bind(input.ownerTgUserId, input.runId)
+        .first<WorkflowRunRow>();
+
+      return row ? toWorkflowRun(row) : null;
     },
 
     async createWorkflowStep(input) {
@@ -1442,6 +1509,20 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
             .all<ScheduleExecutionRow>();
 
       return (results ?? []).map(toScheduleExecution);
+    },
+
+    async getScheduleExecutionForRun(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM schedule_executions
+          WHERE owner_tg_user_id = ? AND run_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1`
+        )
+        .bind(input.ownerTgUserId, input.runId)
+        .first<ScheduleExecutionRow>();
+
+      return row ? toScheduleExecution(row) : null;
     }
   };
 }

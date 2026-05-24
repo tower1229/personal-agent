@@ -14,6 +14,7 @@ import {
   skillRouteTriggerTypes,
   skillRunStatuses,
   todoStatuses,
+  toolCallStatuses,
   toolRiskLevels,
   workflowRunSources,
   workflowSkillStepTypes
@@ -423,6 +424,33 @@ export const adminRunsResponseSchema = z.object({
 });
 
 export type AdminRunsResponse = z.infer<typeof adminRunsResponseSchema>;
+
+export const adminToolCallSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  toolName: z.string().min(1),
+  riskLevel: toolRiskLevelSchema,
+  status: z.enum(toolCallStatuses),
+  inputJson: z.string(),
+  outputJson: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.number().int().min(0)
+});
+
+export type AdminToolCall = z.infer<typeof adminToolCallSchema>;
+
+export const adminRunDetailResponseSchema = z.object({
+  run: adminRunSummarySchema,
+  toolCalls: z.array(adminToolCallSchema),
+  skillRouteDecision: adminSkillRouteDecisionSchema.nullable(),
+  skillRun: adminSkillRunSummarySchema.nullable(),
+  workflowRun: adminWorkflowRunSchema.nullable(),
+  scheduleExecution: adminScheduleExecutionSchema.nullable()
+});
+
+export type AdminRunDetailResponse = z.infer<
+  typeof adminRunDetailResponseSchema
+>;
 
 export const adminTodoSchema = z.object({
   id: z.number().int().min(1),

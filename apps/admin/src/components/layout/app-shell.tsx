@@ -57,10 +57,12 @@ const secondaryNav: NavItem[] = [
 
 function SidebarLink(props: { item: NavItem }) {
   const location = useLocation();
+  const activePrefix =
+    props.item.to === "/admin/data/todos" ? "/admin/data" : props.item.to;
   const isActive =
     props.item.to === "/admin"
       ? location.pathname === props.item.to
-      : location.pathname.startsWith(props.item.to);
+      : location.pathname.startsWith(activePrefix);
 
   return (
     <SidebarMenuItem>

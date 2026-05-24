@@ -207,8 +207,25 @@ function createFakeRepositories(): AgentRepositories & {
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
     },
+    async getRun(input) {
+      return (
+        state.runs.find(
+          (run) => run.ownerTgUserId === input.ownerTgUserId && run.id === input.id
+        ) ?? null
+      );
+    },
     async recordToolCall(input) {
       state.toolCalls.push(input);
+    },
+    async listToolCallsForRun(input) {
+      return state.toolCalls
+        .filter(
+          (toolCall) =>
+            toolCall.ownerTgUserId === input.ownerTgUserId &&
+            toolCall.runId === input.runId
+        )
+        .slice()
+        .sort((left, right) => left.createdAt - right.createdAt);
     },
     async createTodo(input) {
       const todo: TodoRecord = {
@@ -483,6 +500,17 @@ function createFakeRepositories(): AgentRepositories & {
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
     },
+    async getSkillRouteDecisionForRun(input) {
+      return (
+        state.skillRouteDecisions
+          .filter(
+            (decision) =>
+              decision.ownerTgUserId === input.ownerTgUserId &&
+              decision.runId === input.runId
+          )
+          .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+      );
+    },
     async createSkillRun(input) {
       state.skillRuns.push(input);
       return input;
@@ -503,6 +531,17 @@ function createFakeRepositories(): AgentRepositories & {
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
+    },
+    async getSkillRunForRun(input) {
+      return (
+        state.skillRuns
+          .filter(
+            (skillRun) =>
+              skillRun.ownerTgUserId === input.ownerTgUserId &&
+              skillRun.runId === input.runId
+          )
+          .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+      );
     },
     async createWorkflowRun(input) {
       state.workflowRuns.push(input);
@@ -535,6 +574,17 @@ function createFakeRepositories(): AgentRepositories & {
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
+    },
+    async getWorkflowRunForRun(input) {
+      return (
+        state.workflowRuns
+          .filter(
+            (workflowRun) =>
+              workflowRun.ownerTgUserId === input.ownerTgUserId &&
+              workflowRun.runId === input.runId
+          )
+          .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+      );
     },
     async createWorkflowStep(input) {
       state.workflowSteps.push(input);
@@ -689,6 +739,17 @@ function createFakeRepositories(): AgentRepositories & {
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, input.limit);
+    },
+    async getScheduleExecutionForRun(input) {
+      return (
+        state.scheduleExecutions
+          .filter(
+            (execution) =>
+              execution.ownerTgUserId === input.ownerTgUserId &&
+              execution.runId === input.runId
+          )
+          .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+      );
     }
   };
 }
@@ -1301,6 +1362,129 @@ describe("worker app", () => {
           completedAt: null
         }
       ]
+    });
+  });
+
+  it("rejects unauthenticated admin run detail requests", async () => {
+    const { app } = createTestApp();
+    const response = await app.request("/api/admin/runs/id-1", {}, env);
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 404 for missing admin run details", async () => {
+    const { app } = createTestApp();
+    const response = await app.request(
+      "/api/admin/runs/missing",
+      {
+        headers: {
+          Cookie: await ownerCookie()
+        }
+      },
+      env
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("serves aggregated admin run details", async () => {
+    const { app, repositories } = createTestApp();
+    await postWebhook(app, ownerUpdate("新增待办：Trace 详情", 72));
+    const runId = repositories.runs[0]?.id ?? "";
+
+    repositories.skillRouteDecisions.push({
+      id: "route-1",
+      runId,
+      ownerTgUserId: 1229,
+      inputText: "新增待办：Trace 详情",
+      triggerType: "none",
+      matchedSkillId: null,
+      matchedSkillVersionId: null,
+      confidence: null,
+      reason: "fallback",
+      createdAt: 1010
+    });
+    repositories.skillRuns.push({
+      id: "skill-run-1",
+      runId,
+      ownerTgUserId: 1229,
+      skillId: "coach",
+      skillVersionId: "skill-version-1",
+      status: "succeeded",
+      inputText: "Trace 详情",
+      outputText: "ok",
+      error: null,
+      createdAt: 1011,
+      updatedAt: 1012
+    });
+    repositories.workflowRuns.push({
+      id: "workflow-run-1",
+      runId,
+      ownerTgUserId: 1229,
+      skillId: "morning",
+      skillVersionId: "workflow-version-1",
+      cloudflareWorkflowInstanceId: "cf-1",
+      source: "telegram",
+      status: "succeeded",
+      inputText: "Trace 详情",
+      outputText: "done",
+      error: null,
+      createdAt: 1013,
+      updatedAt: 1014
+    });
+    repositories.scheduleExecutions.push({
+      id: "schedule-execution-1",
+      scheduleId: "schedule-1",
+      ownerTgUserId: 1229,
+      runId,
+      scheduledFor: 1000,
+      status: "succeeded",
+      outputText: "done",
+      error: null,
+      createdAt: 1015,
+      updatedAt: 1016
+    });
+
+    const response = await app.request(
+      `/api/admin/runs/${runId}`,
+      {
+        headers: {
+          Cookie: await ownerCookie()
+        }
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      run: {
+        id: runId,
+        status: "succeeded",
+        messageText: "新增待办：Trace 详情"
+      },
+      toolCalls: [
+        {
+          runId,
+          toolName: "create_todo",
+          status: "succeeded"
+        }
+      ],
+      skillRouteDecision: {
+        id: "route-1",
+        runId
+      },
+      skillRun: {
+        id: "skill-run-1",
+        runId
+      },
+      workflowRun: {
+        id: "workflow-run-1",
+        runId
+      },
+      scheduleExecution: {
+        id: "schedule-execution-1",
+        runId
+      }
     });
   });
 
