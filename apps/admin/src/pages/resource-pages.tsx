@@ -453,8 +453,10 @@ function RunTrace(props: { detail: AdminRunDetailResponse }) {
 
 export function SkillsPage() {
   const params = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const isNew = params.id === "new";
+  const isNew = location.pathname.endsWith("/new");
+  const hasDetailTarget = isNew || Boolean(params.id);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
   const [status, setStatus] = useState("all");
@@ -640,10 +642,10 @@ export function SkillsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            {!params.id ? (
+            {!hasDetailTarget ? (
               <EmptyState>从左侧选择一个 skill，或创建 New Skill。</EmptyState>
             ) : null}
-            {params.id ? (
+            {hasDetailTarget ? (
               <>
                 {inlineError ? (
                   <p className="text-sm text-destructive">{inlineError}</p>
@@ -988,8 +990,10 @@ function WorkflowTrace(props: { detail: AdminWorkflowRunDetailResponse }) {
 
 export function SchedulesPage() {
   const params = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const isNew = params.id === "new";
+  const isNew = location.pathname.endsWith("/new");
+  const hasDetailTarget = isNew || Boolean(params.id);
   const schedules = useAsyncData(() => loadSchedules(), []);
   const executions = useAsyncData(
     () => loadScheduleExecutions(isNew ? undefined : params.id),
@@ -1100,8 +1104,8 @@ export function SchedulesPage() {
             <CardDescription>Timezone 固定 Asia/Shanghai。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            {!params.id ? <EmptyState>选择 schedule 或创建新任务。</EmptyState> : null}
-            {params.id ? (
+            {!hasDetailTarget ? <EmptyState>选择 schedule 或创建新任务。</EmptyState> : null}
+            {hasDetailTarget ? (
               <>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Name">
