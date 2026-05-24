@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { buildSessionCookie, signSession } from "./auth.js";
 import { createWorkerApp, runScheduled } from "./app.js";
+import { executeAgentTool } from "./agent.js";
+import {
+  createUrlFetcher,
+  type SearchClient,
+  type UrlFetcher
+} from "./externalTools.js";
+import {
+  type LlmChatCompletionOutput,
+  type LlmClient,
+  type LlmMessage
+} from "./llm.js";
 import { executeWorkflowSkillRun } from "./workflowExecutor.js";
+import { type BuiltInToolName } from "@personal-agent/shared";
 import {
   type AgentRepositories,
   type ApprovalRequestRecord,
@@ -27,7 +39,13 @@ const env: WorkerEnv = {
   TELEGRAM_BOT_USERNAME: "personal_agent_bot",
   TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
   OWNER_TG_USER_ID: "1229",
-  ADMIN_SESSION_SECRET: "session-secret"
+  ADMIN_SESSION_SECRET: "session-secret",
+  LLM_API_BASE_URL: "https://llm.example",
+  LLM_API_KEY: "llm-key",
+  LLM_MODEL: "test-model",
+  LLM_MAX_TOOL_ROUNDS: "3",
+  BRAVE_SEARCH_API_KEY: "brave-key",
+  FETCH_URL_MAX_BYTES: "200000"
 };
 
 function ownerUpdate(text: string, updateId = 1) {
@@ -50,14 +68,7 @@ function ownerUpdate(text: string, updateId = 1) {
 function chatSkillManifest(input: {
   id: string;
   triggerPhrases?: string[];
-  allowedTools?: Array<
-    | "create_todo"
-    | "list_todos"
-    | "complete_todo"
-    | "save_memory"
-    | "search_memory"
-    | "delete_memory_request"
-  >;
+  allowedTools?: BuiltInToolName[];
   instructions?: string;
 }) {
   return {
@@ -697,18 +708,192 @@ function createFakeTelegramClient(options: { fail?: boolean } = {}):
   };
 }
 
+function createFakeLlmClient(options: { fail?: boolean; alwaysTool?: boolean } = {}):
+  LlmClient & { calls: LlmMessage[][] } {
+  const calls: LlmMessage[][] = [];
+
+  return {
+    calls,
+    async createChatCompletion(input): Promise<LlmChatCompletionOutput> {
+      if (options.fail) {
+        throw new Error("llm failed");
+      }
+      calls.push(input.messages);
+      const latest = input.messages.at(-1);
+      if (latest?.role === "tool") {
+        if (latest.content?.includes('"blocked":true')) {
+          return {
+            content: "这个 skill 不允许使用工具 delete_memory_request。",
+            toolCalls: []
+          };
+        }
+        return {
+          content: `工具结果已处理：${latest.content ?? ""}`,
+          toolCalls: options.alwaysTool
+            ? [
+                {
+                  id: "call-loop",
+                  type: "function",
+                  function: {
+                    name: "list_todos",
+                    arguments: "{}"
+                  }
+                }
+              ]
+            : []
+        };
+      }
+
+      const text = latest?.content ?? "";
+      if (text.includes("新增待办")) {
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: "call-create-todo",
+              type: "function",
+              function: {
+                name: "create_todo",
+                arguments: JSON.stringify({
+                  title: text.split(/[:：]/u).at(-1)?.trim() ?? text
+                })
+              }
+            }
+          ]
+        };
+      }
+      if (text.includes("删除记忆")) {
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: "call-delete-memory",
+              type: "function",
+              function: {
+                name: "delete_memory_request",
+                arguments: JSON.stringify({ id: 1 })
+              }
+            }
+          ]
+        };
+      }
+      if (text.includes("搜索网页")) {
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: "call-web-search",
+              type: "function",
+              function: {
+                name: "web_search",
+                arguments: JSON.stringify({ query: "Cloudflare Workers" })
+              }
+            }
+          ]
+        };
+      }
+      if (text.includes("读取网页")) {
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: "call-fetch-url",
+              type: "function",
+              function: {
+                name: "fetch_url",
+                arguments: JSON.stringify({ url: "https://example.com" })
+              }
+            }
+          ]
+        };
+      }
+
+      return {
+        content: `LLM 回复：${text}`,
+        toolCalls: []
+      };
+    }
+  };
+}
+
+function createFakeSearchClient(options: { fail?: boolean } = {}):
+  SearchClient & { queries: string[] } {
+  const queries: string[] = [];
+
+  return {
+    queries,
+    async search(input) {
+      if (options.fail) {
+        throw new Error("search failed");
+      }
+      queries.push(input.query);
+      return input.query
+        ? [
+            {
+              title: "Cloudflare Workers",
+              url: "https://developers.cloudflare.com/workers/",
+              description: "Workers docs",
+              source: "brave",
+              rank: 1
+            }
+          ]
+        : [];
+    }
+  };
+}
+
+function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boolean } = {}):
+  UrlFetcher & { urls: string[] } {
+  const urls: string[] = [];
+
+  return {
+    urls,
+    async fetchUrl(input) {
+      if (options.fail) {
+        throw new Error("fetch failed");
+      }
+      if (options.tooLarge) {
+        throw new Error("fetch_url exceeded 1 bytes");
+      }
+      urls.push(input.url);
+      return {
+        url: input.url,
+        title: "Example",
+        text: "Example page content",
+        bytesRead: 20
+      };
+    }
+  };
+}
+
 function createTestApp(
-  options: { telegramFails?: boolean; workflowStarterFails?: boolean } = {}
+  options: {
+    telegramFails?: boolean;
+    workflowStarterFails?: boolean;
+    llmFails?: boolean;
+    llmAlwaysTool?: boolean;
+    searchFails?: boolean;
+    fetchFails?: boolean;
+  } = {}
 ) {
   const repositories = createFakeRepositories();
   const telegramClient = createFakeTelegramClient({
     fail: options.telegramFails
   });
+  const llmClient = createFakeLlmClient({
+    fail: options.llmFails,
+    alwaysTool: options.llmAlwaysTool
+  });
+  const searchClient = createFakeSearchClient({ fail: options.searchFails });
+  const urlFetcher = createFakeUrlFetcher({ fail: options.fetchFails });
   const workflowCreates: Array<{ id: string; params: unknown }> = [];
   let id = 0;
   const app = createWorkerApp({
     repositories,
     telegramClient,
+    llmClient,
+    searchClient,
+    urlFetcher,
     workflowStarter: {
       async create(input) {
         if (options.workflowStarterFails) {
@@ -726,7 +911,15 @@ function createTestApp(
     generateApprovalCode: () => "123456"
   });
 
-  return { app, repositories, telegramClient, workflowCreates };
+  return {
+    app,
+    repositories,
+    telegramClient,
+    workflowCreates,
+    llmClient,
+    searchClient,
+    urlFetcher
+  };
 }
 
 async function postWebhook(app: ReturnType<typeof createWorkerApp>, body: unknown) {
@@ -872,7 +1065,7 @@ describe("worker app", () => {
     expect(repositories.runs).toHaveLength(0);
   });
 
-  it("creates a run for owner messages and replies with fallback text", async () => {
+  it("uses LLM fallback for owner messages that do not match commands", async () => {
     const { app, repositories, telegramClient } = createTestApp();
     const response = await postWebhook(app, ownerUpdate("hello"));
 
@@ -882,10 +1075,140 @@ describe("worker app", () => {
       runId: "id-1"
     });
     expect(repositories.runs[0]?.status).toBe("succeeded");
-    expect(repositories.toolCalls[0]?.toolName).toBe("fallback");
-    expect(telegramClient.messages[0]?.text).toBe(
-      "Cloudflare 核心 Bot 已接入，LLM/skill 将在后续阶段开启。"
+    expect(repositories.toolCalls.map((call) => call.toolName)).toEqual([
+      "llm_chat_completion",
+      "llm_agent"
+    ]);
+    expect(telegramClient.messages[0]?.text).toBe("LLM 回复：hello");
+  });
+
+  it("lets the LLM fallback call web_search and fetch_url tools", async () => {
+    const { app, repositories, searchClient, urlFetcher, telegramClient } =
+      createTestApp();
+
+    await postWebhook(app, ownerUpdate("搜索网页 Cloudflare Workers", 1));
+    await postWebhook(app, ownerUpdate("读取网页 https://example.com", 2));
+
+    expect(searchClient.queries).toEqual(["Cloudflare Workers"]);
+    expect(urlFetcher.urls).toEqual(["https://example.com"]);
+    expect(repositories.toolCalls.map((call) => call.toolName)).toEqual([
+      "llm_chat_completion",
+      "web_search",
+      "llm_chat_completion",
+      "llm_agent",
+      "llm_chat_completion",
+      "fetch_url",
+      "llm_chat_completion",
+      "llm_agent"
+    ]);
+    expect(telegramClient.messages[0]?.text).toContain("工具结果已处理");
+    expect(telegramClient.messages[1]?.text).toContain("工具结果已处理");
+  });
+
+  it("fails clearly when LLM tool rounds exceed the configured limit", async () => {
+    const { app, repositories, telegramClient } = createTestApp();
+    const response = await app.request(
+      "/telegram/webhook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "webhook-secret"
+        },
+        body: JSON.stringify(ownerUpdate("搜索网页 超过轮次"))
+      },
+      {
+        ...env,
+        LLM_MAX_TOOL_ROUNDS: "0"
+      }
     );
+
+    expect(response.status).toBe(200);
+    expect(repositories.runs[0]).toMatchObject({
+      status: "failed",
+      error: "LLM tool round limit exceeded"
+    });
+    expect(telegramClient.messages[0]?.text).toBe(
+      "执行失败：LLM tool round limit exceeded"
+    );
+  });
+
+  it("serves agent diagnostics and test endpoints", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+    const config = await app.request(
+      "/api/admin/agent-config",
+      {
+        headers: { Cookie: cookie }
+      },
+      env
+    );
+    const llm = await app.request(
+      "/api/admin/agent-config/test-llm",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({ prompt: "hello" })
+      },
+      env
+    );
+    const search = await app.request(
+      "/api/admin/agent-config/test-search",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({ query: "Cloudflare Workers" })
+      },
+      env
+    );
+
+    await expect(config.json()).resolves.toMatchObject({
+      llmConfigured: true,
+      llmBaseUrl: "https://llm.example",
+      llmModel: "test-model",
+      braveSearchConfigured: true
+    });
+    await expect(llm.json()).resolves.toMatchObject({
+      ok: true,
+      output: "LLM 回复：hello"
+    });
+    await expect(search.json()).resolves.toMatchObject({
+      ok: true,
+      results: [
+        {
+          title: "Cloudflare Workers",
+          url: "https://developers.cloudflare.com/workers/"
+        }
+      ]
+    });
+    expect(repositories.runs[0]).toMatchObject({ status: "succeeded" });
+  });
+
+  it("reports Brave search diagnostics failures without exposing secrets", async () => {
+    const { app } = createTestApp({ searchFails: true });
+    const response = await app.request(
+      "/api/admin/agent-config/test-search",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: await ownerCookie()
+        },
+        body: JSON.stringify({ query: "Cloudflare Workers" })
+      },
+      env
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "search failed"
+    });
   });
 
   it("handles todo create, list, and complete commands", async () => {
@@ -1340,8 +1663,8 @@ describe("worker app", () => {
         body: JSON.stringify({
           manifest: workflowSkillManifest("unsupported-workflow", [
             {
-              id: "think",
-              type: "llm",
+              id: "rag",
+              type: "rag_search",
               input: {
                 prompt: "hello"
               }
@@ -1364,7 +1687,7 @@ describe("worker app", () => {
 
     expect(publish.status).toBe(400);
     await expect(publish.json()).resolves.toEqual({
-      error: "Unsupported workflow step types: llm"
+      error: "Unsupported workflow step types: rag_search"
     });
   });
 
@@ -1425,7 +1748,9 @@ describe("worker app", () => {
 
     expect(response.status).toBe(200);
     expect(workflowCreates).toHaveLength(0);
-    expect(telegramClient.messages).toHaveLength(0);
+    expect(telegramClient.messages[0]?.text).toBe(
+      "执行失败：workflow start failed"
+    );
     expect(repositories.workflowRuns[0]).toMatchObject({
       status: "failed",
       error: "workflow start failed"
@@ -1513,7 +1838,8 @@ describe("worker app", () => {
           id += 1;
           return `workflow-id-${id}`;
         },
-        generateApprovalCode: () => "123456"
+        generateApprovalCode: () => "123456",
+        maxToolRounds: 3
       }
     });
 
@@ -1553,6 +1879,102 @@ describe("worker app", () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  it("executes workflow llm, web_search, and fetch_url steps", async () => {
+    const repositories = createFakeRepositories();
+    const telegramClient = createFakeTelegramClient();
+    const llmClient = createFakeLlmClient();
+    const searchClient = createFakeSearchClient();
+    const urlFetcher = createFakeUrlFetcher();
+    const manifest = {
+      ...workflowSkillManifest("research-flow", [
+        {
+          id: "think",
+          type: "llm",
+          input: {
+            prompt: "hello"
+          }
+        },
+        {
+          id: "search",
+          type: "web_search",
+          input: {
+            query: "Cloudflare Workers"
+          }
+        },
+        {
+          id: "fetch",
+          type: "fetch_url",
+          input: {
+            text: "https://example.com"
+          }
+        }
+      ]),
+      allowedTools: ["web_search" as const, "fetch_url" as const]
+    };
+    await repositories.createRun({
+      id: "run-research",
+      ownerTgUserId: 1229,
+      chatId: 1229,
+      updateId: null,
+      messageText: "research",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+    await repositories.createWorkflowRun({
+      id: "workflow-research",
+      runId: "run-research",
+      ownerTgUserId: 1229,
+      skillId: "research-flow",
+      skillVersionId: "version-1",
+      cloudflareWorkflowInstanceId: "workflow-research",
+      source: "telegram",
+      status: "running",
+      inputText: "research",
+      outputText: null,
+      error: null,
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+    let id = 0;
+
+    await executeWorkflowSkillRun({
+      payload: {
+        workflowRunId: "workflow-research",
+        runId: "run-research",
+        ownerTgUserId: 1229,
+        skillId: "research-flow",
+        skillVersionId: "version-1",
+        manifest,
+        inputText: "research"
+      },
+      runtime: {
+        repositories,
+        telegramClient,
+        llmClient,
+        searchClient,
+        urlFetcher,
+        maxToolRounds: 3,
+        now: () => 3000 + id,
+        generateId: () => {
+          id += 1;
+          return `research-id-${id}`;
+        },
+        generateApprovalCode: () => "123456"
+      }
+    });
+
+    expect(repositories.workflowSteps.map((step) => step.stepType)).toEqual([
+      "llm",
+      "web_search",
+      "fetch_url"
+    ]);
+    expect(searchClient.queries).toEqual(["Cloudflare Workers"]);
+    expect(urlFetcher.urls).toEqual(["https://example.com"]);
+    expect(repositories.workflowRuns[0]).toMatchObject({
+      status: "succeeded"
+    });
   });
 
   it("keeps published versions immutable after draft edits", async () => {
@@ -1619,8 +2041,11 @@ describe("worker app", () => {
       skillVersionId: "coach-v1",
       status: "succeeded"
     });
-    expect(repositories.toolCalls[0]?.toolName).toBe("chat_skill_reply");
-    expect(telegramClient.messages[0]?.text).toContain("像教练一样回答。");
+    expect(repositories.toolCalls.map((call) => call.toolName)).toEqual([
+      "llm_chat_completion",
+      "llm_agent"
+    ]);
+    expect(telegramClient.messages[0]?.text).toBe("LLM 回复：今天怎么做");
   });
 
   it("marks admin test runs failed when skill execution fails", async () => {
@@ -1709,9 +2134,7 @@ describe("worker app", () => {
       triggerType: "none",
       matchedSkillId: null
     });
-    expect(telegramClient.messages[1]?.text).toBe(
-      "Cloudflare 核心 Bot 已接入，LLM/skill 将在后续阶段开启。"
-    );
+    expect(telegramClient.messages[1]?.text).toBe("LLM 回复：规划 后天任务");
   });
 
   it("blocks tools outside skill allowlists and keeps destructive approval required", async () => {
@@ -1740,6 +2163,42 @@ describe("worker app", () => {
     expect(telegramClient.messages[1]?.text).toBe(
       "这个 skill 不允许使用工具 delete_memory_request。"
     );
+  });
+
+  it("keeps fetch_url constrained to http and https URLs", async () => {
+    const repositories = createFakeRepositories();
+    const urlFetcher = createUrlFetcher({
+      defaultMaxBytes: 200000,
+      fetcher: async () => new Response("ok")
+    });
+
+    await expect(
+      executeAgentTool({
+        runId: "run-fetch",
+        ownerTgUserId: 1229,
+        toolName: "fetch_url",
+        args: { url: "file:///etc/passwd" },
+        runtime: {
+          repositories,
+          urlFetcher,
+          now: () => 1000,
+          generateId: () => "id-fetch",
+          generateApprovalCode: () => "123456"
+        },
+        record: false
+      })
+    ).rejects.toThrow("fetch_url only supports http and https URLs");
+  });
+
+  it("rejects oversized fetch_url responses", async () => {
+    const urlFetcher = createUrlFetcher({
+      defaultMaxBytes: 1,
+      fetcher: async () => new Response("too large")
+    });
+
+    await expect(
+      urlFetcher.fetchUrl({ url: "https://example.com" })
+    ).rejects.toThrow("fetch_url exceeded 1 bytes");
   });
 
   it("ignores unsupported Telegram updates and records failed tool calls on command errors", async () => {

@@ -9,6 +9,12 @@ export interface WorkerEnv {
   TELEGRAM_WEBHOOK_SECRET: string;
   OWNER_TG_USER_ID: string;
   ADMIN_SESSION_SECRET: string;
+  LLM_API_BASE_URL?: string;
+  LLM_API_KEY?: string;
+  LLM_MODEL?: string;
+  LLM_MAX_TOOL_ROUNDS?: string;
+  BRAVE_SEARCH_API_KEY?: string;
+  FETCH_URL_MAX_BYTES?: string;
 }
 
 export interface WorkflowSkillPayload {

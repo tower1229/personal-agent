@@ -24,3 +24,7 @@ migrations_dir = "migrations"
 [vars]
 TELEGRAM_BOT_USERNAME = "taozang_agent_bot"
 OWNER_TG_USER_ID = "0"
+LLM_API_BASE_URL = "https://api.openai.com"
+LLM_MODEL = "gpt-4.1-mini"
+LLM_MAX_TOOL_ROUNDS = "3"
+FETCH_URL_MAX_BYTES = "200000"

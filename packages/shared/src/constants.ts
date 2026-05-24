@@ -138,7 +138,9 @@ export const builtInToolNames = [
   "complete_todo",
   "save_memory",
   "search_memory",
-  "delete_memory_request"
+  "delete_memory_request",
+  "web_search",
+  "fetch_url"
 ] as const;
 export type BuiltInToolName = (typeof builtInToolNames)[number];
 

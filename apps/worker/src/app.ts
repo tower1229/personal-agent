@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import {
+  adminAgentConfigResponseSchema,
+  adminAgentTestLlmRequestSchema,
+  adminAgentTestLlmResponseSchema,
+  adminAgentTestSearchRequestSchema,
+  adminAgentTestSearchResponseSchema,
   adminApprovalsResponseSchema,
   adminAuthConfigResponseSchema,
   adminHealthResponseSchema,
@@ -36,6 +41,19 @@ import {
 } from "./auth.js";
 import { executeSkill, handleOwnerUpdate, type BotRuntime } from "./bot.js";
 import { createD1Repositories } from "./d1Repositories.js";
+import {
+  createBraveSearchClient,
+  createUrlFetcher,
+  type SearchClient,
+  type UrlFetcher
+} from "./externalTools.js";
+import {
+  createOpenAiCompatibleClient,
+  normalizeLlmBaseUrl,
+  parseMaxToolRounds,
+  type LlmClient
+} from "./llm.js";
+import { executeLlmAgent } from "./agent.js";
 import {
   createTelegramClient,
   getTelegramUpdateUserId,
@@ -265,6 +283,9 @@ function toAdminScheduleExecution(execution: ScheduleExecutionRecord) {
 interface WorkerAppOptions {
   repositories?: AgentRepositories;
   telegramClient?: ReturnType<typeof createTelegramClient>;
+  llmClient?: LlmClient;
+  searchClient?: SearchClient;
+  urlFetcher?: UrlFetcher;
   workflowStarter?: BotRuntime["workflowStarter"];
   now?: () => number;
   generateId?: () => string;
@@ -278,6 +299,36 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
     return options.repositories ?? createD1Repositories(env.DB);
   }
 
+  function fetchUrlMaxBytes(env: WorkerEnv): number {
+    const parsed = Number.parseInt(env.FETCH_URL_MAX_BYTES ?? "200000", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 200000;
+  }
+
+  function llmClient(env: WorkerEnv): LlmClient | undefined {
+    if (options.llmClient) {
+      return options.llmClient;
+    }
+    const baseUrl = normalizeLlmBaseUrl(env.LLM_API_BASE_URL);
+    const apiKey = env.LLM_API_KEY?.trim();
+    const model = env.LLM_MODEL?.trim();
+    if (!baseUrl || !apiKey || !model) {
+      return undefined;
+    }
+    return createOpenAiCompatibleClient({
+      apiBaseUrl: baseUrl,
+      apiKey,
+      model
+    });
+  }
+
+  function searchClient(env: WorkerEnv): SearchClient | undefined {
+    if (options.searchClient) {
+      return options.searchClient;
+    }
+    const apiKey = env.BRAVE_SEARCH_API_KEY?.trim();
+    return apiKey ? createBraveSearchClient({ apiKey }) : undefined;
+  }
+
   function runtime(env: WorkerEnv): BotRuntime {
     return {
       repositories: repositories(env),
@@ -286,6 +337,14 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
         createTelegramClient({
           botToken: env.TELEGRAM_BOT_TOKEN
         }),
+      llmClient: llmClient(env),
+      searchClient: searchClient(env),
+      urlFetcher:
+        options.urlFetcher ??
+        createUrlFetcher({
+          defaultMaxBytes: fetchUrlMaxBytes(env)
+        }),
+      maxToolRounds: parseMaxToolRounds(env.LLM_MAX_TOOL_ROUNDS),
       now: options.now ?? Date.now,
       generateId: options.generateId ?? defaultGenerateId,
       generateApprovalCode:
@@ -330,6 +389,124 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       })
     )
   );
+
+  app.get("/api/admin/agent-config", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const baseUrl = normalizeLlmBaseUrl(c.env.LLM_API_BASE_URL);
+    const model = c.env.LLM_MODEL?.trim() || null;
+
+    return c.json(
+      adminAgentConfigResponseSchema.parse({
+        llmConfigured: Boolean(baseUrl && c.env.LLM_API_KEY?.trim() && model),
+        llmBaseUrl: baseUrl,
+        llmModel: model,
+        maxToolRounds: parseMaxToolRounds(c.env.LLM_MAX_TOOL_ROUNDS),
+        braveSearchConfigured: Boolean(c.env.BRAVE_SEARCH_API_KEY?.trim()),
+        fetchUrlMaxBytes: fetchUrlMaxBytes(c.env)
+      })
+    );
+  });
+
+  app.post("/api/admin/agent-config/test-llm", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminAgentTestLlmRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid LLM test prompt" }, 400);
+    }
+
+    const rt = runtime(c.env);
+    const now = rt.now();
+    const run = await rt.repositories.createRun({
+      id: rt.generateId(),
+      ownerTgUserId: authenticatedOwnerId,
+      chatId: authenticatedOwnerId,
+      updateId: null,
+      messageText: body.data.prompt,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    try {
+      const result = await executeLlmAgent({
+        runId: run.id,
+        ownerTgUserId: authenticatedOwnerId,
+        inputText: body.data.prompt,
+        runtime: rt,
+        maxToolRounds: rt.maxToolRounds
+      });
+      await rt.repositories.updateRun(run.id, {
+        status: "succeeded",
+        responseText: result.responseText,
+        error: null,
+        updatedAt: rt.now()
+      });
+      return c.json(
+        adminAgentTestLlmResponseSchema.parse({
+          ok: true,
+          output: result.responseText
+        })
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "LLM test failed";
+      await rt.repositories.updateRun(run.id, {
+        status: "failed",
+        responseText: null,
+        error: message,
+        updatedAt: rt.now()
+      });
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  app.post("/api/admin/agent-config/test-search", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminAgentTestSearchRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid search query" }, 400);
+    }
+
+    const rt = runtime(c.env);
+    if (!rt.searchClient) {
+      return c.json({ error: "Brave search is not configured" }, 500);
+    }
+
+    try {
+      const results = await rt.searchClient.search({
+        query: body.data.query,
+        count: 5
+      });
+      return c.json(
+        adminAgentTestSearchResponseSchema.parse({
+          ok: true,
+          results
+        })
+      );
+    } catch (error) {
+      return c.json(
+        {
+          error:
+            error instanceof Error ? error.message : "Brave search test failed"
+        },
+        500
+      );
+    }
+  });
 
   app.get("/api/admin/me", async (c) => {
     const session = await verifySession({
@@ -1117,6 +1294,34 @@ export async function runScheduled(
         createTelegramClient({
           botToken: env.TELEGRAM_BOT_TOKEN
         }),
+      llmClient:
+        options.llmClient ??
+        (normalizeLlmBaseUrl(env.LLM_API_BASE_URL) &&
+        env.LLM_API_KEY?.trim() &&
+        env.LLM_MODEL?.trim()
+          ? createOpenAiCompatibleClient({
+              apiBaseUrl: normalizeLlmBaseUrl(env.LLM_API_BASE_URL) as string,
+              apiKey: env.LLM_API_KEY,
+              model: env.LLM_MODEL
+            })
+          : undefined),
+      searchClient:
+        options.searchClient ??
+        (env.BRAVE_SEARCH_API_KEY?.trim()
+          ? createBraveSearchClient({ apiKey: env.BRAVE_SEARCH_API_KEY })
+          : undefined),
+      urlFetcher:
+        options.urlFetcher ??
+        createUrlFetcher({
+          defaultMaxBytes: (() => {
+            const parsed = Number.parseInt(
+              env.FETCH_URL_MAX_BYTES ?? "200000",
+              10
+            );
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : 200000;
+          })()
+        }),
+      maxToolRounds: parseMaxToolRounds(env.LLM_MAX_TOOL_ROUNDS),
       now: options.now ?? Date.now,
       generateId: options.generateId ?? defaultGenerateId,
       generateApprovalCode:

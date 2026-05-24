@@ -3,6 +3,11 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import {
   adminApprovalsResponseSchema,
+  adminAgentConfigResponseSchema,
+  adminAgentTestLlmRequestSchema,
+  adminAgentTestLlmResponseSchema,
+  adminAgentTestSearchRequestSchema,
+  adminAgentTestSearchResponseSchema,
   adminAuthConfigResponseSchema,
   adminMemoriesResponseSchema,
   adminMeResponseSchema,
@@ -24,6 +29,7 @@ import {
   builtInToolNames,
   skillManifestSchema,
   type AdminAuthConfigResponse,
+  type AdminAgentConfigResponse,
   type AdminApprovalsResponse,
   type AdminMemoriesResponse,
   type AdminMeResponse,
@@ -105,6 +111,7 @@ function TelegramLogin(props: { config: AdminAuthConfigResponse | null }) {
 }
 
 interface DashboardData {
+  agentConfig: AdminAgentConfigResponse;
   runs: AdminRunsResponse;
   todos: AdminTodosResponse;
   memories: AdminMemoriesResponse;
@@ -273,6 +280,10 @@ function App() {
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [skillTestInput, setSkillTestInput] = useState("");
   const [skillTestOutput, setSkillTestOutput] = useState<string | null>(null);
+  const [llmTestPrompt, setLlmTestPrompt] = useState("用一句话介绍当前 agent 状态");
+  const [llmTestOutput, setLlmTestOutput] = useState<string | null>(null);
+  const [searchTestQuery, setSearchTestQuery] = useState("Cloudflare Workers");
+  const [searchTestOutput, setSearchTestOutput] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -298,6 +309,9 @@ function App() {
     }
 
     void Promise.all([
+      fetchJson("/api/admin/agent-config", (input) =>
+        adminAgentConfigResponseSchema.parse(input)
+      ),
       fetchJson("/api/admin/runs", (input) =>
         adminRunsResponseSchema.parse(input)
       ),
@@ -331,6 +345,7 @@ function App() {
     ])
       .then(
         ([
+          agentConfig,
           runs,
           todos,
           memories,
@@ -343,6 +358,7 @@ function App() {
           scheduleExecutions
         ]) => {
           setDashboard({
+            agentConfig,
             runs,
             todos,
             memories,
@@ -367,6 +383,9 @@ function App() {
     }
 
     void Promise.all([
+      fetchJson("/api/admin/agent-config", (input) =>
+        adminAgentConfigResponseSchema.parse(input)
+      ),
       fetchJson("/api/admin/runs", (input) =>
         adminRunsResponseSchema.parse(input)
       ),
@@ -400,6 +419,7 @@ function App() {
     ])
       .then(
         ([
+          agentConfig,
           runs,
           todos,
           memories,
@@ -412,6 +432,7 @@ function App() {
           scheduleExecutions
         ]) => {
           setDashboard({
+            agentConfig,
             runs,
             todos,
             memories,
@@ -574,6 +595,31 @@ function App() {
     setWorkflowDetail(response);
   }
 
+  async function testLlmConfig() {
+    const response = await sendJson(
+      "/api/admin/agent-config/test-llm",
+      "POST",
+      adminAgentTestLlmRequestSchema.parse({ prompt: llmTestPrompt }),
+      (input) => adminAgentTestLlmResponseSchema.parse(input)
+    );
+    setLlmTestOutput(response.output);
+    reloadDashboard();
+  }
+
+  async function testSearchConfig() {
+    const response = await sendJson(
+      "/api/admin/agent-config/test-search",
+      "POST",
+      adminAgentTestSearchRequestSchema.parse({ query: searchTestQuery }),
+      (input) => adminAgentTestSearchResponseSchema.parse(input)
+    );
+    setSearchTestOutput(
+      response.results
+        .map((item) => `${item.rank}. ${item.title}\n${item.url}`)
+        .join("\n\n") || "没有搜索到结果。"
+    );
+  }
+
   async function logout() {
     await fetch("/api/admin/logout", {
       method: "POST",
@@ -629,6 +675,82 @@ function App() {
 
           {dashboard ? (
             <>
+              <section className="panel diagnostics-panel">
+                <div className="section-title">
+                  <h2>Agent Settings</h2>
+                  <span className="muted">
+                    {dashboard.agentConfig.llmConfigured ? "LLM ready" : "LLM missing"} ·{" "}
+                    {dashboard.agentConfig.braveSearchConfigured
+                      ? "Search ready"
+                      : "Search missing"}
+                  </span>
+                </div>
+                <div className="diagnostics-grid">
+                  <div>
+                    <p>Base URL: {dashboard.agentConfig.llmBaseUrl ?? "-"}</p>
+                    <p>Model: {dashboard.agentConfig.llmModel ?? "-"}</p>
+                    <p>Max tool rounds: {dashboard.agentConfig.maxToolRounds}</p>
+                    <p>Fetch max bytes: {dashboard.agentConfig.fetchUrlMaxBytes}</p>
+                  </div>
+                  <div className="test-run">
+                    <label>
+                      Test LLM
+                      <input
+                        value={llmTestPrompt}
+                        onChange={(event) => setLlmTestPrompt(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() =>
+                        void testLlmConfig().catch((testError) => {
+                          setError(
+                            testError instanceof Error
+                              ? testError.message
+                              : "LLM 测试失败"
+                          );
+                        })
+                      }
+                    >
+                      Run LLM Test
+                    </button>
+                    {llmTestOutput ? (
+                      <pre className="output">{llmTestOutput}</pre>
+                    ) : null}
+                  </div>
+                  <div className="test-run">
+                    <label>
+                      Test Search
+                      <input
+                        value={searchTestQuery}
+                        onChange={(event) =>
+                          setSearchTestQuery(event.target.value)
+                        }
+                      />
+                    </label>
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() =>
+                        void testSearchConfig().catch((testError) => {
+                          setError(
+                            testError instanceof Error
+                              ? testError.message
+                              : "搜索测试失败"
+                          );
+                        })
+                      }
+                    >
+                      Run Search Test
+                    </button>
+                    {searchTestOutput ? (
+                      <pre className="output">{searchTestOutput}</pre>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+
               <section className="panel skill-editor">
                 <div className="section-title">
                   <h2>Skills</h2>

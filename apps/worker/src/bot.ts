@@ -4,6 +4,13 @@ import {
   type SkillRouteTriggerType,
   type ToolRiskLevel
 } from "@personal-agent/shared";
+import {
+  executeLlmAgent,
+  type AgentRuntime,
+  type AgentToolResult
+} from "./agent.js";
+import { type SearchClient, type UrlFetcher } from "./externalTools.js";
+import { type LlmClient } from "./llm.js";
 import { type AgentRepositories } from "./repositories.js";
 import {
   getTelegramChatId,
@@ -14,9 +21,13 @@ import { type TelegramWebhookUpdate } from "@personal-agent/shared";
 import { type RunnableSkillRecord } from "./repositories.js";
 import { type WorkflowSkillPayload } from "./types.js";
 
-export interface BotRuntime {
+export interface BotRuntime extends AgentRuntime {
   repositories: AgentRepositories;
   telegramClient: TelegramClient;
+  llmClient?: LlmClient;
+  searchClient?: SearchClient;
+  urlFetcher?: UrlFetcher;
+  maxToolRounds: number;
   workflowStarter?: {
     create(input: {
       id: string;
@@ -50,6 +61,10 @@ export interface CommandResult {
   riskLevel: ToolRiskLevel;
   input: unknown;
   output: unknown;
+}
+
+function agentResultToCommandResult(result: AgentToolResult): CommandResult {
+  return result;
 }
 
 export interface SkillMatch {
@@ -627,15 +642,17 @@ export async function executeSkill(input: {
   );
 
   try {
-    const result = await executeCommand({
-      runId: input.runId,
-      ownerTgUserId: input.ownerTgUserId,
-      text: input.match.inputText,
-      runtime: input.runtime,
-      allowedTools,
-      fallbackResponse: buildSkillFallback(manifest, input.match.inputText),
-      fallbackToolName: "chat_skill_reply"
-    });
+    const result = agentResultToCommandResult(
+      await executeLlmAgent({
+        runId: input.runId,
+        ownerTgUserId: input.ownerTgUserId,
+        inputText: input.match.inputText,
+        runtime: input.runtime,
+        allowedTools,
+        systemInstructions: buildSkillFallback(manifest, input.match.inputText),
+        maxToolRounds: input.runtime.maxToolRounds
+      })
+    );
     await recordToolCall(
       {
         runId: input.runId,
@@ -738,6 +755,34 @@ async function startWorkflowSkill(input: {
   };
 }
 
+async function executeCommandOrLlmFallback(input: {
+  runId: string;
+  ownerTgUserId: number;
+  text: string;
+  runtime: BotRuntime;
+}): Promise<CommandResult> {
+  const commandResult = await executeCommand({
+    runId: input.runId,
+    ownerTgUserId: input.ownerTgUserId,
+    text: input.text,
+    runtime: input.runtime
+  });
+
+  if (commandResult.toolName !== "fallback") {
+    return commandResult;
+  }
+
+  return agentResultToCommandResult(
+    await executeLlmAgent({
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      inputText: input.text,
+      runtime: input.runtime,
+      maxToolRounds: input.runtime.maxToolRounds
+    })
+  );
+}
+
 export async function handleOwnerUpdate(
   input: HandleOwnerUpdateInput
 ): Promise<{ runId: string }> {
@@ -788,12 +833,14 @@ export async function handleOwnerUpdate(
             match,
             runtime: input.runtime
           })
-      : await executeCommand({
-          runId: run.id,
-          ownerTgUserId: input.ownerTgUserId,
-          text: text ?? "",
-          runtime: input.runtime
-        });
+      : agentResultToCommandResult(
+          await executeCommandOrLlmFallback({
+            runId: run.id,
+            ownerTgUserId: input.ownerTgUserId,
+            text: text ?? "",
+            runtime: input.runtime
+          })
+        );
 
     if (!match || match.runnable.version.manifest.kind === "workflow") {
       await recordToolCall(
@@ -848,6 +895,12 @@ export async function handleOwnerUpdate(
       error,
       updatedAt: input.runtime.now()
     });
+    await input.runtime.telegramClient
+      .sendMessage({
+        chatId,
+        text: `执行失败：${error}`
+      })
+      .catch(() => undefined);
   }
 
   return { runId: run.id };

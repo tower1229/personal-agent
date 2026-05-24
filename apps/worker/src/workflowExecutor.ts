@@ -2,6 +2,7 @@ import {
   builtInToolNames,
   type WorkflowSkillStep
 } from "@personal-agent/shared";
+import { executeAgentTool, executeLlmAgent } from "./agent.js";
 import { executeCommand, type BotRuntime } from "./bot.js";
 import { type WorkflowSkillPayload } from "./types.js";
 
@@ -26,6 +27,13 @@ function waitDurationMs(step: WorkflowSkillStep): number {
 
 function telegramText(step: WorkflowSkillStep, fallback: string): string {
   const candidate = step.input?.text;
+  return typeof candidate === "string" && candidate.trim()
+    ? candidate.trim()
+    : fallback;
+}
+
+function stepText(step: WorkflowSkillStep, fallback: string): string {
+  const candidate = step.input?.text ?? step.input?.prompt ?? step.input?.query;
   return typeof candidate === "string" && candidate.trim()
     ? candidate.trim()
     : fallback;
@@ -115,6 +123,57 @@ export async function executeWorkflowSkillRun(input: {
             })
           );
           output = { sent: true, text };
+        } else if (workflowStep.type === "llm") {
+          const prompt = stepText(
+            workflowStep,
+            lastOutput || input.payload.inputText
+          );
+          const result = (await adapter.do(workflowStep.id, () =>
+            executeLlmAgent({
+              runId: input.payload.runId,
+              ownerTgUserId: input.payload.ownerTgUserId,
+              inputText: prompt,
+              runtime: input.runtime,
+              allowedTools,
+              systemInstructions: manifest.instructions,
+              maxToolRounds: input.runtime.maxToolRounds
+            })
+          )) as Awaited<ReturnType<typeof executeLlmAgent>>;
+          lastOutput = result.responseText;
+          output = {
+            responseText: result.responseText
+          };
+        } else if (workflowStep.type === "web_search") {
+          const query = stepText(
+            workflowStep,
+            lastOutput || input.payload.inputText
+          );
+          const result = (await adapter.do(workflowStep.id, () =>
+            executeAgentTool({
+              runId: input.payload.runId,
+              ownerTgUserId: input.payload.ownerTgUserId,
+              toolName: "web_search",
+              args: { query },
+              runtime: input.runtime,
+              allowedTools
+            })
+          )) as Awaited<ReturnType<typeof executeAgentTool>>;
+          lastOutput = result.responseText;
+          output = result.output;
+        } else if (workflowStep.type === "fetch_url") {
+          const url = stepText(workflowStep, lastOutput);
+          const result = (await adapter.do(workflowStep.id, () =>
+            executeAgentTool({
+              runId: input.payload.runId,
+              ownerTgUserId: input.payload.ownerTgUserId,
+              toolName: "fetch_url",
+              args: { url },
+              runtime: input.runtime,
+              allowedTools
+            })
+          )) as Awaited<ReturnType<typeof executeAgentTool>>;
+          lastOutput = result.responseText;
+          output = result.output;
         } else {
           throw new Error(`Unsupported workflow step type: ${workflowStep.type}`);
         }

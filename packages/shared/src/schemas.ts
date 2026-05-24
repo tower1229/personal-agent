@@ -229,6 +229,61 @@ export type AdminAuthConfigResponse = z.infer<
   typeof adminAuthConfigResponseSchema
 >;
 
+export const adminAgentConfigResponseSchema = z.object({
+  llmConfigured: z.boolean(),
+  llmBaseUrl: z.string().min(1).nullable(),
+  llmModel: z.string().min(1).nullable(),
+  maxToolRounds: z.number().int().min(0),
+  braveSearchConfigured: z.boolean(),
+  fetchUrlMaxBytes: z.number().int().min(1)
+});
+
+export type AdminAgentConfigResponse = z.infer<
+  typeof adminAgentConfigResponseSchema
+>;
+
+export const adminAgentTestLlmRequestSchema = z.object({
+  prompt: z.string().min(1)
+});
+
+export type AdminAgentTestLlmRequest = z.infer<
+  typeof adminAgentTestLlmRequestSchema
+>;
+
+export const adminAgentTestLlmResponseSchema = z.object({
+  ok: z.literal(true),
+  output: z.string().min(1)
+});
+
+export type AdminAgentTestLlmResponse = z.infer<
+  typeof adminAgentTestLlmResponseSchema
+>;
+
+export const adminAgentTestSearchRequestSchema = z.object({
+  query: z.string().min(1)
+});
+
+export type AdminAgentTestSearchRequest = z.infer<
+  typeof adminAgentTestSearchRequestSchema
+>;
+
+export const adminAgentTestSearchResponseSchema = z.object({
+  ok: z.literal(true),
+  results: z.array(
+    z.object({
+      title: z.string(),
+      url: z.string().url(),
+      description: z.string(),
+      source: z.string(),
+      rank: z.number().int().min(1)
+    })
+  )
+});
+
+export type AdminAgentTestSearchResponse = z.infer<
+  typeof adminAgentTestSearchResponseSchema
+>;
+
 export const adminWorkflowStepSchema = z.object({
   id: z.string().min(1),
   workflowRunId: z.string().min(1),
