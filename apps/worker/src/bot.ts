@@ -700,18 +700,31 @@ async function startWorkflowSkill(input: {
     updatedAt: now
   });
 
-  await input.runtime.workflowStarter.create({
-    id: workflowRunId,
-    params: {
-      workflowRunId,
-      runId: input.runId,
-      ownerTgUserId: input.ownerTgUserId,
-      skillId: input.match.runnable.skill.id,
-      skillVersionId: input.match.runnable.version.id,
-      manifest: input.match.runnable.version.manifest,
-      inputText: input.match.inputText
-    }
-  });
+  try {
+    await input.runtime.workflowStarter.create({
+      id: workflowRunId,
+      params: {
+        workflowRunId,
+        runId: input.runId,
+        ownerTgUserId: input.ownerTgUserId,
+        skillId: input.match.runnable.skill.id,
+        skillVersionId: input.match.runnable.version.id,
+        manifest: input.match.runnable.version.manifest,
+        inputText: input.match.inputText
+      }
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Workflow runner start failed";
+    await input.runtime.repositories.updateWorkflowRun({
+      id: workflowRunId,
+      status: "failed",
+      outputText: null,
+      error: message,
+      updatedAt: input.runtime.now()
+    });
+    throw error;
+  }
 
   return {
     responseText: `已开始执行 workflow：${input.match.runnable.version.manifest.name}`,

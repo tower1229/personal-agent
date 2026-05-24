@@ -238,6 +238,35 @@ h2 {
   font-size: 13px;
 }
 
+.row-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.compact-button {
+  padding: 5px 8px;
+}
+
+.workflow-steps {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #edf1f6;
+}
+
+.workflow-steps h3 {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.step-row {
+  display: grid;
+  gap: 8px;
+}
+
 @media (max-width: 760px) {
   .topbar {
     align-items: flex-start;

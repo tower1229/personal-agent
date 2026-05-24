@@ -226,6 +226,17 @@ export async function pollDueSchedules(input: {
       updatedAt: input.runtime.now()
     });
 
+    if (!execution) {
+      continue;
+    }
+
+    started += 1;
+    await executeScheduleCommand({
+      schedule,
+      execution,
+      runtime: input.runtime
+    });
+
     const nextRunAt = nextScheduleRunAt({
       cadence: schedule.cadence,
       timeOfDay: schedule.timeOfDay,
@@ -237,17 +248,6 @@ export async function pollDueSchedules(input: {
       lastRunAt: schedule.nextRunAt,
       nextRunAt,
       updatedAt: input.runtime.now()
-    });
-
-    if (!execution) {
-      continue;
-    }
-
-    started += 1;
-    await executeScheduleCommand({
-      schedule,
-      execution,
-      runtime: input.runtime
     });
   }
 

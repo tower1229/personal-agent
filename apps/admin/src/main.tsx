@@ -19,6 +19,7 @@ import {
   adminScheduleUpsertRequestSchema,
   adminSchedulesResponseSchema,
   adminTodosResponseSchema,
+  adminWorkflowRunDetailResponseSchema,
   adminWorkflowRunsResponseSchema,
   builtInToolNames,
   skillManifestSchema,
@@ -34,6 +35,7 @@ import {
   type AdminScheduleExecutionsResponse,
   type AdminSchedulesResponse,
   type AdminTodosResponse,
+  type AdminWorkflowRunDetailResponse,
   type AdminWorkflowRunsResponse,
   type BuiltInToolName,
   type SkillKind
@@ -149,6 +151,18 @@ function EmptyList() {
   return <p className="muted">暂无数据</p>;
 }
 
+function parseJsonText(value: string | null) {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
 const emptySkillForm: SkillFormState = {
   id: "",
   name: "",
@@ -251,6 +265,8 @@ function App() {
   const [me, setMe] = useState<AdminMeResponse | null>(null);
   const [config, setConfig] = useState<AdminAuthConfigResponse | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [workflowDetail, setWorkflowDetail] =
+    useState<AdminWorkflowRunDetailResponse | null>(null);
   const [skillForm, setSkillForm] = useState<SkillFormState>(emptySkillForm);
   const [scheduleForm, setScheduleForm] =
     useState<ScheduleFormState>(emptyScheduleForm);
@@ -549,6 +565,13 @@ function App() {
       setScheduleForm(emptyScheduleForm);
     }
     reloadDashboard();
+  }
+
+  async function loadWorkflowRun(id: string) {
+    const response = await fetchJson(`/api/admin/workflow-runs/${id}`, (input) =>
+      adminWorkflowRunDetailResponseSchema.parse(input)
+    );
+    setWorkflowDetail(response);
   }
 
   async function logout() {
@@ -1182,9 +1205,55 @@ function App() {
                       <strong>{workflowRun.skillId}</strong>
                       <p>{workflowRun.inputText || "(empty)"}</p>
                     </div>
-                    <span>{workflowRun.status}</span>
+                    <div className="row-actions">
+                      <span>{workflowRun.status}</span>
+                      <button
+                        className="text-button compact-button"
+                        type="button"
+                        onClick={() =>
+                          void loadWorkflowRun(workflowRun.id).catch(
+                            (loadError) => {
+                              setError(
+                                loadError instanceof Error
+                                  ? loadError.message
+                                  : "加载 workflow steps 失败"
+                              );
+                            }
+                          )
+                        }
+                      >
+                        Steps
+                      </button>
+                    </div>
                   </div>
                 ))}
+                {workflowDetail ? (
+                  <div className="workflow-steps">
+                    <h3>{workflowDetail.workflowRun.id}</h3>
+                    {workflowDetail.steps.length === 0 ? <EmptyList /> : null}
+                    {workflowDetail.steps.map((step) => (
+                      <div className="step-row" key={step.id}>
+                        <div className="section-title">
+                          <strong>
+                            {step.stepId} · {step.stepType}
+                          </strong>
+                          <span>{step.status}</span>
+                        </div>
+                        <pre className="output">
+                          {JSON.stringify(
+                            {
+                              input: parseJsonText(step.inputJson),
+                              output: parseJsonText(step.outputJson),
+                              error: step.error
+                            },
+                            null,
+                            2
+                          )}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </article>
 
               <article className="panel list-panel">

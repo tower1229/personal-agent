@@ -697,7 +697,9 @@ function createFakeTelegramClient(options: { fail?: boolean } = {}):
   };
 }
 
-function createTestApp(options: { telegramFails?: boolean } = {}) {
+function createTestApp(
+  options: { telegramFails?: boolean; workflowStarterFails?: boolean } = {}
+) {
   const repositories = createFakeRepositories();
   const telegramClient = createFakeTelegramClient({
     fail: options.telegramFails
@@ -709,6 +711,9 @@ function createTestApp(options: { telegramFails?: boolean } = {}) {
     telegramClient,
     workflowStarter: {
       async create(input) {
+        if (options.workflowStarterFails) {
+          throw new Error("workflow start failed");
+        }
         workflowCreates.push(input);
         return {};
       }
@@ -1024,6 +1029,99 @@ describe("worker app", () => {
     expect(telegramClient.messages[0]?.text).toBe("当前没有未完成待办。");
   });
 
+  it("updates, toggles, and deletes schedules", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+    await app.request(
+      "/api/admin/schedules",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          name: "daily todos",
+          commandText: "列出我的待办",
+          enabled: true,
+          timezone: "Asia/Shanghai",
+          cadence: "daily",
+          timeOfDay: "09:30",
+          daysOfWeek: []
+        })
+      },
+      env
+    );
+    const scheduleId = repositories.schedules[0]?.id as string;
+
+    const update = await app.request(
+      `/api/admin/schedules/${scheduleId}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          name: "weekly todos",
+          commandText: "列出我的待办",
+          enabled: true,
+          timezone: "Asia/Shanghai",
+          cadence: "weekly",
+          timeOfDay: "10:15",
+          daysOfWeek: [1, 3]
+        })
+      },
+      env
+    );
+    const disable = await app.request(
+      `/api/admin/schedules/${scheduleId}/disable`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(disable.status).toBe(200);
+    expect(repositories.schedules[0]?.enabled).toBe(false);
+
+    const enable = await app.request(
+      `/api/admin/schedules/${scheduleId}/enable`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(enable.status).toBe(200);
+    expect(repositories.schedules[0]?.enabled).toBe(true);
+
+    const remove = await app.request(
+      `/api/admin/schedules/${scheduleId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+
+    expect(update.status).toBe(200);
+    expect(remove.status).toBe(200);
+    expect(repositories.schedules[0]).toMatchObject({
+      name: "weekly todos",
+      cadence: "weekly",
+      daysOfWeek: [1, 3],
+      enabled: false
+    });
+    expect(repositories.schedules[0]?.deletedAt).not.toBeNull();
+  });
+
   it("rejects weekly schedules without selected days", async () => {
     const { app, repositories } = createTestApp();
     const response = await app.request(
@@ -1303,6 +1401,43 @@ describe("worker app", () => {
     expect(workflowCreates).toHaveLength(1);
     expect(repositories.workflowSteps).toHaveLength(0);
     expect(telegramClient.messages[0]?.text).toContain("已开始执行 workflow");
+  });
+
+  it("marks workflow runs failed when the workflow starter rejects", async () => {
+    const { app, repositories, workflowCreates, telegramClient } =
+      createTestApp({ workflowStarterFails: true });
+    const skill = await repositories.createSkill({
+      ownerTgUserId: 1229,
+      manifest: workflowSkillManifest("broken-flow"),
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: skill.id,
+      versionId: "workflow-version",
+      createdAt: 1001
+    });
+
+    const response = await postWebhook(
+      app,
+      ownerUpdate("/skill broken-flow hello")
+    );
+
+    expect(response.status).toBe(200);
+    expect(workflowCreates).toHaveLength(0);
+    expect(telegramClient.messages).toHaveLength(0);
+    expect(repositories.workflowRuns[0]).toMatchObject({
+      status: "failed",
+      error: "workflow start failed"
+    });
+    expect(repositories.runs[0]).toMatchObject({
+      status: "failed",
+      error: "workflow start failed"
+    });
+    expect(repositories.toolCalls[0]).toMatchObject({
+      status: "failed",
+      error: "workflow start failed"
+    });
   });
 
   it("executes workflow runner steps and records workflow trace", async () => {
