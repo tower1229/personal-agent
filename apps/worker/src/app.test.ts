@@ -1076,8 +1076,7 @@ describe("worker app", () => {
     });
     expect(repositories.runs[0]?.status).toBe("succeeded");
     expect(repositories.toolCalls.map((call) => call.toolName)).toEqual([
-      "llm_chat_completion",
-      "llm_agent"
+      "llm_chat_completion"
     ]);
     expect(telegramClient.messages[0]?.text).toBe("LLM 回复：hello");
   });
@@ -1095,11 +1094,9 @@ describe("worker app", () => {
       "llm_chat_completion",
       "web_search",
       "llm_chat_completion",
-      "llm_agent",
       "llm_chat_completion",
       "fetch_url",
-      "llm_chat_completion",
-      "llm_agent"
+      "llm_chat_completion"
     ]);
     expect(telegramClient.messages[0]?.text).toContain("工具结果已处理");
     expect(telegramClient.messages[1]?.text).toContain("工具结果已处理");
@@ -1691,6 +1688,49 @@ describe("worker app", () => {
     });
   });
 
+  it("rejects publishing workflow steps without required allowed tools", async () => {
+    const { app } = createTestApp();
+    const cookie = await ownerCookie();
+    await app.request(
+      "/api/admin/skills",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          manifest: workflowSkillManifest("unauthorized-workflow", [
+            {
+              id: "search",
+              type: "web_search",
+              input: {
+                query: "Cloudflare"
+              }
+            }
+          ])
+        })
+      },
+      env
+    );
+
+    const publish = await app.request(
+      "/api/admin/skills/unauthorized-workflow/publish",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+
+    expect(publish.status).toBe(400);
+    await expect(publish.json()).resolves.toEqual({
+      error: "Workflow steps require allowed tools: web_search"
+    });
+  });
+
   it("starts published workflow skills from Telegram without inline execution", async () => {
     const { app, repositories, workflowCreates, telegramClient } =
       createTestApp();
@@ -2042,8 +2082,7 @@ describe("worker app", () => {
       status: "succeeded"
     });
     expect(repositories.toolCalls.map((call) => call.toolName)).toEqual([
-      "llm_chat_completion",
-      "llm_agent"
+      "llm_chat_completion"
     ]);
     expect(telegramClient.messages[0]?.text).toBe("LLM 回复：今天怎么做");
   });
@@ -2191,14 +2230,25 @@ describe("worker app", () => {
   });
 
   it("rejects oversized fetch_url responses", async () => {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("too "));
+        controller.enqueue(new TextEncoder().encode("large"));
+      },
+      cancel() {
+        canceled = true;
+      }
+    });
     const urlFetcher = createUrlFetcher({
       defaultMaxBytes: 1,
-      fetcher: async () => new Response("too large")
+      fetcher: async () => new Response(body)
     });
 
     await expect(
       urlFetcher.fetchUrl({ url: "https://example.com" })
     ).rejects.toThrow("fetch_url exceeded 1 bytes");
+    expect(canceled).toBe(true);
   });
 
   it("ignores unsupported Telegram updates and records failed tool calls on command errors", async () => {

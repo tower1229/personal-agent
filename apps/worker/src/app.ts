@@ -66,7 +66,10 @@ import {
   normalizeScheduleRequest,
   pollDueSchedules
 } from "./schedules.js";
-import { unsupportedWorkflowStepTypes } from "./workflowValidation.js";
+import {
+  unauthorizedWorkflowStepTools,
+  unsupportedWorkflowStepTypes
+} from "./workflowValidation.js";
 import {
   type AgentRepositories,
   type ApprovalRequestRecord,
@@ -717,6 +720,15 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       if (unsupported.length > 0) {
         return c.json(
           { error: `Unsupported workflow step types: ${unsupported.join(", ")}` },
+          400
+        );
+      }
+      const unauthorized = unauthorizedWorkflowStepTools(manifest);
+      if (unauthorized.length > 0) {
+        return c.json(
+          {
+            error: `Workflow steps require allowed tools: ${unauthorized.join(", ")}`
+          },
           400
         );
       }

@@ -99,6 +99,56 @@ function htmlToText(value: string): string {
   ).trim();
 }
 
+async function readLimitedText(input: {
+  response: Response;
+  maxBytes: number;
+}): Promise<{ text: string; bytesRead: number }> {
+  if (!input.response.body) {
+    const text = await input.response.text();
+    const bytesRead = new TextEncoder().encode(text).byteLength;
+    if (bytesRead > input.maxBytes) {
+      throw new Error(`fetch_url exceeded ${input.maxBytes} bytes`);
+    }
+    return { text, bytesRead };
+  }
+
+  const reader = input.response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytesRead = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+      bytesRead += value.byteLength;
+      if (bytesRead > input.maxBytes) {
+        await reader.cancel();
+        throw new Error(`fetch_url exceeded ${input.maxBytes} bytes`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const buffer = new Uint8Array(bytesRead);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return {
+    text: new TextDecoder().decode(buffer),
+    bytesRead
+  };
+}
+
 export function createUrlFetcher(input: {
   fetcher?: typeof fetch;
   defaultMaxBytes: number;
@@ -123,11 +173,10 @@ export function createUrlFetcher(input: {
         throw new Error(`fetch_url returned ${response.status}`);
       }
 
-      const text = await response.text();
-      const bytesRead = new TextEncoder().encode(text).byteLength;
-      if (bytesRead > maxBytes) {
-        throw new Error(`fetch_url exceeded ${maxBytes} bytes`);
-      }
+      const { text, bytesRead } = await readLimitedText({
+        response,
+        maxBytes
+      });
 
       return {
         url: parsed.toString(),

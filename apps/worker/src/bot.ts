@@ -653,16 +653,6 @@ export async function executeSkill(input: {
         maxToolRounds: input.runtime.maxToolRounds
       })
     );
-    await recordToolCall(
-      {
-        runId: input.runId,
-        ownerTgUserId: input.ownerTgUserId,
-        text: input.match.inputText,
-        runtime: input.runtime
-      },
-      result,
-      "succeeded"
-    );
 
     await input.runtime.repositories.updateSkillRun({
       id: skillRun.id,
@@ -842,7 +832,10 @@ export async function handleOwnerUpdate(
           })
         );
 
-    if (!match || match.runnable.version.manifest.kind === "workflow") {
+    if (
+      (!match && result.toolName !== "llm_agent") ||
+      match?.runnable.version.manifest.kind === "workflow"
+    ) {
       await recordToolCall(
         {
           runId: run.id,
