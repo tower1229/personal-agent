@@ -208,7 +208,7 @@ export async function executeCommand(
   if (text === "/start") {
     return {
       responseText:
-        "Cloudflare 核心 Bot 已接入。当前支持待办、记忆和删除确认；LLM/skill 会在后续阶段开启。",
+        "Cloudflare Bot 已接入。当前支持待办、记忆、删除确认、skill、workflow、schedule、LLM 和联网搜索。",
       toolName: "bot_status",
       riskLevel: "read",
       input: { text },

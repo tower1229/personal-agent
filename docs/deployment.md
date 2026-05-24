@@ -2,6 +2,8 @@
 
 本文覆盖本地开发、Docker 启动、环境变量、SQLite volume、安全和备份建议。
 
+Cloudflare Worker 版本的部署手册见 [Cloudflare Workers.dev Runbook](./cloudflare-workers-dev-runbook.md)。当前迁移期允许旧 Node/SQLite 运行时与 Cloudflare Worker 运行时并存；线上优先验证 Worker 路径。
+
 ## 本地开发启动
 
 ```bash

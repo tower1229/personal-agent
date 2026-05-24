@@ -18,13 +18,13 @@ crons = [ "* * * * *" ]
 [[d1_databases]]
 binding = "DB"
 database_name = "personal-agent-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "59bbec2a-d985-43a4-86b0-2d6f0100f4ce"
 migrations_dir = "migrations"
 
 [vars]
 TELEGRAM_BOT_USERNAME = "taozang_agent_bot"
-OWNER_TG_USER_ID = "0"
-LLM_API_BASE_URL = "https://api.openai.com"
-LLM_MODEL = "gpt-4.1-mini"
+OWNER_TG_USER_ID = "5424534900"
+LLM_API_BASE_URL = "https://api.deepseek.com"
+LLM_MODEL = "deepseek-v4-pro"
 LLM_MAX_TOOL_ROUNDS = "3"
 FETCH_URL_MAX_BYTES = "200000"

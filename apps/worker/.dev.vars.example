@@ -4,3 +4,9 @@ ADMIN_SESSION_SECRET=replace-with-session-secret
 # Telegram Login requires the bot username without @ and ending in bot.
 TELEGRAM_BOT_USERNAME=your_bot_username_bot
 OWNER_TG_USER_ID=1229
+LLM_API_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=replace-with-deepseek-api-key
+LLM_MODEL=deepseek-v4-pro
+LLM_MAX_TOOL_ROUNDS=3
+BRAVE_SEARCH_API_KEY=replace-with-brave-search-api-key
+FETCH_URL_MAX_BYTES=200000
