@@ -224,6 +224,7 @@ function useAsyncData<T>(loader: () => Promise<T>, deps: unknown[] = []) {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setData(null);
 
     void loader()
       .then((value) => {
@@ -548,9 +549,21 @@ export function SkillsPage() {
     if (!params.id || isNew) {
       return;
     }
-    await deleteSkill(params.id);
-    toast.success("Skill deleted");
-    navigate("/admin/skills");
+    try {
+      await deleteSkill(params.id);
+      toast.success("Skill deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      if (!message.includes("Skill not found")) {
+        toast.error(message);
+        return;
+      }
+      toast.success("Skill already deleted");
+    }
+    setInlineError(null);
+    setTestOutput(null);
+    detail.setData(null);
+    navigate("/admin/skills", { replace: true });
   }
 
   async function runTest() {
@@ -650,9 +663,14 @@ export function SkillsPage() {
             ) : null}
             {hasDetailTarget ? (
               <>
+                {detail.error ? (
+                  <EmptyState>{detail.error}</EmptyState>
+                ) : null}
                 {inlineError ? (
                   <p className="text-sm text-destructive">{inlineError}</p>
                 ) : null}
+                {!detail.error ? (
+                  <>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="ID">
                     <Input
@@ -852,6 +870,8 @@ export function SkillsPage() {
                       />
                     </TabsContent>
                   </Tabs>
+                ) : null}
+                  </>
                 ) : null}
               </>
             ) : null}
