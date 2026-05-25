@@ -12,37 +12,37 @@ const OverviewPage = lazy(() =>
   }))
 );
 const RunsPage = lazy(() =>
-  import("@/pages/resource-pages").then((module) => ({
+  import("@/pages/runs-page").then((module) => ({
     default: module.RunsPage
   }))
 );
 const SkillsPage = lazy(() =>
-  import("@/pages/resource-pages").then((module) => ({
+  import("@/pages/skills-page").then((module) => ({
     default: module.SkillsPage
   }))
 );
 const WorkflowsPage = lazy(() =>
-  import("@/pages/resource-pages").then((module) => ({
+  import("@/pages/workflows-page").then((module) => ({
     default: module.WorkflowsPage
   }))
 );
 const SchedulesPage = lazy(() =>
-  import("@/pages/resource-pages").then((module) => ({
+  import("@/pages/schedules-page").then((module) => ({
     default: module.SchedulesPage
   }))
 );
 const DataPage = lazy(() =>
-  import("@/pages/resource-pages").then((module) => ({
+  import("@/pages/data-page").then((module) => ({
     default: module.DataPage
   }))
 );
 const ApprovalsPage = lazy(() =>
-  import("@/pages/resource-pages").then((module) => ({
+  import("@/pages/approvals-page").then((module) => ({
     default: module.ApprovalsPage
   }))
 );
 const SettingsPage = lazy(() =>
-  import("@/pages/resource-pages").then((module) => ({
+  import("@/pages/settings-page").then((module) => ({
     default: module.SettingsPage
   }))
 );
