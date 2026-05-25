@@ -387,7 +387,11 @@ function createFakeRepositories(): AgentRepositories & {
     },
     async listSkills(ownerTgUserId, limit) {
       return state.skills
-        .filter((skill) => skill.ownerTgUserId === ownerTgUserId)
+        .filter(
+          (skill) =>
+            skill.ownerTgUserId === ownerTgUserId &&
+            skill.deletedAt === null
+        )
         .slice()
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .slice(0, limit);
@@ -1702,6 +1706,19 @@ describe("worker app", () => {
       env
     );
     expect(secondRemove.status).toBe(200);
+
+    const listAfterRemove = await app.request(
+      "/api/admin/skills",
+      {
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    await expect(listAfterRemove.json()).resolves.toMatchObject({
+      items: []
+    });
   });
 
   it("rejects weekly schedules without selected days", async () => {

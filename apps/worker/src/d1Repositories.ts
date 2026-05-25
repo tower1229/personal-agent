@@ -783,7 +783,7 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
       const { results } = await db
         .prepare(
           `SELECT * FROM skills
-          WHERE owner_tg_user_id = ?
+          WHERE owner_tg_user_id = ? AND deleted_at IS NULL
           ORDER BY updated_at DESC
           LIMIT ?`
         )

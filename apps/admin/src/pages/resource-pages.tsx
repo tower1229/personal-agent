@@ -494,7 +494,9 @@ export function SkillsPage() {
   const filtered = useMemo(() => {
     return (skills.data?.items ?? []).filter((skill) => {
       const matchesKind = kind === "all" || skill.kind === kind;
-      const matchesStatus = status === "all" || skillStatus(skill) === status;
+      const currentStatus = skillStatus(skill);
+      const matchesStatus =
+        status === "all" ? currentStatus !== "deleted" : currentStatus === status;
       const matchesQuery = filterText(
         skill.id,
         skill.name,
