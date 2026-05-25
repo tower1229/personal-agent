@@ -8,43 +8,20 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "npm run dev:worker",
     "dev:worker": "npm run dev -w @personal-agent/worker",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "build": "npm run build:workspaces",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "npm run typecheck:workspaces",
     "build:workspaces": "npm run build -ws --if-present",
     "typecheck:workspaces": "npm run typecheck -ws --if-present",
     "deploy:worker": "npm run deploy -w @personal-agent/worker",
     "d1:migrate:worker:local": "npm run d1:migrate:local -w @personal-agent/worker",
-    "d1:migrate:worker:remote": "npm run d1:migrate:remote -w @personal-agent/worker",
-    "eval": "tsx src/eval/runEval.ts",
-    "preeval:mock": "npm run db:migrate",
-    "eval:mock": "tsx src/eval/runEval.ts --mock",
-    "db:generate": "drizzle-kit generate",
-    "predb:migrate": "node scripts/ensure-data-dir.mjs",
-    "db:migrate": "drizzle-kit migrate",
-    "db:clear": "node scripts/clear-db.mjs",
-    "db:reset": "npm run db:clear && npm run db:migrate"
-  },
-  "dependencies": {
-    "@hono/node-server": "^2.0.2",
-    "better-sqlite3": "^11.10.0",
-    "dotenv": "^16.5.0",
-    "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.18",
-    "openai": "^4.100.0",
-    "telegraf": "^4.16.3",
-    "zod": "^3.24.4",
-    "zod-to-json-schema": "^3.25.2"
+    "d1:migrate:worker:remote": "npm run d1:migrate:remote -w @personal-agent/worker"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.18",
-    "drizzle-kit": "^0.31.1",
-    "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^4.1.6"
   }
