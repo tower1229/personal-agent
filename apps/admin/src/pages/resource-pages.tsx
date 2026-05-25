@@ -503,6 +503,8 @@ export function SkillsPage() {
       return matchesKind && matchesStatus && matchesQuery;
     });
   }, [kind, query, skills.data, status]);
+  const selectedSkill = detail.data?.skill ?? null;
+  const isDeletedSkill = selectedSkill?.deleted === true;
 
   async function save() {
     setInlineError(null);
@@ -554,11 +556,8 @@ export function SkillsPage() {
       toast.success("Skill deleted");
     } catch (error) {
       const message = error instanceof Error ? error.message : "删除失败";
-      if (!message.includes("Skill not found")) {
-        toast.error(message);
-        return;
-      }
-      toast.success("Skill already deleted");
+      toast.error(message);
+      return;
     }
     setInlineError(null);
     setTestOutput(null);
@@ -669,12 +668,15 @@ export function SkillsPage() {
                 {inlineError ? (
                   <p className="text-sm text-destructive">{inlineError}</p>
                 ) : null}
+                {isDeletedSkill ? (
+                  <EmptyState>这个 skill 已删除，只保留历史记录查看。</EmptyState>
+                ) : null}
                 {!detail.error ? (
                   <>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="ID">
                     <Input
-                      disabled={!isNew}
+                      disabled={!isNew || isDeletedSkill}
                       onChange={(event) =>
                         setForm({ ...form, id: event.target.value })
                       }
@@ -683,6 +685,7 @@ export function SkillsPage() {
                   </Field>
                   <Field label="Kind">
                     <Select
+                      disabled={isDeletedSkill}
                       onValueChange={(value) =>
                         setForm({ ...form, kind: value as SkillKind })
                       }
@@ -701,6 +704,7 @@ export function SkillsPage() {
                   </Field>
                   <Field label="Name">
                     <Input
+                      disabled={isDeletedSkill}
                       onChange={(event) =>
                         setForm({ ...form, name: event.target.value })
                       }
@@ -711,6 +715,7 @@ export function SkillsPage() {
                     <div className="flex h-8 items-center gap-2">
                       <Switch
                         checked={form.enabled}
+                        disabled={isDeletedSkill}
                         onCheckedChange={(checked) =>
                           setForm({ ...form, enabled: checked })
                         }
@@ -723,6 +728,7 @@ export function SkillsPage() {
                 </div>
                 <Field label="Description">
                   <Input
+                    disabled={isDeletedSkill}
                     onChange={(event) =>
                       setForm({ ...form, description: event.target.value })
                     }
@@ -731,6 +737,7 @@ export function SkillsPage() {
                 </Field>
                 <Field label="Trigger phrases" description="一行一个 trigger phrase。">
                   <Textarea
+                    disabled={isDeletedSkill}
                     onChange={(event) =>
                       setForm({ ...form, triggerPhrases: event.target.value })
                     }
@@ -740,6 +747,7 @@ export function SkillsPage() {
                 </Field>
                 <Field label="Instructions">
                   <Textarea
+                    disabled={isDeletedSkill}
                     onChange={(event) =>
                       setForm({ ...form, instructions: event.target.value })
                     }
@@ -754,6 +762,7 @@ export function SkillsPage() {
                       <label className="flex items-center gap-2 text-sm" key={toolName}>
                         <Checkbox
                           checked={form.allowedTools.includes(toolName)}
+                          disabled={isDeletedSkill}
                           onCheckedChange={(checked) => {
                             setForm({
                               ...form,
@@ -773,6 +782,7 @@ export function SkillsPage() {
                 </div>
                 <Field label="Workflow template JSON">
                   <Textarea
+                    disabled={isDeletedSkill}
                     onChange={(event) =>
                       setForm({ ...form, workflowTemplate: event.target.value })
                     }
@@ -782,11 +792,13 @@ export function SkillsPage() {
                 </Field>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={() => void save()} type="button">
-                    Save Draft
-                  </Button>
-                  {!isNew ? (
+                  {!isDeletedSkill ? (
                     <>
+                      <Button onClick={() => void save()} type="button">
+                        Save Draft
+                      </Button>
+                      {!isNew ? (
+                        <>
                       <Button
                         onClick={() => void publish()}
                         type="button"
@@ -822,6 +834,8 @@ export function SkillsPage() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                        </>
+                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -834,26 +848,32 @@ export function SkillsPage() {
                       <TabsTrigger value="routes">Routes</TabsTrigger>
                     </TabsList>
                     <TabsContent className="flex flex-col gap-3" value="test">
-                      <Textarea
-                        onChange={(event) => setTestInput(event.target.value)}
-                        placeholder="输入测试消息"
-                        rows={4}
-                        value={testInput}
-                      />
-                      <Button
-                        disabled={!testInput.trim()}
-                        onClick={() =>
-                          void runTest().catch((error) => {
-                            toast.error(
-                              error instanceof Error ? error.message : "测试失败"
-                            );
-                          })
-                        }
-                        type="button"
-                      >
-                        Run Test
-                      </Button>
-                      {testOutput ? <CodeBlock value={testOutput} /> : null}
+                      {isDeletedSkill ? (
+                        <EmptyState>已删除 skill 不能再执行测试。</EmptyState>
+                      ) : (
+                        <>
+                          <Textarea
+                            onChange={(event) => setTestInput(event.target.value)}
+                            placeholder="输入测试消息"
+                            rows={4}
+                            value={testInput}
+                          />
+                          <Button
+                            disabled={!testInput.trim()}
+                            onClick={() =>
+                              void runTest().catch((error) => {
+                                toast.error(
+                                  error instanceof Error ? error.message : "测试失败"
+                                );
+                              })
+                            }
+                            type="button"
+                          >
+                            Run Test
+                          </Button>
+                          {testOutput ? <CodeBlock value={testOutput} /> : null}
+                        </>
+                      )}
                     </TabsContent>
                     <TabsContent value="runs">
                       <CodeBlock
@@ -1026,6 +1046,8 @@ export function SchedulesPage() {
   const selected = useMemo(() => {
     return schedules.data?.items.find((item) => item.id === params.id) ?? null;
   }, [params.id, schedules.data]);
+  const scheduleMissing =
+    Boolean(params.id) && !isNew && !schedules.loading && !selected;
 
   useEffect(() => {
     if (isNew) {
@@ -1040,8 +1062,10 @@ export function SchedulesPage() {
         timeOfDay: selected.timeOfDay,
         daysOfWeek: selected.daysOfWeek
       });
+    } else if (scheduleMissing) {
+      setForm(emptyScheduleForm);
     }
-  }, [isNew, selected]);
+  }, [isNew, scheduleMissing, selected]);
 
   async function save() {
     try {
@@ -1130,6 +1154,11 @@ export function SchedulesPage() {
             {!hasDetailTarget ? <EmptyState>选择 schedule 或创建新任务。</EmptyState> : null}
             {hasDetailTarget ? (
               <>
+                {scheduleMissing ? (
+                  <EmptyState>这个 schedule 不存在或已删除。</EmptyState>
+                ) : null}
+                {!scheduleMissing ? (
+                  <>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Name">
                     <Input
@@ -1262,6 +1291,8 @@ export function SchedulesPage() {
                   ) : null}
                 </div>
                 <ScheduleExecutionTable items={executions.data?.items ?? []} />
+                  </>
+                ) : null}
               </>
             ) : null}
           </CardContent>

@@ -835,7 +835,16 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
         .bind(input.deletedAt, input.deletedAt, input.ownerTgUserId, input.id)
         .first<SkillRow>();
 
-      return row ? toSkill(row) : null;
+      if (row) {
+        return toSkill(row);
+      }
+
+      const existing = await this.getSkill({
+        ownerTgUserId: input.ownerTgUserId,
+        id: input.id
+      });
+
+      return existing?.deletedAt !== null ? existing : null;
     },
 
     async publishSkill(input) {
@@ -1383,7 +1392,19 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
         .bind(input.deletedAt, input.deletedAt, input.ownerTgUserId, input.id)
         .first<ScheduleRow>();
 
-      return row ? toSchedule(row) : null;
+      if (row) {
+        return toSchedule(row);
+      }
+
+      const existing = await db
+        .prepare(
+          `SELECT * FROM schedules
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .first<ScheduleRow>();
+
+      return existing && existing.deleted_at !== null ? toSchedule(existing) : null;
     },
 
     async getSchedule(input) {

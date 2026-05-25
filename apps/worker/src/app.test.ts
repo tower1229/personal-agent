@@ -426,7 +426,14 @@ function createFakeRepositories(): AgentRepositories & {
           item.deletedAt === null
       );
       if (!skill) {
-        return null;
+        return (
+          state.skills.find(
+            (item) =>
+              item.ownerTgUserId === input.ownerTgUserId &&
+              item.id === input.id &&
+              item.deletedAt !== null
+          ) ?? null
+        );
       }
       skill.enabled = false;
       skill.deletedAt = input.deletedAt;
@@ -655,7 +662,14 @@ function createFakeRepositories(): AgentRepositories & {
           item.deletedAt === null
       );
       if (!schedule) {
-        return null;
+        return (
+          state.schedules.find(
+            (item) =>
+              item.ownerTgUserId === input.ownerTgUserId &&
+              item.id === input.id &&
+              item.deletedAt !== null
+          ) ?? null
+        );
       }
       schedule.enabled = false;
       schedule.deletedAt = input.deletedAt;
@@ -1676,6 +1690,18 @@ describe("worker app", () => {
       enabled: false
     });
     expect(repositories.schedules[0]?.deletedAt).not.toBeNull();
+
+    const secondRemove = await app.request(
+      `/api/admin/schedules/${scheduleId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(secondRemove.status).toBe(200);
   });
 
   it("rejects weekly schedules without selected days", async () => {
@@ -1843,6 +1869,18 @@ describe("worker app", () => {
       env
     );
     expect(repositories.skills[0]?.deletedAt).not.toBeNull();
+
+    const secondRemove = await app.request(
+      "/api/admin/skills/brief",
+      {
+        method: "DELETE",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(secondRemove.status).toBe(200);
   });
 
   it("allows workflow drafts and publishes supported workflow steps", async () => {
