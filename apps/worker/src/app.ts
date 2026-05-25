@@ -7,6 +7,7 @@ import {
   adminAgentTestSearchResponseSchema,
   adminApprovalsResponseSchema,
   adminAuthConfigResponseSchema,
+  adminD1ReadinessResponseSchema,
   adminHealthResponseSchema,
   adminMemoriesResponseSchema,
   adminMeResponseSchema,
@@ -87,6 +88,23 @@ import {
   type WorkflowStepRecord
 } from "./repositories.js";
 
+const requiredD1Tables = [
+  "runs",
+  "tool_calls",
+  "todos",
+  "memories",
+  "memory_events",
+  "approval_requests",
+  "skills",
+  "skill_versions",
+  "skill_route_decisions",
+  "skill_runs",
+  "workflow_runs",
+  "workflow_steps",
+  "schedules",
+  "schedule_executions"
+] as const;
+
 function ownerId(env: WorkerEnv): number {
   return Number.parseInt(env.OWNER_TG_USER_ID, 10);
 }
@@ -123,6 +141,30 @@ function limitParam(value: string | undefined): number {
   }
 
   return Math.min(Math.max(parsed, 1), 50);
+}
+
+async function checkD1Readiness(db: D1Database, checkedAt: number) {
+  const tableRows = await db
+    .prepare("select name from sqlite_master where type = 'table'")
+    .all<{ name: string }>();
+  const present = new Set(
+    (tableRows.results ?? []).map((row) => row.name).filter(Boolean)
+  );
+  const requiredTables = requiredD1Tables.map((name) => ({
+    name,
+    present: present.has(name)
+  }));
+  const missingTables = requiredTables
+    .filter((table) => !table.present)
+    .map((table) => table.name);
+
+  return adminD1ReadinessResponseSchema.parse({
+    ok: missingTables.length === 0,
+    checkedAt,
+    requiredTables,
+    missingTables,
+    migrationCommand: "npm run d1:migrate:worker:remote"
+  });
 }
 
 function toAdminRun(run: RunRecord) {
@@ -427,6 +469,17 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
         braveSearchConfigured: Boolean(c.env.BRAVE_SEARCH_API_KEY?.trim()),
         fetchUrlMaxBytes: fetchUrlMaxBytes(c.env)
       })
+    );
+  });
+
+  app.get("/api/admin/diagnostics/d1", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    return c.json(
+      await checkD1Readiness(c.env.DB, (options.now ?? Date.now)())
     );
   });
 

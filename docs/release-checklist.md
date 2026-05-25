@@ -17,6 +17,7 @@ Personal Agent v1.0.0 发布前检查清单。
 - [ ] `npx wrangler login` / `npx wrangler whoami` 正常
 - [ ] D1 remote database 已创建，并已把真实 `database_id` 写入 `apps/worker/wrangler.toml`
 - [ ] `npm run d1:migrate:worker:remote` 成功
+- [ ] 线上 Admin Settings / Diagnostics 显示 D1 schema `ready`
 - [ ] Cloudflare secrets 已配置：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_WEBHOOK_SECRET`、`ADMIN_SESSION_SECRET`、`LLM_API_KEY`、可选 `BRAVE_SEARCH_API_KEY`
 - [ ] `[vars]` 已配置：`TELEGRAM_BOT_USERNAME`、`OWNER_TG_USER_ID`、`LLM_API_BASE_URL=https://api.deepseek.com`、`LLM_MODEL`
 - [ ] `npm run deploy:worker` 成功

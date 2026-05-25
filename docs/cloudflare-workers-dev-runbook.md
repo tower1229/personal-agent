@@ -62,6 +62,12 @@ npx wrangler d1 migrations apply personal-agent-db --remote
 npm run d1:migrate:worker:remote
 ```
 
+部署后可以在 Admin Settings / Diagnostics 查看 D1 schema readiness。若显示缺表，先重新执行远端 migration，再刷新 Admin：
+
+```bash
+npm run d1:migrate:worker:remote
+```
+
 ## 3. 配置 Worker vars
 
 非密钥配置在 [apps/worker/wrangler.toml](../apps/worker/wrangler.toml) 的 `[vars]` 中维护：
@@ -165,6 +171,7 @@ curl.exe "https://api.telegram.org/bot8966479686:AAH-wXkTI9VfkKCihaWbC-bsvbr78FM
 - [ ] Telegram Login 按钮出现
 - [ ] 用 owner Telegram 账号登录成功
 - [ ] 非 owner 登录被拒绝
+- [ ] Admin Settings / Diagnostics 显示 D1 schema `ready`
 - [ ] Admin dashboard 能加载 runs / todos / memories / approvals
 
 ### Telegram core bot

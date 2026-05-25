@@ -4,6 +4,7 @@ import {
   adminAgentTestSearchResponseSchema,
   adminApprovalsResponseSchema,
   adminAuthConfigResponseSchema,
+  adminD1ReadinessResponseSchema,
   adminMeResponseSchema,
   adminMemoriesResponseSchema,
   adminRunDetailResponseSchema,
@@ -27,6 +28,7 @@ import {
   type AdminAgentTestSearchResponse,
   type AdminApprovalsResponse,
   type AdminAuthConfigResponse,
+  type AdminD1ReadinessResponse,
   type AdminMeResponse,
   type AdminMemoriesResponse,
   type AdminRunDetailResponse,
@@ -337,6 +339,12 @@ export function loadApprovals(): Promise<AdminApprovalsResponse> {
 export function loadAgentConfig(): Promise<AdminAgentConfigResponse> {
   return fetchJson("/api/admin/agent-config", (input) =>
     adminAgentConfigResponseSchema.parse(input)
+  );
+}
+
+export function loadD1Readiness(): Promise<AdminD1ReadinessResponse> {
+  return fetchJson("/api/admin/diagnostics/d1", (input) =>
+    adminD1ReadinessResponseSchema.parse(input)
   );
 }
 

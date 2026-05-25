@@ -927,6 +927,25 @@ function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boolean } = 
   };
 }
 
+function createFakeD1Database(tableNames: string[]): D1Database {
+  return {
+    prepare() {
+      return {
+        bind() {
+          return this;
+        },
+        async all() {
+          return {
+            results: tableNames.map((name) => ({ name })),
+            success: true,
+            meta: {}
+          };
+        }
+      };
+    }
+  } as unknown as D1Database;
+}
+
 function createTestApp(
   options: {
     telegramFails?: boolean;
@@ -1246,6 +1265,39 @@ describe("worker app", () => {
       ]
     });
     expect(repositories.runs[0]).toMatchObject({ status: "succeeded" });
+  });
+
+  it("requires admin session for D1 readiness diagnostics", async () => {
+    const { app } = createTestApp();
+    const response = await app.request("/api/admin/diagnostics/d1", {}, env);
+
+    expect(response.status).toBe(401);
+  });
+
+  it("reports D1 readiness and missing migration tables", async () => {
+    const { app } = createTestApp();
+    const cookie = await ownerCookie();
+    const response = await app.request(
+      "/api/admin/diagnostics/d1",
+      {
+        headers: { Cookie: cookie }
+      },
+      {
+        ...env,
+        DB: createFakeD1Database(["runs", "tool_calls"])
+      }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      migrationCommand: "npm run d1:migrate:worker:remote",
+      requiredTables: expect.arrayContaining([
+        { name: "runs", present: true },
+        { name: "skills", present: false }
+      ]),
+      missingTables: expect.arrayContaining(["skills", "schedules"])
+    });
   });
 
   it("reports Brave search diagnostics failures without exposing secrets", async () => {

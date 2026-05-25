@@ -243,6 +243,25 @@ export type AdminAgentConfigResponse = z.infer<
   typeof adminAgentConfigResponseSchema
 >;
 
+export const adminD1TableStatusSchema = z.object({
+  name: z.string().min(1),
+  present: z.boolean()
+});
+
+export type AdminD1TableStatus = z.infer<typeof adminD1TableStatusSchema>;
+
+export const adminD1ReadinessResponseSchema = z.object({
+  ok: z.boolean(),
+  checkedAt: z.number().int().min(0),
+  requiredTables: z.array(adminD1TableStatusSchema),
+  missingTables: z.array(z.string().min(1)),
+  migrationCommand: z.literal("npm run d1:migrate:worker:remote")
+});
+
+export type AdminD1ReadinessResponse = z.infer<
+  typeof adminD1ReadinessResponseSchema
+>;
+
 export const adminAgentTestLlmRequestSchema = z.object({
   prompt: z.string().min(1)
 });

@@ -6,6 +6,7 @@ import {
   skillManifestSchema,
   type AdminAgentConfigResponse,
   type AdminApproval,
+  type AdminD1ReadinessResponse,
   type AdminMemory,
   type AdminRunDetailResponse,
   type AdminScheduleExecution,
@@ -23,6 +24,7 @@ import {
   deleteSchedule,
   deleteSkill,
   loadAgentConfig,
+  loadD1Readiness,
   loadApprovals,
   loadMemories,
   loadRunDetail,
@@ -46,6 +48,7 @@ import {
   testSearch,
   testSkill
 } from "@/lib/api";
+import { isCreateRoutePath } from "@/lib/admin-routes";
 import { formatDateTime, truncateText } from "@/lib/format";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -455,7 +458,7 @@ export function SkillsPage() {
   const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const isNew = location.pathname.endsWith("/new");
+  const isNew = isCreateRoutePath(location.pathname);
   const hasDetailTarget = isNew || Boolean(params.id);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
@@ -992,7 +995,7 @@ export function SchedulesPage() {
   const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const isNew = location.pathname.endsWith("/new");
+  const isNew = isCreateRoutePath(location.pathname);
   const hasDetailTarget = isNew || Boolean(params.id);
   const schedules = useAsyncData(() => loadSchedules(), []);
   const executions = useAsyncData(
@@ -1499,6 +1502,7 @@ function ApprovalsTable(props: { items: AdminApproval[] }) {
 
 export function SettingsPage(props: { diagnostics?: boolean }) {
   const config = useAsyncData(() => loadAgentConfig(), []);
+  const d1Readiness = useAsyncData(() => loadD1Readiness(), []);
   const [prompt, setPrompt] = useState("用一句话介绍当前 agent 状态");
   const [query, setQuery] = useState("Cloudflare Workers");
   const [llmOutput, setLlmOutput] = useState<string | null>(null);
@@ -1530,10 +1534,15 @@ export function SettingsPage(props: { diagnostics?: boolean }) {
         description="密钥只显示配置状态，不在 Admin 暴露。"
         title={props.diagnostics ? "Diagnostics" : "Settings"}
       />
-      {config.loading ? <Skeleton className="h-64" /> : null}
+      {config.loading || d1Readiness.loading ? (
+        <Skeleton className="h-64" />
+      ) : null}
       {config.data ? (
         <div className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <SettingsSummary config={config.data} />
+          <SettingsSummary
+            config={config.data}
+            d1Readiness={d1Readiness.data ?? undefined}
+          />
           <Card>
             <CardHeader>
               <CardTitle>Diagnostics</CardTitle>
@@ -1577,7 +1586,10 @@ export function SettingsPage(props: { diagnostics?: boolean }) {
   );
 }
 
-function SettingsSummary(props: { config: AdminAgentConfigResponse }) {
+function SettingsSummary(props: {
+  config: AdminAgentConfigResponse;
+  d1Readiness?: AdminD1ReadinessResponse;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -1610,6 +1622,34 @@ function SettingsSummary(props: { config: AdminAgentConfigResponse }) {
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Fetch URL max bytes</span>
           <span>{props.config.fetchUrlMaxBytes}</span>
+        </div>
+        <div className="border-t pt-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">D1 schema</span>
+            <StatusBadge
+              status={props.d1Readiness?.ok ? "ready" : "missing"}
+            />
+          </div>
+          {props.d1Readiness ? (
+            props.d1Readiness.ok ? (
+              <p className="text-muted-foreground">
+                Required tables are present.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 text-muted-foreground">
+                <p>
+                  Missing tables: {props.d1Readiness.missingTables.join(", ")}
+                </p>
+                <code className="rounded bg-muted px-2 py-1 text-xs text-foreground">
+                  {props.d1Readiness.migrationCommand}
+                </code>
+              </div>
+            )
+          ) : (
+            <p className="text-muted-foreground">
+              D1 readiness check unavailable.
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
