@@ -32,6 +32,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,22 +62,14 @@ const emptyForm: ClaimFormState = {
 
 interface SourceFormState {
   title: string;
-  uri: string;
   content: string;
   sourceType: PersonalModelSourceType;
-  usagePolicy: PersonalModelUsagePolicy;
-  sensitivity: PersonalModelSensitivity;
-  metadataText: string;
 }
 
 const emptySourceForm: SourceFormState = {
   title: "",
-  uri: "",
   content: "",
-  sourceType: "manual_note",
-  usagePolicy: "default_available",
-  sensitivity: "medium",
-  metadataText: "{}"
+  sourceType: "manual_note"
 };
 
 export function PersonalModelPage() {
@@ -86,8 +79,8 @@ export function PersonalModelPage() {
   const [query, setQuery] = useState("");
   const [scenario, setScenario] = useState("all");
   const [status, setStatus] = useState("all");
-  const [form, setForm] = useState<ClaimFormState>(emptyForm);
   const [sourceForm, setSourceForm] = useState<SourceFormState>(emptySourceForm);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editing, setEditing] = useState<ClaimFormState>(emptyForm);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [events, setEvents] = useState<AdminPersonalModelClaimEvent[]>([]);
@@ -128,28 +121,7 @@ export function PersonalModelPage() {
     [claims.data?.items, query, scenario, status]
   );
 
-  async function submitClaim() {
-    if (!form.claim.trim()) {
-      toast.error("Claim 不能为空");
-      return;
-    }
-    setSaving(true);
-    try {
-      await createPersonalModelClaim({
-        ...form,
-        claim: form.claim.trim(),
-        sensitivity: "medium",
-        metadata: { source: "admin" }
-      });
-      toast.success("已创建个人理解");
-      setForm(emptyForm);
-      await refreshClaims();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "创建失败");
-    } finally {
-      setSaving(false);
-    }
-  }
+
 
   async function patchClaim(
     claim: AdminPersonalModelClaim,
@@ -221,33 +193,43 @@ export function PersonalModelPage() {
       return;
     }
     setSaving(true);
-    let parsedMetadata = {};
-    try {
-      parsedMetadata = JSON.parse(sourceForm.metadataText);
-    } catch {
-      toast.error("Metadata 必须是合法的 JSON 对象");
-      setSaving(false);
-      return;
-    }
     
     try {
       const detail = await createPersonalModelSource({
         title: sourceForm.title.trim(),
         content: sourceForm.content.trim(),
         sourceType: sourceForm.sourceType,
-        uri: sourceForm.uri.trim() || null,
-        usagePolicy: sourceForm.usagePolicy,
-        sensitivity: sourceForm.sensitivity,
-        metadata: { ...parsedMetadata, source: "admin" }
+        uri: null,
+        usagePolicy: "default_available",
+        sensitivity: "medium",
+        metadata: { source: "admin" }
       });
       toast.success(`已导入资料，生成 ${detail.chunks.length} 个 chunk`);
       setSourceForm(emptySourceForm);
+      setIsImportModalOpen(false);
       await refreshSources();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "导入失败");
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      setSourceForm((current) => ({
+        ...current,
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        content
+      }));
+    };
+    reader.onerror = () => toast.error("读取文件失败");
+    reader.readAsText(file);
   }
 
   async function selectSource(source: AdminPersonalModelSourceDocument) {
@@ -338,84 +320,6 @@ export function PersonalModelPage() {
         description="结构化个人理解模型。这里管理的是 agent 对你的可审计理解，而不是原始资料。"
         title="Personal Model"
       />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>New Claim</CardTitle>
-          <CardDescription>
-            先保存明确确认过的高置信理解，后续批次再加入证据链和自动提议。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <Field label="Claim">
-            <Textarea
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  claim: event.target.value
-                }))
-              }
-              placeholder="例如：写作修改默认保留我的表达气质，只有明确要求成稿时才大幅重写。"
-              value={form.claim}
-            />
-          </Field>
-          <div className="grid gap-3 md:grid-cols-4">
-            <Field label="Layer">
-              <EnumSelect
-                items={personalModelLayers}
-                onChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    layer: value as PersonalModelLayer
-                  }))
-                }
-                value={form.layer}
-              />
-            </Field>
-            <Field label="Scenario">
-              <EnumSelect
-                items={personalModelScenarios}
-                onChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    scenario: value as PersonalModelScenario
-                  }))
-                }
-                value={form.scenario}
-              />
-            </Field>
-            <Field label="Confidence">
-              <EnumSelect
-                items={personalModelConfidences}
-                onChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    confidence: value as PersonalModelConfidence
-                  }))
-                }
-                value={form.confidence}
-              />
-            </Field>
-            <Field label="Usage">
-              <EnumSelect
-                items={personalModelUsagePolicies}
-                onChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    usagePolicy: value as PersonalModelUsagePolicy
-                  }))
-                }
-                value={form.usagePolicy}
-              />
-            </Field>
-          </div>
-          <div>
-            <Button disabled={saving} onClick={() => void submitClaim()}>
-              Save Claim
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -653,10 +557,76 @@ export function PersonalModelPage() {
 
       <Card>
         <CardHeader>
-            <CardTitle>Sources</CardTitle>
-          <CardDescription>
-            导入原始资料并生成 chunks。原文不可在这里修改，只能治理使用策略。
-          </CardDescription>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Sources</CardTitle>
+              <CardDescription>
+                导入原始资料并生成 chunks。原文不可在这里修改，只能治理使用策略。
+              </CardDescription>
+            </div>
+            <div>
+              <Dialog onOpenChange={setIsImportModalOpen} open={isImportModalOpen}>
+                <DialogTrigger asChild>
+                  <Button>Import Source</Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Import Source</DialogTitle>
+                    <DialogDescription>
+                      直接粘贴文本，或上传 Markdown / TXT 文件。
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <Field label="Upload File">
+                      <Input accept=".md,.txt" onChange={handleFileUpload} type="file" />
+                    </Field>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Title">
+                        <Input
+                          onChange={(event) =>
+                            setSourceForm((current) => ({
+                              ...current,
+                              title: event.target.value
+                            }))
+                          }
+                          value={sourceForm.title}
+                        />
+                      </Field>
+                      <Field label="Source Type">
+                        <EnumSelect
+                          items={personalModelSourceTypes}
+                          onChange={(value) =>
+                            setSourceForm((current) => ({
+                              ...current,
+                              sourceType: value as PersonalModelSourceType
+                            }))
+                          }
+                          value={sourceForm.sourceType}
+                        />
+                      </Field>
+                    </div>
+                    <Field label="Content">
+                      <Textarea
+                        className="min-h-[200px]"
+                        onChange={(event) =>
+                          setSourceForm((current) => ({
+                            ...current,
+                            content: event.target.value
+                          }))
+                        }
+                        value={sourceForm.content}
+                      />
+                    </Field>
+                    <div className="flex justify-end">
+                      <Button disabled={saving} onClick={() => void submitSource()}>
+                        Import
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4 pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end">
@@ -667,93 +637,6 @@ export function PersonalModelPage() {
                 value={sourceTypeFilter}
               />
             </Field>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Field label="Title">
-              <Input
-                onChange={(event) =>
-                  setSourceForm((current) => ({
-                    ...current,
-                    title: event.target.value
-                  }))
-                }
-                value={sourceForm.title}
-              />
-            </Field>
-            <Field label="URI">
-              <Input
-                onChange={(event) =>
-                  setSourceForm((current) => ({
-                    ...current,
-                    uri: event.target.value
-                  }))
-                }
-                value={sourceForm.uri}
-              />
-            </Field>
-            <Field label="Source Type">
-              <EnumSelect
-                items={personalModelSourceTypes}
-                onChange={(value) =>
-                  setSourceForm((current) => ({
-                    ...current,
-                    sourceType: value as PersonalModelSourceType
-                  }))
-                }
-                value={sourceForm.sourceType}
-              />
-            </Field>
-            <Field label="Usage">
-              <EnumSelect
-                items={personalModelUsagePolicies}
-                onChange={(value) =>
-                  setSourceForm((current) => ({
-                    ...current,
-                    usagePolicy: value as PersonalModelUsagePolicy
-                  }))
-                }
-                value={sourceForm.usagePolicy}
-              />
-            </Field>
-            <Field label="Sensitivity">
-              <EnumSelect
-                items={personalModelSensitivities}
-                onChange={(value) =>
-                  setSourceForm((current) => ({
-                    ...current,
-                    sensitivity: value as PersonalModelSensitivity
-                  }))
-                }
-                value={sourceForm.sensitivity}
-              />
-            </Field>
-          </div>
-          <Field label="Metadata (JSON)">
-            <Textarea
-              onChange={(event) =>
-                setSourceForm((current) => ({
-                  ...current,
-                  metadataText: event.target.value
-                }))
-              }
-              value={sourceForm.metadataText}
-            />
-          </Field>
-          <Field label="Content">
-            <Textarea
-              onChange={(event) =>
-                setSourceForm((current) => ({
-                  ...current,
-                  content: event.target.value
-                }))
-              }
-              value={sourceForm.content}
-            />
-          </Field>
-          <div>
-            <Button disabled={saving} onClick={() => void submitSource()}>
-              Import Source
-            </Button>
           </div>
           <SourcesTable
             items={sources.data?.items ?? []}
