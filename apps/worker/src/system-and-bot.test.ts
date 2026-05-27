@@ -882,7 +882,7 @@ describe("worker system and bot commands", () => {
       updatedAt: 1000
     });
 
-    await postWebhook(app, ownerUpdate("帮我改这段文字", 1));
+    await postWebhook(app, ownerUpdate("我和朋友吵架了", 1));
 
     const systemText = llmClient.calls.at(-1)?.[0]?.content ?? "";
     expect(systemText).toContain("写作默认保留表达气质");

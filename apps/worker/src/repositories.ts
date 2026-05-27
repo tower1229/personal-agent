@@ -445,6 +445,11 @@ export interface AgentRepositories {
     documentId: string;
     limit: number;
   }): Promise<PersonalModelSourceChunkRecord[]>;
+  searchPersonalModelSourceChunks(input: {
+    ownerTgUserId: number;
+    keyword: string;
+    limit: number;
+  }): Promise<PersonalModelSourceChunkRecord[]>;
   createPersonalModelEvidence(
     input: PersonalModelEvidenceRecord
   ): Promise<PersonalModelEvidenceRecord>;

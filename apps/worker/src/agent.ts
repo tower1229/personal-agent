@@ -11,6 +11,7 @@ import {
   type LlmToolDefinition
 } from "./llm.js";
 import { type AgentRepositories } from "./repositories.js";
+import { assemblePersonalModelContext } from "./personalModelContext.js";
 
 export interface AgentRuntime {
   repositories: AgentRepositories;
@@ -438,33 +439,7 @@ function availableToolDefinitions(allowedTools?: Set<string>): LlmToolDefinition
     .map((name) => toolDefinitions[name]);
 }
 
-async function buildPersonalModelContext(input: {
-  runtime: AgentRuntime;
-  ownerTgUserId: number;
-}): Promise<string | null> {
-  const claims = await input.runtime.repositories.listActivePersonalModelClaims({
-    ownerTgUserId: input.ownerTgUserId,
-    limit: 8,
-    now: input.runtime.now()
-  });
-  const usable = claims.filter(
-    (claim) => claim.confidence === "high"
-  );
 
-  if (usable.length === 0) {
-    return null;
-  }
-
-  return [
-    "User model context:",
-    ...usable.map(
-      (claim) =>
-        `- [${claim.layer}/${claim.scenario}/${claim.confidence}] ${claim.claim}`
-    ),
-    "",
-    "Use this context implicitly. Only cite it explicitly when correcting a conflict, explaining a challenge, handling sensitive reasoning, or when the user asks why."
-  ].join("\n");
-}
 
 async function recordLlmCall(input: {
   runtime: AgentRuntime;
@@ -499,6 +474,35 @@ export async function executeLlmAgent(
     throw new Error("LLM is not configured");
   }
 
+  const contextAssembly = await assemblePersonalModelContext({
+    repositories: input.runtime.repositories,
+    ownerTgUserId: input.ownerTgUserId,
+    inputText: input.inputText,
+    now: input.runtime.now()
+  });
+
+  for (const claimId of contextAssembly.trace.selectedClaimIds) {
+    await input.runtime.repositories.createPersonalModelEvent({
+      id: crypto.randomUUID(),
+      claimId,
+      ownerTgUserId: input.ownerTgUserId,
+      eventType: "used_in_response",
+      payloadJson: JSON.stringify({ runId: input.runId, scenario: contextAssembly.trace.scenario }),
+      createdAt: input.runtime.now()
+    });
+  }
+
+  for (const claimId of contextAssembly.trace.excludedClaimIds) {
+    await input.runtime.repositories.createPersonalModelEvent({
+      id: crypto.randomUUID(),
+      claimId,
+      ownerTgUserId: input.ownerTgUserId,
+      eventType: "excluded_by_policy",
+      payloadJson: JSON.stringify({ runId: input.runId, reason: "scenario_mismatch" }),
+      createdAt: input.runtime.now()
+    });
+  }
+
   const systemInstructions = [
     "你是一个个人 Telegram agent。用简洁中文回答。",
     "你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。",
@@ -509,10 +513,7 @@ export async function executeLlmAgent(
     "需要联网信息时先使用 web_search；需要读取具体网页时使用 fetch_url。",
     "使用搜索或网页内容回答时，必须包含来源 URL。",
     "删除记忆只能通过 delete_memory_request 创建确认，不能直接删除。",
-    await buildPersonalModelContext({
-      runtime: input.runtime,
-      ownerTgUserId: input.ownerTgUserId
-    }),
+    contextAssembly.contextString,
     input.systemInstructions ?? ""
   ]
     .filter(Boolean)

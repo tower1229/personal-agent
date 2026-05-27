@@ -509,6 +509,21 @@ export function createFakeRepositories(): AgentRepositories & {
         .sort((left, right) => left.chunkIndex - right.chunkIndex)
         .slice(0, input.limit);
     },
+    async searchPersonalModelSourceChunks(input) {
+      return state.personalModelSourceChunks
+        .filter((chunk) => {
+          if (chunk.ownerTgUserId !== input.ownerTgUserId) return false;
+          if (!chunk.normalizedContent.includes(input.keyword.toLowerCase())) return false;
+          const doc = state.personalModelSourceDocuments.find(d => d.id === chunk.documentId);
+          if (!doc) return false;
+          if (doc.status !== "active") return false;
+          if (doc.usagePolicy === "do_not_use") return false;
+          return true;
+        })
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, input.limit);
+    },
     async createPersonalModelEvidence(input) {
       const evidence: PersonalModelEvidenceRecord = { ...input };
       state.personalModelEvidence.push(evidence);

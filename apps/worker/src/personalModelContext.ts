@@ -1,0 +1,138 @@
+import {
+  type PersonalModelClaimRecord,
+  type PersonalModelSourceChunkRecord,
+  type AgentRepositories
+} from "./repositories.js";
+import { type PersonalModelScenario } from "@personal-agent/shared";
+
+const scenarioKeywords: Record<PersonalModelScenario, string[]> = {
+  writing: ["写作", "写", "文章", "博客", "文字", "修改", "润色"],
+  health: ["睡觉", "休息", "累", "失眠", "健康", "疲劳", "作息", "精力"],
+  relationship: ["朋友", "关系", "吵架", "父母", "恋人", "对象", "沟通", "别人"],
+  self_knowledge: ["我是谁", "性格", "测试", "mbti", "探索", "潜意识", "星盘", "自己"],
+  emotional_support: ["难受", "伤心", "烦躁", "焦虑", "抑郁", "情绪", "哭", "压力"],
+  work_decision: ["工作", "离职", "辞职", "职业", "面试", "老板", "公司", "业务"],
+  technical_writing: ["技术文章", "教程", "代码注释", "文档", "readme"],
+  technical_collaboration: ["code review", "pr", "协作", "团队", "开发", "代码", "bug"],
+  life_decision: ["搬家", "买房", "决定", "人生", "选择", "规划"],
+  global: []
+};
+
+export function classifyScenario(inputText: string): PersonalModelScenario {
+  let bestScenario: PersonalModelScenario = "global";
+  let maxMatches = 0;
+
+  for (const [scenario, keywords] of Object.entries(scenarioKeywords)) {
+    let matches = 0;
+    for (const keyword of keywords) {
+      if (inputText.toLowerCase().includes(keyword.toLowerCase())) {
+        matches++;
+      }
+    }
+    if (matches > maxMatches) {
+      maxMatches = matches;
+      bestScenario = scenario as PersonalModelScenario;
+    }
+  }
+
+  return bestScenario;
+}
+
+function extractSearchKeyword(inputText: string): string | null {
+  if (inputText.length < 20) {
+    return inputText;
+  }
+  // Try to find a meaningful keyword, or just use the first 10 chars
+  return inputText.slice(0, 10);
+}
+
+export interface AssembleContextTrace {
+  scenario: PersonalModelScenario;
+  selectedClaimIds: string[];
+  excludedClaimIds: string[];
+  selectedChunkIds: string[];
+}
+
+export async function assemblePersonalModelContext(input: {
+  repositories: AgentRepositories;
+  ownerTgUserId: number;
+  inputText: string;
+  now: number;
+}): Promise<{ contextString: string | null; trace: AssembleContextTrace }> {
+  const scenario = classifyScenario(input.inputText);
+  
+  // 1. Fetch active claims (which already handles validFrom/validUntil and usagePolicy != 'do_not_use')
+  const allClaims = await input.repositories.listActivePersonalModelClaims({
+    ownerTgUserId: input.ownerTgUserId,
+    limit: 50,
+    now: input.now
+  });
+
+  const selectedClaims: PersonalModelClaimRecord[] = [];
+  const excludedClaimIds: string[] = [];
+
+  for (const claim of allClaims) {
+    // We prioritize matching scenario and global
+    if (claim.scenario === scenario || claim.scenario === "global") {
+      selectedClaims.push(claim);
+    } else {
+      excludedClaimIds.push(claim.id);
+    }
+  }
+
+  // Ensure exact scenario matches appear before global ones, preserving the confidence order from DB
+  selectedClaims.sort((a, b) => {
+    if (a.scenario === scenario && b.scenario !== scenario) return -1;
+    if (b.scenario === scenario && a.scenario !== scenario) return 1;
+    return 0;
+  });
+
+  // Slice to max 8 claims to avoid prompt bloat
+  const finalClaims = selectedClaims.slice(0, 8);
+
+  // 2. Fetch source chunks
+  const keyword = extractSearchKeyword(input.inputText);
+  let chunks: PersonalModelSourceChunkRecord[] = [];
+  if (keyword && keyword.trim().length > 0) {
+    chunks = await input.repositories.searchPersonalModelSourceChunks({
+      ownerTgUserId: input.ownerTgUserId,
+      keyword: keyword.trim().toLowerCase(),
+      limit: 3
+    });
+  }
+
+  const trace: AssembleContextTrace = {
+    scenario,
+    selectedClaimIds: finalClaims.map(c => c.id),
+    excludedClaimIds,
+    selectedChunkIds: chunks.map(c => c.id)
+  };
+
+  if (finalClaims.length === 0 && chunks.length === 0) {
+    return { contextString: null, trace };
+  }
+
+  const lines: string[] = ["User model context:"];
+  
+  if (finalClaims.length > 0) {
+    lines.push("- Stable preferences & states:");
+    for (const claim of finalClaims) {
+      lines.push(`  - [${claim.layer}/${claim.scenario}/${claim.confidence}] ${claim.claim}`);
+    }
+  }
+
+  if (chunks.length > 0) {
+    lines.push("- Relevant source chunks:");
+    for (const chunk of chunks) {
+      lines.push(`  - ${chunk.content}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("Use this context implicitly. Only cite it explicitly when correcting a conflict, explaining a challenge, handling sensitive reasoning, or when the user asks why.");
+
+  return {
+    contextString: lines.join("\\n"),
+    trace
+  };
+}
