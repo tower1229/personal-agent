@@ -10,6 +10,7 @@ import {
   longTaskToolPolicies,
   memoryStatuses,
   memoryTypes,
+  metacognitionReflectionTypes,
   personalModelConfidences,
   personalModelEventTypes,
   personalModelEvidenceTypes,
@@ -29,7 +30,8 @@ import {
   skillRunStatuses,
   todoStatuses,
   toolCallStatuses,
-  toolRiskLevels
+  toolRiskLevels,
+  understandingGapStatuses
 } from "./constants.js";
 
 export const toolRiskLevelSchema = z.enum(toolRiskLevels);
@@ -896,3 +898,42 @@ export type EvalCase = z.infer<typeof evalCaseSchema>;
 
 export const documentIndexStatusSchema = z.enum(documentIndexStatuses);
 export const documentSourceTypeSchema = z.enum(documentSourceTypes);
+
+export const personalModelMetacognitionReflectionTypeSchema = z.enum(metacognitionReflectionTypes);
+export const personalModelMetacognitionLogDtoSchema = z.object({
+  id: z.string().min(1),
+  relatedClaimId: z.string().min(1).nullable(),
+  relatedGapId: z.string().min(1).nullable(),
+  reflectionType: personalModelMetacognitionReflectionTypeSchema,
+  content: z.string(),
+  createdAt: z.number().int().min(0)
+});
+export type PersonalModelMetacognitionLogDto = z.infer<typeof personalModelMetacognitionLogDtoSchema>;
+
+export const personalModelUnderstandingGapStatusSchema = z.enum(understandingGapStatuses);
+export const personalModelUnderstandingGapDtoSchema = z.object({
+  id: z.string().min(1),
+  scenario: personalModelScenarioSchema,
+  gapDescription: z.string(),
+  status: personalModelUnderstandingGapStatusSchema,
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+export type PersonalModelUnderstandingGapDto = z.infer<typeof personalModelUnderstandingGapDtoSchema>;
+
+export const adminPersonalModelMetacognitionLogsResponseSchema = z.object({
+  items: z.array(personalModelMetacognitionLogDtoSchema)
+});
+
+export const adminPersonalModelUnderstandingGapsResponseSchema = z.object({
+  items: z.array(personalModelUnderstandingGapDtoSchema)
+});
+
+export const adminPersonalModelUnderstandingGapUpdateRequestSchema = z.object({
+  status: personalModelUnderstandingGapStatusSchema
+});
+
+export const adminPersonalModelUnderstandingGapCreateRequestSchema = z.object({
+  scenario: personalModelScenarioSchema,
+  gapDescription: z.string().min(1)
+});

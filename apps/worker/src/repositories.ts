@@ -23,7 +23,9 @@ import {
   type SkillRunStatus,
   type TodoStatus,
   type ToolCallStatus,
-  type ToolRiskLevel
+  type ToolRiskLevel,
+  type MetacognitionReflectionType,
+  type UnderstandingGapStatus
 } from "@personal-agent/shared";
 
 export interface RunRecord {
@@ -150,6 +152,27 @@ export interface PersonalModelEvidenceRecord {
   weight: PersonalModelEvidenceWeight;
   createdAt: number;
 }
+
+export interface PersonalModelMetacognitionLogRecord {
+  id: string;
+  ownerTgUserId: number;
+  relatedClaimId: string | null;
+  relatedGapId: string | null;
+  reflectionType: MetacognitionReflectionType;
+  content: string;
+  createdAt: number;
+}
+
+export interface PersonalModelUnderstandingGapRecord {
+  id: string;
+  ownerTgUserId: number;
+  scenario: PersonalModelScenario;
+  gapDescription: string;
+  status: UnderstandingGapStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
 
 export interface SkillRecord {
   id: string;
@@ -451,13 +474,36 @@ export interface AgentRepositories {
     limit: number;
   }): Promise<PersonalModelSourceChunkRecord[]>;
   createPersonalModelEvidence(
-    input: PersonalModelEvidenceRecord
+    record: PersonalModelEvidenceRecord
   ): Promise<PersonalModelEvidenceRecord>;
   listPersonalModelEvidence(input: {
     ownerTgUserId: number;
     claimId: string;
     limit: number;
   }): Promise<PersonalModelEvidenceRecord[]>;
+  createPersonalModelMetacognitionLog(
+    record: PersonalModelMetacognitionLogRecord
+  ): Promise<void>;
+  listPersonalModelMetacognitionLogs(input: {
+    ownerTgUserId: number;
+    limit: number;
+    offset: number;
+  }): Promise<PersonalModelMetacognitionLogRecord[]>;
+  createPersonalModelUnderstandingGap(
+    record: PersonalModelUnderstandingGapRecord
+  ): Promise<void>;
+  listPersonalModelUnderstandingGaps(input: {
+    ownerTgUserId: number;
+    status?: UnderstandingGapStatus;
+    limit: number;
+    offset: number;
+  }): Promise<PersonalModelUnderstandingGapRecord[]>;
+  updatePersonalModelUnderstandingGapStatus(input: {
+    ownerTgUserId: number;
+    gapId: string;
+    status: UnderstandingGapStatus;
+    updatedAt: number;
+  }): Promise<void>;
   createSkill(input: {
     ownerTgUserId: number;
     manifest: SkillManifest;

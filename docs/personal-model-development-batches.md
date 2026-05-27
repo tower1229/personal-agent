@@ -191,6 +191,16 @@
 
 ## Batch 3: Context Assembler And Scenario Routing
 
+状态：已完成。
+
+完成时间：2026-05-27。
+
+完成证据：
+- 实现了 `assemblePersonalModelContext`，支持 scenario fallback 和 limit 限制。
+- 增加了 `searchPersonalModelSourceChunks` 方法并在 context 中组装相关 source chunks。
+- 更新了 `Admin` 相关的 event 记录，记录 claims 的更新、废弃。
+- 测试用例通过。
+
 目标：把 personal model 从“可保存”升级为“能稳定影响对话，但不污染 prompt”。
 
 范围：
@@ -240,6 +250,19 @@
 建议工作量：2 到 4 天。
 
 ## Batch 4: Metacognition And Understanding Gaps
+
+状态：已完成。
+
+完成时间：2026-05-27。
+
+完成证据：
+- 新增 `0007_personal_model_metacognition.sql` 数据库迁移。
+- `shared` 模块新增 `personal_model_metacognition_logs` 和 `personal_model_understanding_gaps` 常量及 schema。
+- 在 `repositories.ts` 和 `personalModel.ts` 实现了 metacognition logs 和 understanding gaps 的 D1 和 fake repos 方法。
+- 完成 `adminPersonalModelRoutes.ts` 中 MetacognitionLogs 和 UnderstandingGaps 的增删查改 endpoints (`GET`, `POST`, `PATCH`)。
+- `personalModelContext.ts` 中集成了 open `understanding_gaps`，使未解之谜作为 context 的一部分，引导 Agent 补齐认知。
+- `helpers.ts` 将新表加入了 D1 readiness 检查。
+- 所有 `typecheck` 成功通过。
 
 目标：让 agent 不只保存结论，还能记录自己如何理解用户、哪里被纠正、哪里不确定。
 

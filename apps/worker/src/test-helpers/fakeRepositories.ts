@@ -20,6 +20,8 @@ import {
   type PersonalModelClaimRecord,
   type PersonalModelEvidenceRecord,
   type PersonalModelEventRecord,
+  type PersonalModelMetacognitionLogRecord,
+  type PersonalModelUnderstandingGapRecord,
   type PersonalModelSourceChunkRecord,
   type PersonalModelSourceDocumentRecord,
   type RunRecord,
@@ -99,6 +101,8 @@ export function createFakeRepositories(): AgentRepositories & {
   personalModelSourceDocuments: PersonalModelSourceDocumentRecord[];
   personalModelSourceChunks: PersonalModelSourceChunkRecord[];
   personalModelEvidence: PersonalModelEvidenceRecord[];
+  personalModelMetacognitionLogs: PersonalModelMetacognitionLogRecord[];
+  personalModelUnderstandingGaps: PersonalModelUnderstandingGapRecord[];
   approvals: ApprovalRequestRecord[];
   skills: SkillRecord[];
   skillVersions: SkillVersionRecord[];
@@ -120,6 +124,8 @@ export function createFakeRepositories(): AgentRepositories & {
     personalModelSourceDocuments: [] as PersonalModelSourceDocumentRecord[],
     personalModelSourceChunks: [] as PersonalModelSourceChunkRecord[],
     personalModelEvidence: [] as PersonalModelEvidenceRecord[],
+    personalModelMetacognitionLogs: [] as PersonalModelMetacognitionLogRecord[],
+    personalModelUnderstandingGaps: [] as PersonalModelUnderstandingGapRecord[],
     approvals: [] as ApprovalRequestRecord[],
     skills: [] as SkillRecord[],
     skillVersions: [] as SkillVersionRecord[],
@@ -161,6 +167,12 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     get personalModelEvidence() {
       return state.personalModelEvidence;
+    },
+    get personalModelMetacognitionLogs() {
+      return state.personalModelMetacognitionLogs;
+    },
+    get personalModelUnderstandingGaps() {
+      return state.personalModelUnderstandingGaps;
     },
     get approvals() {
       return state.approvals;
@@ -539,6 +551,31 @@ export function createFakeRepositories(): AgentRepositories & {
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, input.limit);
+    },
+    async createPersonalModelMetacognitionLog(record) {
+      state.personalModelMetacognitionLogs.push(record);
+    },
+    async listPersonalModelMetacognitionLogs(input) {
+      return state.personalModelMetacognitionLogs
+        .filter((l) => l.ownerTgUserId === input.ownerTgUserId)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(input.offset, input.offset + input.limit);
+    },
+    async createPersonalModelUnderstandingGap(record) {
+      state.personalModelUnderstandingGaps.push(record);
+    },
+    async listPersonalModelUnderstandingGaps(input) {
+      return state.personalModelUnderstandingGaps
+        .filter((g) => g.ownerTgUserId === input.ownerTgUserId && (!input.status || g.status === input.status))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(input.offset, input.offset + input.limit);
+    },
+    async updatePersonalModelUnderstandingGapStatus(input) {
+      const gap = state.personalModelUnderstandingGaps.find(g => g.id === input.gapId && g.ownerTgUserId === input.ownerTgUserId);
+      if (gap) {
+        gap.status = input.status;
+        gap.updatedAt = input.updatedAt;
+      }
     },
     async createSkill(input) {
       const skill: SkillRecord = {

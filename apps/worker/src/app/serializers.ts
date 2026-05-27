@@ -7,6 +7,8 @@ import {
   type PersonalModelClaimRecord,
   type PersonalModelEvidenceRecord,
   type PersonalModelEventRecord,
+  type PersonalModelMetacognitionLogRecord,
+  type PersonalModelUnderstandingGapRecord,
   type PersonalModelSourceChunkRecord,
   type PersonalModelSourceDocumentRecord,
   type RunRecord,
@@ -151,6 +153,32 @@ export function toAdminPersonalModelEvidence(
     quote: evidence.quote,
     weight: evidence.weight,
     createdAt: evidence.createdAt
+  };
+}
+
+export function toAdminPersonalModelMetacognitionLog(
+  log: PersonalModelMetacognitionLogRecord
+) {
+  return {
+    id: log.id,
+    relatedClaimId: log.relatedClaimId,
+    relatedGapId: log.relatedGapId,
+    reflectionType: log.reflectionType,
+    content: log.content,
+    createdAt: log.createdAt
+  };
+}
+
+export function toAdminPersonalModelUnderstandingGap(
+  gap: PersonalModelUnderstandingGapRecord
+) {
+  return {
+    id: gap.id,
+    scenario: gap.scenario,
+    gapDescription: gap.gapDescription,
+    status: gap.status,
+    createdAt: gap.createdAt,
+    updatedAt: gap.updatedAt
   };
 }
 

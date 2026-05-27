@@ -1,14 +1,18 @@
 import {
+  type PersonalModelClaimRow,
+  type PersonalModelEvidenceRow,
+  type PersonalModelSourceChunkRow,
+  type PersonalModelSourceDocumentRow,
+  type PersonalModelEventRow,
+  type PersonalModelMetacognitionLogRow,
+  type PersonalModelUnderstandingGapRow,
   toPersonalModelClaim,
   toPersonalModelEvidence,
   toPersonalModelEvent,
   toPersonalModelSourceChunk,
   toPersonalModelSourceDocument,
-  type PersonalModelClaimRow,
-  type PersonalModelEvidenceRow,
-  type PersonalModelSourceChunkRow,
-  type PersonalModelSourceDocumentRow,
-  type PersonalModelEventRow
+  toPersonalModelMetacognitionLog,
+  toPersonalModelUnderstandingGap
 } from "./mappers.js";
 import { type AgentRepositories } from "../../repositories.js";
 
@@ -33,6 +37,11 @@ export function createD1PersonalModelRepositories(
   | "searchPersonalModelSourceChunks"
   | "createPersonalModelEvidence"
   | "listPersonalModelEvidence"
+  | "createPersonalModelMetacognitionLog"
+  | "listPersonalModelMetacognitionLogs"
+  | "createPersonalModelUnderstandingGap"
+  | "listPersonalModelUnderstandingGaps"
+  | "updatePersonalModelUnderstandingGapStatus"
 > {
   return {
     async createPersonalModelClaim(input) {
@@ -454,6 +463,92 @@ export function createD1PersonalModelRepositories(
         .all<PersonalModelEvidenceRow>();
 
       return (results ?? []).map(toPersonalModelEvidence);
+    },
+
+    async createPersonalModelMetacognitionLog(record) {
+      await db
+        .prepare(
+          `INSERT INTO personal_model_metacognition_logs (
+            id, owner_tg_user_id, related_claim_id, related_gap_id, reflection_type, content, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          record.id,
+          record.ownerTgUserId,
+          record.relatedClaimId,
+          record.relatedGapId,
+          record.reflectionType,
+          record.content,
+          record.createdAt
+        )
+        .run();
+    },
+
+    async listPersonalModelMetacognitionLogs(input) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM personal_model_metacognition_logs 
+           WHERE owner_tg_user_id = ? 
+           ORDER BY created_at DESC 
+           LIMIT ? OFFSET ?`
+        )
+        .bind(input.ownerTgUserId, input.limit, input.offset)
+        .all<PersonalModelMetacognitionLogRow>();
+      return (results ?? []).map(toPersonalModelMetacognitionLog);
+    },
+
+    async createPersonalModelUnderstandingGap(record) {
+      await db
+        .prepare(
+          `INSERT INTO personal_model_understanding_gaps (
+            id, owner_tg_user_id, scenario, gap_description, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          record.id,
+          record.ownerTgUserId,
+          record.scenario,
+          record.gapDescription,
+          record.status,
+          record.createdAt,
+          record.updatedAt
+        )
+        .run();
+    },
+
+    async listPersonalModelUnderstandingGaps(input) {
+      let query = `SELECT * FROM personal_model_understanding_gaps WHERE owner_tg_user_id = ?`;
+      const binds: any[] = [input.ownerTgUserId];
+
+      if (input.status) {
+        query += ` AND status = ?`;
+        binds.push(input.status);
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+      binds.push(input.limit, input.offset);
+
+      const { results } = await db
+        .prepare(query)
+        .bind(...binds)
+        .all<PersonalModelUnderstandingGapRow>();
+      return (results ?? []).map(toPersonalModelUnderstandingGap);
+    },
+
+    async updatePersonalModelUnderstandingGapStatus(input) {
+      await db
+        .prepare(
+          `UPDATE personal_model_understanding_gaps 
+           SET status = ?, updated_at = ? 
+           WHERE id = ? AND owner_tg_user_id = ?`
+        )
+        .bind(
+          input.status,
+          input.updatedAt,
+          input.gapId,
+          input.ownerTgUserId
+        )
+        .run();
     }
   };
 }

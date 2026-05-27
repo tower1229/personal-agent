@@ -15,6 +15,8 @@ import {
   type PersonalModelSourceType,
   type PersonalModelStatus,
   type PersonalModelUsagePolicy,
+  type MetacognitionReflectionType,
+  type UnderstandingGapStatus,
   type RunStatus,
   type ScheduleCadence,
   type ScheduleExecutionStatus,
@@ -36,6 +38,8 @@ import {
   type PersonalModelClaimRecord,
   type PersonalModelEvidenceRecord,
   type PersonalModelEventRecord,
+  type PersonalModelMetacognitionLogRecord,
+  type PersonalModelUnderstandingGapRecord,
   type PersonalModelSourceChunkRecord,
   type PersonalModelSourceDocumentRecord,
   type RunnableSkillRecord,
@@ -173,6 +177,26 @@ export interface PersonalModelEvidenceRow {
   quote: string | null;
   weight: PersonalModelEvidenceWeight;
   created_at: number;
+}
+
+export interface PersonalModelMetacognitionLogRow {
+  id: string;
+  owner_tg_user_id: number;
+  related_claim_id: string | null;
+  related_gap_id: string | null;
+  reflection_type: MetacognitionReflectionType;
+  content: string;
+  created_at: number;
+}
+
+export interface PersonalModelUnderstandingGapRow {
+  id: string;
+  owner_tg_user_id: number;
+  scenario: PersonalModelScenario;
+  gap_description: string;
+  status: UnderstandingGapStatus;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface SkillRow {
@@ -450,6 +474,34 @@ export function toPersonalModelEvidence(
     quote: row.quote,
     weight: row.weight,
     createdAt: row.created_at
+  };
+}
+
+export function toPersonalModelMetacognitionLog(
+  row: PersonalModelMetacognitionLogRow
+): PersonalModelMetacognitionLogRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    relatedClaimId: row.related_claim_id,
+    relatedGapId: row.related_gap_id,
+    reflectionType: row.reflection_type,
+    content: row.content,
+    createdAt: row.created_at
+  };
+}
+
+export function toPersonalModelUnderstandingGap(
+  row: PersonalModelUnderstandingGapRow
+): PersonalModelUnderstandingGapRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    scenario: row.scenario,
+    gapDescription: row.gap_description,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 

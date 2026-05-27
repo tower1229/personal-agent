@@ -21,7 +21,9 @@ const requiredD1Tables = [
   "personal_model_events",
   "source_documents",
   "source_chunks",
-  "personal_model_evidence"
+  "personal_model_evidence",
+  "personal_model_metacognition_logs",
+  "personal_model_understanding_gaps"
 ] as const;
 
 export function ownerId(env: WorkerEnv): number {

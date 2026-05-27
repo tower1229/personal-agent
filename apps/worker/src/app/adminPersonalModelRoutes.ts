@@ -11,6 +11,10 @@ import {
   adminPersonalModelSourceDetailResponseSchema,
   adminPersonalModelSourcesResponseSchema,
   adminPersonalModelSourceUpdateRequestSchema,
+  adminPersonalModelMetacognitionLogsResponseSchema,
+  adminPersonalModelUnderstandingGapsResponseSchema,
+  adminPersonalModelUnderstandingGapCreateRequestSchema,
+  adminPersonalModelUnderstandingGapUpdateRequestSchema,
   personalModelScenarioSchema,
   personalModelSourceStatusSchema,
   personalModelSourceTypeSchema,
@@ -28,7 +32,9 @@ import {
   toAdminPersonalModelEvidence,
   toAdminPersonalModelEvent,
   toAdminPersonalModelSourceChunk,
-  toAdminPersonalModelSourceDocument
+  toAdminPersonalModelSourceDocument,
+  toAdminPersonalModelMetacognitionLog,
+  toAdminPersonalModelUnderstandingGap
 } from "./serializers.js";
 import { type WorkerRouteContext } from "./routeContext.js";
 
@@ -437,6 +443,107 @@ export function registerAdminPersonalModelRoutes(
     });
 
     return c.json(toAdminPersonalModelEvidence(evidence), 201);
+  });
+
+  app.get("/api/admin/personal-model/metacognition-logs", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.text("Unauthorized", 401);
+    }
+
+    const limit = limitParam(c.req.query("limit"));
+    const offset = parseInt(c.req.query("offset") ?? "0", 10);
+
+    const repo = repositories(c.env);
+    const logs = await repo.listPersonalModelMetacognitionLogs({
+      ownerTgUserId: authenticatedOwnerId,
+      limit,
+      offset
+    });
+
+    return c.json({
+      items: logs.map(toAdminPersonalModelMetacognitionLog)
+    });
+  });
+
+  app.get("/api/admin/personal-model/understanding-gaps", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.text("Unauthorized", 401);
+    }
+
+    const limit = limitParam(c.req.query("limit"));
+    const offset = parseInt(c.req.query("offset") ?? "0", 10);
+    const statusQuery = c.req.query("status");
+    let status: "open" | "resolved" | "ignored" | undefined;
+    if (statusQuery === "open" || statusQuery === "resolved" || statusQuery === "ignored") {
+      status = statusQuery as any;
+    }
+
+    const repo = repositories(c.env);
+    const gaps = await repo.listPersonalModelUnderstandingGaps({
+      ownerTgUserId: authenticatedOwnerId,
+      limit,
+      offset,
+      status
+    });
+
+    return c.json({
+      items: gaps.map(toAdminPersonalModelUnderstandingGap)
+    });
+  });
+
+  app.post("/api/admin/personal-model/understanding-gaps", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.text("Unauthorized", 401);
+    }
+
+    const body = await c.req.json();
+    const result = adminPersonalModelUnderstandingGapCreateRequestSchema.safeParse(body);
+    if (!result.success) {
+      return c.text("Bad Request: " + result.error.message, 400);
+    }
+
+    const now = Date.now();
+    const gap = {
+      id: (options.generateId ?? defaultGenerateId)(),
+      ownerTgUserId: authenticatedOwnerId,
+      scenario: result.data.scenario,
+      gapDescription: result.data.gapDescription,
+      status: "open" as const,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const repo = repositories(c.env);
+    await repo.createPersonalModelUnderstandingGap(gap);
+
+    return c.json(toAdminPersonalModelUnderstandingGap(gap), 201);
+  });
+
+  app.patch("/api/admin/personal-model/understanding-gaps/:id/status", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.text("Unauthorized", 401);
+    }
+
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const result = adminPersonalModelUnderstandingGapUpdateRequestSchema.safeParse(body);
+    if (!result.success) {
+      return c.text("Bad Request: " + result.error.message, 400);
+    }
+
+    const repo = repositories(c.env);
+    await repo.updatePersonalModelUnderstandingGapStatus({
+      ownerTgUserId: authenticatedOwnerId,
+      gapId: id,
+      status: result.data.status,
+      updatedAt: Date.now()
+    });
+
+    return c.json({ success: true }, 200);
   });
 }
 

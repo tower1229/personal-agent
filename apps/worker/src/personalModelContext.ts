@@ -1,6 +1,7 @@
 import {
   type PersonalModelClaimRecord,
   type PersonalModelSourceChunkRecord,
+  type PersonalModelUnderstandingGapRecord,
   type AgentRepositories
 } from "./repositories.js";
 import { type PersonalModelScenario } from "@personal-agent/shared";
@@ -51,6 +52,7 @@ export interface AssembleContextTrace {
   selectedClaimIds: string[];
   excludedClaimIds: string[];
   selectedChunkIds: string[];
+  selectedGapIds: string[];
 }
 
 export async function assemblePersonalModelContext(input: {
@@ -101,14 +103,26 @@ export async function assemblePersonalModelContext(input: {
     });
   }
 
+  const openGaps = await input.repositories.listPersonalModelUnderstandingGaps({
+    ownerTgUserId: input.ownerTgUserId,
+    limit: 50,
+    offset: 0,
+    status: "open"
+  });
+
+  const selectedGaps = openGaps.filter(
+    (gap) => gap.scenario === scenario || gap.scenario === "global"
+  ).slice(0, 3);
+
   const trace: AssembleContextTrace = {
     scenario,
     selectedClaimIds: finalClaims.map(c => c.id),
     excludedClaimIds,
-    selectedChunkIds: chunks.map(c => c.id)
+    selectedChunkIds: chunks.map(c => c.id),
+    selectedGapIds: selectedGaps.map(g => g.id)
   };
 
-  if (finalClaims.length === 0 && chunks.length === 0) {
+  if (finalClaims.length === 0 && chunks.length === 0 && selectedGaps.length === 0) {
     return { contextString: null, trace };
   }
 
@@ -128,8 +142,15 @@ export async function assemblePersonalModelContext(input: {
     }
   }
 
+  if (selectedGaps.length > 0) {
+    lines.push("- Known understanding gaps (things you need to figure out):");
+    for (const gap of selectedGaps) {
+      lines.push(`  - [${gap.scenario}] ${gap.gapDescription}`);
+    }
+  }
+
   lines.push("");
-  lines.push("Use this context implicitly. Only cite it explicitly when correcting a conflict, explaining a challenge, handling sensitive reasoning, or when the user asks why.");
+  lines.push("Use this context implicitly. Only cite it explicitly when correcting a conflict, explaining a challenge, handling sensitive reasoning, asking questions to fill gaps, or when the user asks why.");
 
   return {
     contextString: lines.join("\\n"),
