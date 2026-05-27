@@ -584,6 +584,30 @@ export const adminPersonalModelSourceDocumentSchema = z.object({
   metadataJson: z.string()
 });
 
+export const personalModelWritingMetadataSchema = z.object({
+  title: z.string().optional(),
+  url: z.string().optional(),
+  publishDate: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  isOriginal: z.boolean().optional()
+});
+export type PersonalModelWritingMetadata = z.infer<typeof personalModelWritingMetadataSchema>;
+
+export const personalModelFrameworkMetadataSchema = z.object({
+  frameworkType: z.string().optional(),
+  testDate: z.string().optional(),
+  agreementLevel: z.string().optional(),
+  stableDimensions: z.array(z.string()).optional()
+});
+export type PersonalModelFrameworkMetadata = z.infer<typeof personalModelFrameworkMetadataSchema>;
+
+export const personalModelSocialMetadataSchema = z.object({
+  originalTimestamp: z.number().int().optional(),
+  platform: z.string().optional(),
+  isHistoricalExpression: z.boolean().optional()
+});
+export type PersonalModelSocialMetadata = z.infer<typeof personalModelSocialMetadataSchema>;
+
 export type AdminPersonalModelSourceDocument = z.infer<
   typeof adminPersonalModelSourceDocumentSchema
 >;

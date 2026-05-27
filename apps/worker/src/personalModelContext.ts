@@ -137,8 +137,40 @@ export async function assemblePersonalModelContext(input: {
 
   if (chunks.length > 0) {
     lines.push("- Relevant source chunks:");
-    for (const chunk of chunks) {
-      lines.push(`  - ${chunk.content}`);
+    const documents = await Promise.all(
+      chunks.map((c) =>
+        input.repositories.getPersonalModelSourceDocument({
+          ownerTgUserId: input.ownerTgUserId,
+          id: c.documentId
+        })
+      )
+    );
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const doc = documents[i];
+      let prefix = "[Source Chunk]";
+
+      if (doc) {
+        try {
+          const meta = doc.metadataJson ? JSON.parse(doc.metadataJson) : {};
+          if (doc.sourceType === "writing" || doc.sourceType === "blog") {
+            prefix = meta.isOriginal ? "[Original Writing]" : "[External Article]";
+          } else if (
+            doc.sourceType === "qq_export" ||
+            doc.sourceType === "weibo_export"
+          ) {
+            prefix = meta.isHistoricalExpression
+              ? "[Historical Social Expression]"
+              : "[Social Expression]";
+          } else if (doc.sourceType === "personality_framework") {
+            prefix = "[Personality Framework]";
+          }
+        } catch {
+          // fallback
+        }
+      }
+      lines.push(`  - ${prefix}: ${chunk.content}`);
     }
   }
 

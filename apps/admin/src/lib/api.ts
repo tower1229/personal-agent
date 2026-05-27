@@ -417,8 +417,9 @@ export function updatePersonalModelClaim(input: {
   );
 }
 
-export function loadPersonalModelSources(): Promise<AdminPersonalModelSourcesResponse> {
-  return fetchJson("/api/admin/personal-model/sources", (input) =>
+export function loadPersonalModelSources(sourceType?: string): Promise<AdminPersonalModelSourcesResponse> {
+  const url = sourceType ? `/api/admin/personal-model/sources?sourceType=${encodeURIComponent(sourceType)}` : "/api/admin/personal-model/sources";
+  return fetchJson(url, (input) =>
     adminPersonalModelSourcesResponseSchema.parse(input)
   );
 }

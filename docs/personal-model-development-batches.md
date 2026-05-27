@@ -302,6 +302,19 @@
 
 ## Batch 5: First Real Source Ingestion
 
+状态：已完成。
+
+完成时间：2026-05-27。
+
+完成证据：
+- `shared` 模块新增了专门的 `personalModelWritingMetadataSchema`、`personalModelFrameworkMetadataSchema` 和 `personalModelSocialMetadataSchema`。
+- Admin API 的 `POST /api/admin/personal-model/sources` 能够根据 `sourceType` 自动校验相关的 metadata JSON 结构。
+- `personalModelSources.ts` 的 `chunkSourceContent` 实现了按类型的定制化 Chunk 切分策略：
+  - Markdown：按标题或段落（双换行）切分。
+  - Social：识别 JSON 数组逐项切分，或按换行切分。
+  - Framework：解析 JSON 按结构字段切块。
+- Admin Frontend 在创建资料页新增了高容错的 Metadata (JSON) TextArea 输入，并在资料列表页支持按 Source Type 筛选查询。
+
 目标：开始接入真实个人资料，但先选择低复杂度、可控格式，不碰复杂授权。
 
 范围：

@@ -23,6 +23,45 @@ function splitLongBlock(block: string, maxLength: number): string[] {
   return chunks.filter(Boolean);
 }
 
+function markdownChunker(content: string): string[] {
+  return content
+    .split(/\n(?=#{1,6}\s)|\n{2,}/u)
+    .map((block) => block.trim())
+    .filter(Boolean);
+}
+
+function socialChunker(content: string): string[] {
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => {
+        if (typeof item === "string") return item;
+        return JSON.stringify(item);
+      });
+    }
+  } catch {
+    // fallback
+  }
+  return content
+    .split(/\n{2,}/u)
+    .map((block) => block.trim())
+    .filter(Boolean);
+}
+
+function frameworkChunker(content: string): string[] {
+  try {
+    const parsed = JSON.parse(content);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return Object.entries(parsed).map(([key, value]) => {
+        return `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`;
+      });
+    }
+  } catch {
+    // fallback
+  }
+  return markdownChunker(content);
+}
+
 export function chunkSourceContent(input: {
   content: string;
   sourceType: string;
@@ -34,18 +73,26 @@ export function chunkSourceContent(input: {
     return [];
   }
 
-  const blocks =
+  let blocks: string[];
+  if (
     input.sourceType === "writing" ||
     input.sourceType === "blog" ||
     input.sourceType === "manual_note"
-      ? normalized
-          .split(/\n(?=#{1,6}\s)|\n{2,}/u)
-          .map((block) => block.trim())
-          .filter(Boolean)
-      : normalized
-          .split(/\n{2,}/u)
-          .map((block) => block.trim())
-          .filter(Boolean);
+  ) {
+    blocks = markdownChunker(normalized);
+  } else if (
+    input.sourceType === "qq_export" ||
+    input.sourceType === "weibo_export"
+  ) {
+    blocks = socialChunker(normalized);
+  } else if (input.sourceType === "personality_framework") {
+    blocks = frameworkChunker(normalized);
+  } else {
+    blocks = normalized
+      .split(/\n{2,}/u)
+      .map((block) => block.trim())
+      .filter(Boolean);
+  }
 
   return blocks.flatMap((block, blockIndex) =>
     splitLongBlock(block, maxLength).map((content, splitIndex) => ({

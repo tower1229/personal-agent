@@ -9,6 +9,9 @@ import {
   adminPersonalModelEvidenceResponseSchema,
   adminPersonalModelSourceCreateRequestSchema,
   adminPersonalModelSourceDetailResponseSchema,
+  personalModelWritingMetadataSchema,
+  personalModelSocialMetadataSchema,
+  personalModelFrameworkMetadataSchema,
   adminPersonalModelSourcesResponseSchema,
   adminPersonalModelSourceUpdateRequestSchema,
   adminPersonalModelMetacognitionLogsResponseSchema,
@@ -276,6 +279,21 @@ export function registerAdminPersonalModelRoutes(
       return c.json({ error: "Invalid personal model source" }, 400);
     }
 
+    let metadata = body.data.metadata;
+    if (metadata) {
+      try {
+        if (body.data.sourceType === "writing" || body.data.sourceType === "blog") {
+          metadata = personalModelWritingMetadataSchema.parse(metadata);
+        } else if (body.data.sourceType === "qq_export" || body.data.sourceType === "weibo_export") {
+          metadata = personalModelSocialMetadataSchema.parse(metadata);
+        } else if (body.data.sourceType === "personality_framework") {
+          metadata = personalModelFrameworkMetadataSchema.parse(metadata);
+        }
+      } catch (err) {
+        return c.json({ error: "Invalid metadata format for the given source type" }, 400);
+      }
+    }
+
     const now = (options.now ?? Date.now)();
     const generateId = options.generateId ?? defaultGenerateId;
     const repo = repositories(c.env);
@@ -293,7 +311,7 @@ export function registerAdminPersonalModelRoutes(
       sourceCreatedAt: body.data.sourceCreatedAt ?? null,
       sourceUpdatedAt: body.data.sourceUpdatedAt ?? null,
       ingestedAt: now,
-      metadataJson: JSON.stringify(body.data.metadata)
+      metadataJson: JSON.stringify(metadata ?? {})
     });
     const chunkDrafts = chunkSourceContent({
       content: body.data.content,

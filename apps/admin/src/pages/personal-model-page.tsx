@@ -66,6 +66,7 @@ interface SourceFormState {
   sourceType: PersonalModelSourceType;
   usagePolicy: PersonalModelUsagePolicy;
   sensitivity: PersonalModelSensitivity;
+  metadataText: string;
 }
 
 const emptySourceForm: SourceFormState = {
@@ -74,12 +75,14 @@ const emptySourceForm: SourceFormState = {
   content: "",
   sourceType: "manual_note",
   usagePolicy: "default_available",
-  sensitivity: "medium"
+  sensitivity: "medium",
+  metadataText: "{}"
 };
 
 export function PersonalModelPage() {
   const claims = useAsyncData(() => loadPersonalModelClaims(), []);
-  const sources = useAsyncData(() => loadPersonalModelSources(), []);
+  const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
+  const sources = useAsyncData(() => loadPersonalModelSources(sourceTypeFilter !== "all" ? sourceTypeFilter : undefined), [sourceTypeFilter]);
   const [query, setQuery] = useState("");
   const [scenario, setScenario] = useState("all");
   const [status, setStatus] = useState("all");
@@ -105,7 +108,7 @@ export function PersonalModelPage() {
   }
 
   async function refreshSources() {
-    sources.setData(await loadPersonalModelSources());
+    sources.setData(await loadPersonalModelSources(sourceTypeFilter !== "all" ? sourceTypeFilter : undefined));
   }
 
   const items = useMemo(
@@ -218,6 +221,15 @@ export function PersonalModelPage() {
       return;
     }
     setSaving(true);
+    let parsedMetadata = {};
+    try {
+      parsedMetadata = JSON.parse(sourceForm.metadataText);
+    } catch {
+      toast.error("Metadata 必须是合法的 JSON 对象");
+      setSaving(false);
+      return;
+    }
+    
     try {
       const detail = await createPersonalModelSource({
         title: sourceForm.title.trim(),
@@ -226,7 +238,7 @@ export function PersonalModelPage() {
         uri: sourceForm.uri.trim() || null,
         usagePolicy: sourceForm.usagePolicy,
         sensitivity: sourceForm.sensitivity,
-        metadata: { source: "admin" }
+        metadata: { ...parsedMetadata, source: "admin" }
       });
       toast.success(`已导入资料，生成 ${detail.chunks.length} 个 chunk`);
       setSourceForm(emptySourceForm);
@@ -641,13 +653,22 @@ export function PersonalModelPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Sources</CardTitle>
+            <CardTitle>Sources</CardTitle>
           <CardDescription>
             导入原始资料并生成 chunks。原文不可在这里修改，只能治理使用策略。
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="grid gap-3 md:grid-cols-2">
+        <CardContent className="grid gap-4 pt-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end">
+            <Field label="Filter by Source Type">
+              <FilterSelect
+                items={personalModelSourceTypes}
+                onChange={setSourceTypeFilter}
+                value={sourceTypeFilter}
+              />
+            </Field>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Field label="Title">
               <Input
                 onChange={(event) =>
@@ -670,8 +691,6 @@ export function PersonalModelPage() {
                 value={sourceForm.uri}
               />
             </Field>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
             <Field label="Source Type">
               <EnumSelect
                 items={personalModelSourceTypes}
@@ -709,6 +728,17 @@ export function PersonalModelPage() {
               />
             </Field>
           </div>
+          <Field label="Metadata (JSON)">
+            <Textarea
+              onChange={(event) =>
+                setSourceForm((current) => ({
+                  ...current,
+                  metadataText: event.target.value
+                }))
+              }
+              value={sourceForm.metadataText}
+            />
+          </Field>
           <Field label="Content">
             <Textarea
               onChange={(event) =>
