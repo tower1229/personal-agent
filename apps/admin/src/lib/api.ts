@@ -9,6 +9,11 @@ import {
   adminLongTasksResponseSchema,
   adminMeResponseSchema,
   adminMemoriesResponseSchema,
+  adminPersonalModelClaimCreateRequestSchema,
+  adminPersonalModelClaimDetailResponseSchema,
+  adminPersonalModelClaimSchema,
+  adminPersonalModelClaimsResponseSchema,
+  adminPersonalModelClaimUpdateRequestSchema,
   adminRunDetailResponseSchema,
   adminRunsResponseSchema,
   adminScheduleExecutionsResponseSchema,
@@ -33,6 +38,11 @@ import {
   type AdminLongTasksResponse,
   type AdminMeResponse,
   type AdminMemoriesResponse,
+  type AdminPersonalModelClaim,
+  type AdminPersonalModelClaimCreateRequest,
+  type AdminPersonalModelClaimDetailResponse,
+  type AdminPersonalModelClaimsResponse,
+  type AdminPersonalModelClaimUpdateRequest,
   type AdminRunDetailResponse,
   type AdminRunsResponse,
   type AdminSchedule,
@@ -339,6 +349,47 @@ export function loadTodos(): Promise<AdminTodosResponse> {
 export function loadMemories(): Promise<AdminMemoriesResponse> {
   return fetchJson("/api/admin/memories", (input) =>
     adminMemoriesResponseSchema.parse(input)
+  );
+}
+
+export function loadPersonalModelClaims(): Promise<AdminPersonalModelClaimsResponse> {
+  return fetchJson("/api/admin/personal-model/claims", (input) =>
+    adminPersonalModelClaimsResponseSchema.parse(input)
+  );
+}
+
+export function loadPersonalModelClaimDetail(
+  id: string
+): Promise<AdminPersonalModelClaimDetailResponse> {
+  return fetchJson(`/api/admin/personal-model/claims/${id}`, (input) =>
+    adminPersonalModelClaimDetailResponseSchema.parse(input)
+  );
+}
+
+export function createPersonalModelClaim(
+  request: AdminPersonalModelClaimCreateRequest
+): Promise<AdminPersonalModelClaim> {
+  return sendJson(
+    "/api/admin/personal-model/claims",
+    "POST",
+    adminPersonalModelClaimCreateRequestSchema.parse(request),
+    (input) => adminPersonalModelClaimSchema.parse(input)
+  );
+}
+
+export function updatePersonalModelClaim(input: {
+  id: string;
+  request: AdminPersonalModelClaimUpdateRequest;
+}): Promise<AdminPersonalModelClaim> {
+  return requestJson(
+    `/api/admin/personal-model/claims/${input.id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(
+        adminPersonalModelClaimUpdateRequestSchema.parse(input.request)
+      )
+    },
+    (body) => adminPersonalModelClaimSchema.parse(body)
   );
 }
 

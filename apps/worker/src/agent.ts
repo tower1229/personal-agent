@@ -438,6 +438,34 @@ function availableToolDefinitions(allowedTools?: Set<string>): LlmToolDefinition
     .map((name) => toolDefinitions[name]);
 }
 
+async function buildPersonalModelContext(input: {
+  runtime: AgentRuntime;
+  ownerTgUserId: number;
+}): Promise<string | null> {
+  const claims = await input.runtime.repositories.listActivePersonalModelClaims({
+    ownerTgUserId: input.ownerTgUserId,
+    limit: 8,
+    now: input.runtime.now()
+  });
+  const usable = claims.filter(
+    (claim) => claim.confidence === "high"
+  );
+
+  if (usable.length === 0) {
+    return null;
+  }
+
+  return [
+    "User model context:",
+    ...usable.map(
+      (claim) =>
+        `- [${claim.layer}/${claim.scenario}/${claim.confidence}] ${claim.claim}`
+    ),
+    "",
+    "Use this context implicitly. Only cite it explicitly when correcting a conflict, explaining a challenge, handling sensitive reasoning, or when the user asks why."
+  ].join("\n");
+}
+
 async function recordLlmCall(input: {
   runtime: AgentRuntime;
   runId: string;
@@ -473,9 +501,18 @@ export async function executeLlmAgent(
 
   const systemInstructions = [
     "你是一个个人 Telegram agent。用简洁中文回答。",
+    "你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。",
+    "默认隐性使用个人模型，不要频繁显性引用旧资料或展示你有多了解用户。",
+    "当用户情绪或真实需求不确定时，先给轻量判断，再问一个关键校准问题，不要直接定性。",
+    "可以指出逃避、投射、控制欲、自我合理化和分析过度，但语气必须平静，态度必须温和。",
+    "不要自称宗教、心理或终极真理权威。",
     "需要联网信息时先使用 web_search；需要读取具体网页时使用 fetch_url。",
     "使用搜索或网页内容回答时，必须包含来源 URL。",
     "删除记忆只能通过 delete_memory_request 创建确认，不能直接删除。",
+    await buildPersonalModelContext({
+      runtime: input.runtime,
+      ownerTgUserId: input.ownerTgUserId
+    }),
     input.systemInstructions ?? ""
   ]
     .filter(Boolean)

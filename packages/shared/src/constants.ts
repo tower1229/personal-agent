@@ -33,6 +33,78 @@ export type MemoryEventType = (typeof memoryEventTypes)[number];
 export const memoryStatuses = ["active", "archived", "deleted"] as const;
 export type MemoryStatus = (typeof memoryStatuses)[number];
 
+export const personalModelLayers = [
+  "fact",
+  "preference",
+  "pattern",
+  "value",
+  "interpretation_framework",
+  "current_state",
+  "positive_resource",
+  "negative_pattern",
+  "boundary"
+] as const;
+export type PersonalModelLayer = (typeof personalModelLayers)[number];
+
+export const personalModelScenarios = [
+  "global",
+  "writing",
+  "health",
+  "relationship",
+  "self_knowledge",
+  "emotional_support",
+  "work_decision",
+  "technical_writing",
+  "technical_collaboration",
+  "life_decision"
+] as const;
+export type PersonalModelScenario = (typeof personalModelScenarios)[number];
+
+export const personalModelConfidences = ["low", "medium", "high"] as const;
+export type PersonalModelConfidence =
+  (typeof personalModelConfidences)[number];
+
+export const personalModelStatuses = [
+  "active",
+  "under_revision",
+  "deprecated",
+  "archived",
+  "deleted"
+] as const;
+export type PersonalModelStatus = (typeof personalModelStatuses)[number];
+
+export const personalModelUsagePolicies = [
+  "default_available",
+  "use_only_if_relevant",
+  "use_only_if_user_mentions",
+  "do_not_use"
+] as const;
+export type PersonalModelUsagePolicy =
+  (typeof personalModelUsagePolicies)[number];
+
+export const personalModelSensitivities = [
+  "low",
+  "medium",
+  "high"
+] as const;
+export type PersonalModelSensitivity =
+  (typeof personalModelSensitivities)[number];
+
+export const personalModelEventTypes = [
+  "proposed",
+  "created",
+  "updated",
+  "confirmed",
+  "corrected",
+  "deprecated",
+  "merged",
+  "conflict_detected",
+  "used_in_response",
+  "excluded_by_policy"
+] as const;
+export type PersonalModelEventType =
+  (typeof personalModelEventTypes)[number];
+
 export const approvalRequestStatuses = [
   "pending",
   "rejected",

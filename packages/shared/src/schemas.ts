@@ -10,6 +10,13 @@ import {
   longTaskToolPolicies,
   memoryStatuses,
   memoryTypes,
+  personalModelConfidences,
+  personalModelEventTypes,
+  personalModelLayers,
+  personalModelScenarios,
+  personalModelSensitivities,
+  personalModelStatuses,
+  personalModelUsagePolicies,
   runStatuses,
   scheduleCadences,
   scheduleExecutionStatuses,
@@ -511,6 +518,112 @@ export const adminMemoriesResponseSchema = z.object({
 
 export type AdminMemoriesResponse = z.infer<
   typeof adminMemoriesResponseSchema
+>;
+
+export const personalModelLayerSchema = z.enum(personalModelLayers);
+export const personalModelScenarioSchema = z.enum(personalModelScenarios);
+export const personalModelConfidenceSchema = z.enum(personalModelConfidences);
+export const personalModelStatusSchema = z.enum(personalModelStatuses);
+export const personalModelUsagePolicySchema = z.enum(
+  personalModelUsagePolicies
+);
+export const personalModelSensitivitySchema = z.enum(
+  personalModelSensitivities
+);
+export const personalModelEventTypeSchema = z.enum(personalModelEventTypes);
+
+export const adminPersonalModelClaimSchema = z.object({
+  id: z.string().min(1),
+  claim: z.string().min(1),
+  layer: personalModelLayerSchema,
+  scenario: personalModelScenarioSchema,
+  confidence: personalModelConfidenceSchema,
+  status: personalModelStatusSchema,
+  usagePolicy: personalModelUsagePolicySchema,
+  sensitivity: personalModelSensitivitySchema,
+  validFrom: z.number().int().min(0).nullable(),
+  validUntil: z.number().int().min(0).nullable(),
+  lastConfirmedAt: z.number().int().min(0).nullable(),
+  metadataJson: z.string(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminPersonalModelClaim = z.infer<
+  typeof adminPersonalModelClaimSchema
+>;
+
+export const adminPersonalModelClaimsResponseSchema = z.object({
+  items: z.array(adminPersonalModelClaimSchema)
+});
+
+export type AdminPersonalModelClaimsResponse = z.infer<
+  typeof adminPersonalModelClaimsResponseSchema
+>;
+
+export const adminPersonalModelClaimEventSchema = z.object({
+  id: z.string().min(1),
+  claimId: z.string().min(1).nullable(),
+  eventType: personalModelEventTypeSchema,
+  payloadJson: z.string(),
+  createdAt: z.number().int().min(0)
+});
+
+export type AdminPersonalModelClaimEvent = z.infer<
+  typeof adminPersonalModelClaimEventSchema
+>;
+
+export const adminPersonalModelClaimDetailResponseSchema = z.object({
+  claim: adminPersonalModelClaimSchema,
+  events: z.array(adminPersonalModelClaimEventSchema)
+});
+
+export type AdminPersonalModelClaimDetailResponse = z.infer<
+  typeof adminPersonalModelClaimDetailResponseSchema
+>;
+
+export const adminPersonalModelClaimEventsResponseSchema = z.object({
+  items: z.array(adminPersonalModelClaimEventSchema)
+});
+
+export type AdminPersonalModelClaimEventsResponse = z.infer<
+  typeof adminPersonalModelClaimEventsResponseSchema
+>;
+
+export const adminPersonalModelClaimCreateRequestSchema = z.object({
+  claim: z.string().min(1),
+  layer: personalModelLayerSchema.default("preference"),
+  scenario: personalModelScenarioSchema.default("global"),
+  confidence: personalModelConfidenceSchema.default("high"),
+  status: personalModelStatusSchema.default("active"),
+  usagePolicy: personalModelUsagePolicySchema.default("default_available"),
+  sensitivity: personalModelSensitivitySchema.default("medium"),
+  validFrom: z.number().int().min(0).nullable().optional(),
+  validUntil: z.number().int().min(0).nullable().optional(),
+  lastConfirmedAt: z.number().int().min(0).nullable().optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+
+export type AdminPersonalModelClaimCreateRequest = z.infer<
+  typeof adminPersonalModelClaimCreateRequestSchema
+>;
+
+export const adminPersonalModelClaimUpdateRequestSchema = z.object({
+  claim: z.string().min(1).optional(),
+  layer: personalModelLayerSchema.optional(),
+  scenario: personalModelScenarioSchema.optional(),
+  confidence: personalModelConfidenceSchema.optional(),
+  status: personalModelStatusSchema.optional(),
+  usagePolicy: personalModelUsagePolicySchema.optional(),
+  sensitivity: personalModelSensitivitySchema.optional(),
+  validFrom: z.number().int().min(0).nullable().optional(),
+  validUntil: z.number().int().min(0).nullable().optional(),
+  lastConfirmedAt: z.number().int().min(0).nullable().optional(),
+  metadata: z.record(z.unknown()).optional()
+});
+
+export type AdminPersonalModelClaimUpdateRequest = z.infer<
+  typeof adminPersonalModelClaimUpdateRequestSchema
 >;
 
 export const adminApprovalSchema = z.object({

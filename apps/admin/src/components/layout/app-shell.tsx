@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   ActivityIcon,
   BotIcon,
+  BrainIcon,
   CalendarClockIcon,
   ClipboardCheckIcon,
   DatabaseIcon,
@@ -52,6 +53,7 @@ const primaryNav: NavItem[] = [
 
 const secondaryNav: NavItem[] = [
   { label: "Data", to: "/admin/data/todos", icon: DatabaseIcon },
+  { label: "Personal Model", to: "/admin/personal-model", icon: BrainIcon },
   { label: "Settings", to: "/admin/settings", icon: SettingsIcon }
 ];
 

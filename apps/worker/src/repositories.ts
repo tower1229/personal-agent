@@ -4,6 +4,13 @@ import {
   type LongTaskStepStatus,
   type LongTaskToolPolicy,
   type MemoryStatus,
+  type PersonalModelConfidence,
+  type PersonalModelEventType,
+  type PersonalModelLayer,
+  type PersonalModelScenario,
+  type PersonalModelSensitivity,
+  type PersonalModelStatus,
+  type PersonalModelUsagePolicy,
   type RunStatus,
   type ScheduleCadence,
   type ScheduleExecutionStatus,
@@ -69,6 +76,33 @@ export interface ApprovalRequestRecord {
   code: string;
   createdAt: number;
   decidedAt: number | null;
+}
+
+export interface PersonalModelClaimRecord {
+  id: string;
+  ownerTgUserId: number;
+  claim: string;
+  layer: PersonalModelLayer;
+  scenario: PersonalModelScenario;
+  confidence: PersonalModelConfidence;
+  status: PersonalModelStatus;
+  usagePolicy: PersonalModelUsagePolicy;
+  sensitivity: PersonalModelSensitivity;
+  validFrom: number | null;
+  validUntil: number | null;
+  lastConfirmedAt: number | null;
+  metadataJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PersonalModelEventRecord {
+  id: string;
+  claimId: string | null;
+  ownerTgUserId: number;
+  eventType: PersonalModelEventType;
+  payloadJson: string;
+  createdAt: number;
 }
 
 export interface SkillRecord {
@@ -274,6 +308,54 @@ export interface AgentRepositories {
     ownerTgUserId: number,
     limit: number
   ): Promise<ApprovalRequestRecord[]>;
+  createPersonalModelClaim(input: Omit<PersonalModelClaimRecord, "createdAt" | "updatedAt"> & {
+    createdAt: number;
+    updatedAt: number;
+  }): Promise<PersonalModelClaimRecord>;
+  updatePersonalModelClaim(input: {
+    ownerTgUserId: number;
+    id: string;
+    patch: Partial<
+      Pick<
+        PersonalModelClaimRecord,
+        | "claim"
+        | "layer"
+        | "scenario"
+        | "confidence"
+        | "status"
+        | "usagePolicy"
+        | "sensitivity"
+        | "validFrom"
+        | "validUntil"
+        | "lastConfirmedAt"
+        | "metadataJson"
+      >
+    >;
+    updatedAt: number;
+  }): Promise<PersonalModelClaimRecord | null>;
+  getPersonalModelClaim(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<PersonalModelClaimRecord | null>;
+  listPersonalModelClaims(input: {
+    ownerTgUserId: number;
+    limit: number;
+    status?: PersonalModelStatus;
+    scenario?: PersonalModelScenario;
+  }): Promise<PersonalModelClaimRecord[]>;
+  listActivePersonalModelClaims(input: {
+    ownerTgUserId: number;
+    limit: number;
+    now: number;
+  }): Promise<PersonalModelClaimRecord[]>;
+  createPersonalModelEvent(
+    input: PersonalModelEventRecord
+  ): Promise<PersonalModelEventRecord>;
+  listPersonalModelEvents(input: {
+    ownerTgUserId: number;
+    claimId: string;
+    limit: number;
+  }): Promise<PersonalModelEventRecord[]>;
   createSkill(input: {
     ownerTgUserId: number;
     manifest: SkillManifest;

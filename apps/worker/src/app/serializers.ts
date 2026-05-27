@@ -4,6 +4,8 @@ import {
   type LongTaskRecord,
   type LongTaskStepRecord,
   type MemoryRecord,
+  type PersonalModelClaimRecord,
+  type PersonalModelEventRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
   type ScheduleRecord,
@@ -68,6 +70,35 @@ export function toAdminApproval(approval: ApprovalRequestRecord) {
     code: approval.code,
     createdAt: approval.createdAt,
     decidedAt: approval.decidedAt
+  };
+}
+
+export function toAdminPersonalModelClaim(claim: PersonalModelClaimRecord) {
+  return {
+    id: claim.id,
+    claim: claim.claim,
+    layer: claim.layer,
+    scenario: claim.scenario,
+    confidence: claim.confidence,
+    status: claim.status,
+    usagePolicy: claim.usagePolicy,
+    sensitivity: claim.sensitivity,
+    validFrom: claim.validFrom,
+    validUntil: claim.validUntil,
+    lastConfirmedAt: claim.lastConfirmedAt,
+    metadataJson: claim.metadataJson,
+    createdAt: claim.createdAt,
+    updatedAt: claim.updatedAt
+  };
+}
+
+export function toAdminPersonalModelEvent(event: PersonalModelEventRecord) {
+  return {
+    id: event.id,
+    claimId: event.claimId,
+    eventType: event.eventType,
+    payloadJson: event.payloadJson,
+    createdAt: event.createdAt
   };
 }
 

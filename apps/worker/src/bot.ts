@@ -1,6 +1,10 @@
 import {
   builtInToolNames,
+  personalModelLayers,
+  personalModelScenarios,
   type SkillManifest,
+  type PersonalModelLayer,
+  type PersonalModelScenario,
   type SkillRouteTriggerType,
   type ToolRiskLevel
 } from "@personal-agent/shared";
@@ -80,6 +84,7 @@ export interface SkillMatch {
 const CREATE_TODO_PATTERN = /^(新增待办|创建待办)[:：]\s*(.+)$/u;
 const COMPLETE_TODO_PATTERN = /^完成待办\s+(\d+)$/u;
 const REMEMBER_PATTERN = /^记住[:：]\s*(.+)$/u;
+const RECORD_UNDERSTANDING_PATTERN = /^记录理解[:：]\s*(.+)$/u;
 const SEARCH_MEMORY_PATTERN = /^(搜索记忆|你记得)\s*(.+)$/u;
 const DELETE_MEMORY_PATTERN = /^删除记忆\s+(\d+)$/u;
 const APPROVAL_PATTERN = /^(确认)\s+([A-Za-z0-9-]+)$|^(取消)\s+(\d{6})$/u;
@@ -94,6 +99,39 @@ export function normalizeMemoryContent(content: string): string {
 function trimRequired(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function parsePersonalModelClaimInput(input: string): {
+  claim: string;
+  layer: PersonalModelLayer;
+  scenario: PersonalModelScenario;
+} | null {
+  const text = input.trim();
+  if (!text) {
+    return null;
+  }
+
+  const match = /^\[([^/\]]+)\/([^/\]]+)\]\s*([\s\S]+)$/u.exec(text);
+  if (!match) {
+    return {
+      claim: text,
+      layer: "preference",
+      scenario: "global"
+    };
+  }
+
+  const layer = match[1] as PersonalModelLayer;
+  const scenario = match[2] as PersonalModelScenario;
+  const claim = trimRequired(match[3] ?? "");
+  if (
+    !claim ||
+    !personalModelLayers.includes(layer) ||
+    !personalModelScenarios.includes(scenario)
+  ) {
+    return null;
+  }
+
+  return { claim, layer, scenario };
 }
 
 function formatTodos(
@@ -339,6 +377,65 @@ export async function executeCommand(
       riskLevel: "write_low",
       input: { content },
       output: { id: memory.id }
+    };
+  }
+
+  const recordUnderstanding = RECORD_UNDERSTANDING_PATTERN.exec(text);
+  if (recordUnderstanding) {
+    const parsedClaim = parsePersonalModelClaimInput(
+      recordUnderstanding[1] ?? ""
+    );
+    if (!parsedClaim) {
+      return {
+        responseText:
+          "理解内容不能为空。可选格式：记录理解：[preference/writing] 写作默认保留我的表达气质",
+        toolName: "personal_model_claim_create",
+        riskLevel: "write_low",
+        input: { text },
+        output: { created: false }
+      };
+    }
+
+    const now = context.runtime.now();
+    const claim = await repositories.createPersonalModelClaim({
+      id: context.runtime.generateId(),
+      ownerTgUserId: context.ownerTgUserId,
+      claim: parsedClaim.claim,
+      layer: parsedClaim.layer,
+      scenario: parsedClaim.scenario,
+      confidence: "high",
+      status: "active",
+      usagePolicy: "default_available",
+      sensitivity: "medium",
+      validFrom: null,
+      validUntil: null,
+      lastConfirmedAt: now,
+      metadataJson: JSON.stringify({
+        source: "telegram_manual",
+        syntax: text.includes("[") ? "typed" : "default"
+      }),
+      createdAt: now,
+      updatedAt: now
+    });
+    await repositories.createPersonalModelEvent({
+      id: context.runtime.generateId(),
+      claimId: claim.id,
+      ownerTgUserId: context.ownerTgUserId,
+      eventType: "created",
+      payloadJson: JSON.stringify({ source: "telegram_manual" }),
+      createdAt: now
+    });
+
+    return {
+      responseText: `已记录理解 ${claim.id}。`,
+      toolName: "personal_model_claim_create",
+      riskLevel: "write_low",
+      input: {
+        claim: parsedClaim.claim,
+        layer: parsedClaim.layer,
+        scenario: parsedClaim.scenario
+      },
+      output: { id: claim.id }
     };
   }
 

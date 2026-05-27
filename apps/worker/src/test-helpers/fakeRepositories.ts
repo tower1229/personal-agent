@@ -17,6 +17,8 @@ import {
   type LongTaskRecord,
   type LongTaskStepRecord,
   type MemoryRecord,
+  type PersonalModelClaimRecord,
+  type PersonalModelEventRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
   type ScheduleRecord,
@@ -89,6 +91,8 @@ export function createFakeRepositories(): AgentRepositories & {
   toolCalls: ToolCallRecord[];
   todos: TodoRecord[];
   memories: MemoryRecord[];
+  personalModelClaims: PersonalModelClaimRecord[];
+  personalModelEvents: PersonalModelEventRecord[];
   approvals: ApprovalRequestRecord[];
   skills: SkillRecord[];
   skillVersions: SkillVersionRecord[];
@@ -105,6 +109,8 @@ export function createFakeRepositories(): AgentRepositories & {
     toolCalls: [] as ToolCallRecord[],
     todos: [] as TodoRecord[],
     memories: [] as MemoryRecord[],
+    personalModelClaims: [] as PersonalModelClaimRecord[],
+    personalModelEvents: [] as PersonalModelEventRecord[],
     approvals: [] as ApprovalRequestRecord[],
     skills: [] as SkillRecord[],
     skillVersions: [] as SkillVersionRecord[],
@@ -131,6 +137,12 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     get memories() {
       return state.memories;
+    },
+    get personalModelClaims() {
+      return state.personalModelClaims;
+    },
+    get personalModelEvents() {
+      return state.personalModelEvents;
     },
     get approvals() {
       return state.approvals;
@@ -336,6 +348,82 @@ export function createFakeRepositories(): AgentRepositories & {
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
+    },
+    async createPersonalModelClaim(input) {
+      const claim: PersonalModelClaimRecord = { ...input };
+      state.personalModelClaims.push(claim);
+      return claim;
+    },
+    async updatePersonalModelClaim(input) {
+      const claim = state.personalModelClaims.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+      );
+      if (!claim) {
+        return null;
+      }
+      for (const [key, value] of Object.entries(input.patch)) {
+        if (value !== undefined) {
+          Object.assign(claim, { [key]: value });
+        }
+      }
+      claim.updatedAt = input.updatedAt;
+      return claim;
+    },
+    async getPersonalModelClaim(input) {
+      return (
+        state.personalModelClaims.find(
+          (claim) =>
+            claim.ownerTgUserId === input.ownerTgUserId &&
+            claim.id === input.id
+        ) ?? null
+      );
+    },
+    async listPersonalModelClaims(input) {
+      return state.personalModelClaims
+        .filter(
+          (claim) =>
+            claim.ownerTgUserId === input.ownerTgUserId &&
+            (!input.status || claim.status === input.status) &&
+            (!input.scenario || claim.scenario === input.scenario)
+        )
+        .slice()
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, input.limit);
+    },
+    async listActivePersonalModelClaims(input) {
+      return state.personalModelClaims
+        .filter(
+          (claim) =>
+            claim.ownerTgUserId === input.ownerTgUserId &&
+            claim.status === "active" &&
+            claim.usagePolicy !== "do_not_use" &&
+            (claim.validFrom === null || claim.validFrom <= input.now) &&
+            (claim.validUntil === null || claim.validUntil > input.now)
+        )
+        .slice()
+        .sort((left, right) => {
+          const confidenceRank = { high: 0, medium: 1, low: 2 };
+          const diff =
+            confidenceRank[left.confidence] - confidenceRank[right.confidence];
+          return diff || right.updatedAt - left.updatedAt;
+        })
+        .slice(0, input.limit);
+    },
+    async createPersonalModelEvent(input) {
+      state.personalModelEvents.push(input);
+      return input;
+    },
+    async listPersonalModelEvents(input) {
+      return state.personalModelEvents
+        .filter(
+          (event) =>
+            event.ownerTgUserId === input.ownerTgUserId &&
+            event.claimId === input.claimId
+        )
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, input.limit);
     },
     async createSkill(input) {
       const skill: SkillRecord = {

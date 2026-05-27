@@ -284,9 +284,16 @@ describe("worker system and bot commands", () => {
       migrationCommand: "npm run d1:migrate:worker:remote",
       requiredTables: expect.arrayContaining([
         { name: "runs", present: true },
-        { name: "skills", present: false }
+        { name: "skills", present: false },
+        { name: "personal_model_claims", present: false },
+        { name: "personal_model_events", present: false }
       ]),
-      missingTables: expect.arrayContaining(["skills", "schedules"])
+      missingTables: expect.arrayContaining([
+        "skills",
+        "schedules",
+        "personal_model_claims",
+        "personal_model_events"
+      ])
     });
   });
 
@@ -353,6 +360,222 @@ describe("worker system and bot commands", () => {
       "删除记忆 #1 需要确认。发送：确认 123456",
       "已删除记忆 #1。"
     ]);
+  });
+
+  it("records personal model claims from Telegram", async () => {
+    const { app, repositories, telegramClient } = createTestApp();
+
+    await postWebhook(
+      app,
+      ownerUpdate("记录理解：写作默认保留我的表达气质", 1)
+    );
+
+    expect(repositories.personalModelClaims[0]).toMatchObject({
+      claim: "写作默认保留我的表达气质",
+      layer: "preference",
+      scenario: "global",
+      confidence: "high",
+      status: "active",
+      usagePolicy: "default_available"
+    });
+    expect(repositories.personalModelEvents[0]).toMatchObject({
+      claimId: repositories.personalModelClaims[0]?.id,
+      eventType: "created"
+    });
+    expect(telegramClient.messages[0]?.text).toBe("已记录理解 id-3。");
+  });
+
+  it("records typed personal model claims from Telegram", async () => {
+    const { app, repositories } = createTestApp();
+
+    await postWebhook(
+      app,
+      ownerUpdate("记录理解：[pattern/relationship] 我在关系问题中重视边界判断", 1)
+    );
+
+    expect(repositories.personalModelClaims[0]).toMatchObject({
+      claim: "我在关系问题中重视边界判断",
+      layer: "pattern",
+      scenario: "relationship",
+      confidence: "high",
+      status: "active"
+    });
+  });
+
+  it("serves personal model admin CRUD behind authentication", async () => {
+    const { app, repositories } = createTestApp();
+    const unauthenticated = await app.request(
+      "/api/admin/personal-model/claims",
+      {},
+      env
+    );
+    expect(unauthenticated.status).toBe(401);
+
+    const cookie = await ownerCookie();
+    const created = await app.request(
+      "/api/admin/personal-model/claims",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          claim: "观点锋利，语气平静，态度温和",
+          layer: "preference",
+          scenario: "global",
+          confidence: "high",
+          status: "active",
+          usagePolicy: "default_available",
+          sensitivity: "medium",
+          metadata: { source: "test" }
+        })
+      },
+      env
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as { id: string };
+
+    const patched = await app.request(
+      `/api/admin/personal-model/claims/${createdBody.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          usagePolicy: "do_not_use",
+          status: "deprecated"
+        })
+      },
+      env
+    );
+    expect(patched.status).toBe(200);
+
+    const listed = await app.request(
+      "/api/admin/personal-model/claims",
+      {
+        headers: { Cookie: cookie }
+      },
+      env
+    );
+    await expect(listed.json()).resolves.toMatchObject({
+      items: [
+        {
+          id: createdBody.id,
+          claim: "观点锋利，语气平静，态度温和",
+          status: "deprecated",
+          usagePolicy: "do_not_use"
+        }
+      ]
+    });
+    const detail = await app.request(
+      `/api/admin/personal-model/claims/${createdBody.id}`,
+      {
+        headers: { Cookie: cookie }
+      },
+      env
+    );
+    await expect(detail.json()).resolves.toMatchObject({
+      claim: {
+        id: createdBody.id,
+        status: "deprecated"
+      },
+      events: [
+        {
+          eventType: "updated"
+        },
+        {
+          eventType: "created"
+        }
+      ]
+    });
+    expect(repositories.personalModelEvents.map((event) => event.eventType)).toEqual([
+      "created",
+      "updated"
+    ]);
+  });
+
+  it("injects active personal model claims into LLM context and excludes do_not_use claims", async () => {
+    const { app, repositories, llmClient } = createTestApp();
+    await repositories.createPersonalModelClaim({
+      id: "claim-active",
+      ownerTgUserId: 1229,
+      claim: "写作默认保留表达气质",
+      layer: "preference",
+      scenario: "global",
+      confidence: "high",
+      status: "active",
+      usagePolicy: "default_available",
+      sensitivity: "medium",
+      validFrom: null,
+      validUntil: null,
+      lastConfirmedAt: 1000,
+      metadataJson: "{}",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+    await repositories.createPersonalModelClaim({
+      id: "claim-blocked",
+      ownerTgUserId: 1229,
+      claim: "这条不应该进入上下文",
+      layer: "preference",
+      scenario: "global",
+      confidence: "high",
+      status: "active",
+      usagePolicy: "do_not_use",
+      sensitivity: "medium",
+      validFrom: null,
+      validUntil: null,
+      lastConfirmedAt: 1000,
+      metadataJson: "{}",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+    await repositories.createPersonalModelClaim({
+      id: "claim-relationship",
+      ownerTgUserId: 1229,
+      claim: "关系问题中优先判断边界",
+      layer: "pattern",
+      scenario: "relationship",
+      confidence: "high",
+      status: "active",
+      usagePolicy: "default_available",
+      sensitivity: "medium",
+      validFrom: null,
+      validUntil: null,
+      lastConfirmedAt: 1000,
+      metadataJson: "{}",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+    await repositories.createPersonalModelClaim({
+      id: "claim-future",
+      ownerTgUserId: 1229,
+      claim: "未来才生效的理解",
+      layer: "preference",
+      scenario: "global",
+      confidence: "high",
+      status: "active",
+      usagePolicy: "default_available",
+      sensitivity: "medium",
+      validFrom: 999999,
+      validUntil: null,
+      lastConfirmedAt: 1000,
+      metadataJson: "{}",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+
+    await postWebhook(app, ownerUpdate("帮我改这段文字", 1));
+
+    const systemText = llmClient.calls.at(-1)?.[0]?.content ?? "";
+    expect(systemText).toContain("写作默认保留表达气质");
+    expect(systemText).toContain("关系问题中优先判断边界");
+    expect(systemText).not.toContain("这条不应该进入上下文");
+    expect(systemText).not.toContain("未来才生效的理解");
+    expect(systemText).toContain("默认隐性使用个人模型");
   });
 
   it("marks the run failed when Telegram sendMessage fails without returning 5xx", async () => {

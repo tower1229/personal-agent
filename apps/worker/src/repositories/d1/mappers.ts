@@ -4,6 +4,13 @@ import {
   type LongTaskStepStatus,
   type LongTaskToolPolicy,
   type MemoryStatus,
+  type PersonalModelConfidence,
+  type PersonalModelEventType,
+  type PersonalModelLayer,
+  type PersonalModelScenario,
+  type PersonalModelSensitivity,
+  type PersonalModelStatus,
+  type PersonalModelUsagePolicy,
   type RunStatus,
   type ScheduleCadence,
   type ScheduleExecutionStatus,
@@ -22,6 +29,8 @@ import {
   type LongTaskRecord,
   type LongTaskStepRecord,
   type MemoryRecord,
+  type PersonalModelClaimRecord,
+  type PersonalModelEventRecord,
   type RunnableSkillRecord,
   type RunRecord,
   type SkillRecord,
@@ -88,6 +97,33 @@ export interface ApprovalRequestRow {
   code: string;
   created_at: number;
   decided_at: number | null;
+}
+
+export interface PersonalModelClaimRow {
+  id: string;
+  owner_tg_user_id: number;
+  claim: string;
+  layer: PersonalModelLayer;
+  scenario: PersonalModelScenario;
+  confidence: PersonalModelConfidence;
+  status: PersonalModelStatus;
+  usage_policy: PersonalModelUsagePolicy;
+  sensitivity: PersonalModelSensitivity;
+  valid_from: number | null;
+  valid_until: number | null;
+  last_confirmed_at: number | null;
+  metadata_json: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PersonalModelEventRow {
+  id: string;
+  claim_id: string | null;
+  owner_tg_user_id: number;
+  event_type: PersonalModelEventType;
+  payload_json: string;
+  created_at: number;
 }
 
 export interface SkillRow {
@@ -276,6 +312,41 @@ export function toApproval(row: ApprovalRequestRow): ApprovalRequestRecord {
     code: row.code,
     createdAt: row.created_at,
     decidedAt: row.decided_at
+  };
+}
+
+export function toPersonalModelClaim(
+  row: PersonalModelClaimRow
+): PersonalModelClaimRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    claim: row.claim,
+    layer: row.layer,
+    scenario: row.scenario,
+    confidence: row.confidence,
+    status: row.status,
+    usagePolicy: row.usage_policy,
+    sensitivity: row.sensitivity,
+    validFrom: row.valid_from,
+    validUntil: row.valid_until,
+    lastConfirmedAt: row.last_confirmed_at,
+    metadataJson: row.metadata_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function toPersonalModelEvent(
+  row: PersonalModelEventRow
+): PersonalModelEventRecord {
+  return {
+    id: row.id,
+    claimId: row.claim_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    eventType: row.event_type,
+    payloadJson: row.payload_json,
+    createdAt: row.created_at
   };
 }
 

@@ -36,6 +36,11 @@ const DataPage = lazy(() =>
     default: module.DataPage
   }))
 );
+const PersonalModelPage = lazy(() =>
+  import("@/pages/personal-model-page").then((module) => ({
+    default: module.PersonalModelPage
+  }))
+);
 const ApprovalsPage = lazy(() =>
   import("@/pages/approvals-page").then((module) => ({
     default: module.ApprovalsPage
@@ -99,6 +104,10 @@ export function App() {
             <Route element={<SchedulesPage />} path="/admin/schedules/:id" />
             <Route element={<DataPage />} path="/admin/data/todos" />
             <Route element={<DataPage />} path="/admin/data/memories" />
+            <Route
+              element={<PersonalModelPage />}
+              path="/admin/personal-model"
+            />
             <Route element={<ApprovalsPage />} path="/admin/approvals" />
             <Route element={<SettingsPage />} path="/admin/settings" />
             <Route
