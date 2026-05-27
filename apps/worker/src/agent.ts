@@ -574,9 +574,25 @@ export async function executeLlmAgent(
     });
   }
 
+  const profile = await input.runtime.repositories.getUserProfile(input.ownerTgUserId.toString());
+  let profileContext = "";
+  if (profile) {
+    const parts = [];
+    if (profile.name) parts.push(`称呼: ${profile.name}`);
+    if (profile.gender) parts.push(`性别: ${profile.gender}`);
+    if (profile.birthdayTimestamp) {
+      const age = new Date(input.runtime.now() - profile.birthdayTimestamp).getUTCFullYear() - 1970;
+      parts.push(`真实年龄: ${age}岁`);
+    }
+    if (parts.length > 0) {
+      profileContext = `[用户档案: ${parts.join(", ")}]`;
+    }
+  }
+
   const systemInstructions = [
     "你是一个个人 Telegram agent。用简洁中文回答。",
     "你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。",
+    profileContext,
     "默认隐性使用个人模型，不要频繁显性引用旧资料或展示你有多了解用户。",
     "当用户情绪或真实需求不确定时，先给轻量判断，再问一个关键校准问题，不要直接定性。",
     "可以指出逃避、投射、控制欲、自我合理化和分析过度，但语气必须平静，态度必须温和。",

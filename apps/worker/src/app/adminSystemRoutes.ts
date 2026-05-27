@@ -27,7 +27,9 @@ import {
   adminRunsResponseSchema,
   adminTodosResponseSchema,
   skillManifestSchema,
-  telegramWebhookResponseSchema
+  telegramWebhookResponseSchema,
+  userProfileSchema,
+  userProfileUpdateRequestSchema
 } from "@personal-agent/shared";
 import {
   buildExpiredSessionCookie,
@@ -248,6 +250,55 @@ export function registerAdminSystemRoutes(
         user: session
       })
     );
+  });
+
+  app.get("/api/admin/profile", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const profile = await repositories(c.env).getUserProfile(authenticatedOwnerId.toString());
+    if (!profile) {
+      return c.json(userProfileSchema.parse({
+        id: authenticatedOwnerId.toString(),
+        name: "",
+        birthdayTimestamp: null,
+        gender: null,
+        createdAt: (options.now ?? Date.now)(),
+        updatedAt: (options.now ?? Date.now)()
+      }));
+    }
+    return c.json(userProfileSchema.parse(profile));
+  });
+
+  app.put("/api/admin/profile", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = userProfileUpdateRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid request data" }, 400);
+    }
+
+    const existing = await repositories(c.env).getUserProfile(authenticatedOwnerId.toString());
+    const now = (options.now ?? Date.now)();
+    
+    const input = {
+      id: authenticatedOwnerId.toString(),
+      name: body.data.name !== undefined ? body.data.name : (existing?.name ?? ""),
+      birthdayTimestamp: body.data.birthdayTimestamp !== undefined ? body.data.birthdayTimestamp : (existing?.birthdayTimestamp ?? null),
+      gender: body.data.gender !== undefined ? body.data.gender : (existing?.gender ?? null),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    };
+
+    const updated = await repositories(c.env).upsertUserProfile(input);
+    return c.json(userProfileSchema.parse(updated));
   });
 
   app.post("/api/admin/logout", (c) => {

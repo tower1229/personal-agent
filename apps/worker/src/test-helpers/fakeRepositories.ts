@@ -32,7 +32,8 @@ import {
   type SkillRunRecord,
   type SkillVersionRecord,
   type TodoRecord,
-  type ToolCallRecord
+  type ToolCallRecord,
+  type UserProfileRecord
 } from "../repositories.js";
 import { type TelegramClient } from "../telegram.js";
 import { type WorkerEnv } from "../types.js";
@@ -113,6 +114,7 @@ export function createFakeRepositories(): AgentRepositories & {
   longTaskEvents: LongTaskEventRecord[];
   schedules: ScheduleRecord[];
   scheduleExecutions: ScheduleExecutionRecord[];
+  userProfiles: UserProfileRecord[];
 } {
   const state = {
     runs: [] as RunRecord[],
@@ -136,11 +138,15 @@ export function createFakeRepositories(): AgentRepositories & {
     longTaskEvents: [] as LongTaskEventRecord[],
     schedules: [] as ScheduleRecord[],
     scheduleExecutions: [] as ScheduleExecutionRecord[],
+    userProfiles: [] as UserProfileRecord[],
     nextTodoId: 1,
     nextMemoryId: 1
   };
 
   return {
+    get userProfiles() {
+      return state.userProfiles;
+    },
     get runs() {
       return state.runs;
     },
@@ -1044,6 +1050,18 @@ export function createFakeRepositories(): AgentRepositories & {
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
+    },
+    async getUserProfile(id) {
+      return state.userProfiles.find((p) => p.id === id) ?? null;
+    },
+    async upsertUserProfile(input) {
+      const existingIndex = state.userProfiles.findIndex((p) => p.id === input.id);
+      if (existingIndex !== -1) {
+        state.userProfiles[existingIndex] = input;
+      } else {
+        state.userProfiles.push(input);
+      }
+      return input;
     }
   };
 }

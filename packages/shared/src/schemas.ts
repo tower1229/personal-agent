@@ -965,3 +965,20 @@ export const adminPersonalModelUnderstandingGapCreateRequestSchema = z.object({
   gapDescription: z.string().min(1)
 });
 export type AdminPersonalModelUnderstandingGapCreateRequest = z.infer<typeof adminPersonalModelUnderstandingGapCreateRequestSchema>;
+
+export const userProfileSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  birthdayTimestamp: z.number().int().nullable(),
+  gender: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+export type UserProfile = z.infer<typeof userProfileSchema>;
+
+export const userProfileUpdateRequestSchema = z.object({
+  name: z.string().optional(),
+  birthdayTimestamp: z.number().int().nullable().optional(),
+  gender: z.string().nullable().optional()
+});
+export type UserProfileUpdateRequest = z.infer<typeof userProfileUpdateRequestSchema>;

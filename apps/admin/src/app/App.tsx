@@ -61,6 +61,11 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage
   }))
 );
+const ProfilePage = lazy(() =>
+  import("@/pages/profile-page").then((module) => ({
+    default: module.ProfilePage
+  }))
+);
 
 function RequireAuth() {
   const auth = useAuth();
@@ -121,6 +126,7 @@ export function App() {
             <Route element={<GapsPage />} path="/admin/personal-model/gaps" />
             <Route element={<MetacognitionPage />} path="/admin/personal-model/metacognition" />
             <Route element={<ApprovalsPage />} path="/admin/approvals" />
+            <Route element={<ProfilePage />} path="/admin/profile" />
             <Route element={<SettingsPage />} path="/admin/settings" />
             <Route
               element={<SettingsPage diagnostics />}

@@ -12,9 +12,10 @@ import {
   LogOutIcon,
   MenuIcon,
   SettingsIcon,
-  WrenchIcon,
   HelpCircleIcon,
   EyeIcon,
+  UserCircleIcon,
+  WrenchIcon,
   type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ const primaryNav: NavItem[] = [
 ];
 
 const secondaryNav: NavItem[] = [
+  { label: "Profile", to: "/admin/profile", icon: UserCircleIcon },
   { label: "Data", to: "/admin/data/todos", icon: DatabaseIcon },
   { label: "Personal Model", to: "/admin/personal-model", icon: BrainIcon },
   { label: "Gaps", to: "/admin/personal-model/gaps", icon: HelpCircleIcon },

@@ -43,6 +43,8 @@ export function createD1CoreDataRepositories(
   | "findPendingApprovalByCode"
   | "updateApprovalStatus"
   | "listApprovals"
+  | "getUserProfile"
+  | "upsertUserProfile"
 > {
   return {
     async createTodo(input) {
@@ -267,5 +269,50 @@ export function createD1CoreDataRepositories(
       return (results ?? []).map(toApproval);
     },
 
+    async getUserProfile(id) {
+      const row = await db
+        .prepare(`SELECT * FROM user_profiles WHERE id = ?`)
+        .bind(id)
+        .first<{
+          id: string;
+          name: string;
+          birthday_timestamp: number | null;
+          gender: string | null;
+          created_at: number;
+          updated_at: number;
+        }>();
+      if (!row) return null;
+      return {
+        id: row.id,
+        name: row.name,
+        birthdayTimestamp: row.birthday_timestamp,
+        gender: row.gender,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+    },
+
+    async upsertUserProfile(input) {
+      await db
+        .prepare(
+          `INSERT INTO user_profiles (id, name, birthday_timestamp, gender, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET
+             name = excluded.name,
+             birthday_timestamp = excluded.birthday_timestamp,
+             gender = excluded.gender,
+             updated_at = excluded.updated_at`
+        )
+        .bind(
+          input.id,
+          input.name,
+          input.birthdayTimestamp,
+          input.gender,
+          input.createdAt,
+          input.updatedAt
+        )
+        .run();
+      return input;
+    }
   };
 }

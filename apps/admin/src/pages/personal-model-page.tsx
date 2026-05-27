@@ -39,7 +39,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { createPersonalModelClaim, createPersonalModelEvidence, createPersonalModelSource, loadPersonalModelClaimDetail, loadPersonalModelClaims, loadPersonalModelSourceDetail, loadPersonalModelSources, updatePersonalModelClaim, updatePersonalModelSource } from "@/lib/api";
-import { formatDateTime, truncateText } from "@/lib/format";
+import { formatDateTime, parseLocalYMD, truncateText } from "@/lib/format";
 import { EmptyState, Field, filterText, useAsyncData } from "./resource-common";
 
 interface ClaimFormState {
@@ -64,12 +64,14 @@ interface SourceFormState {
   title: string;
   content: string;
   sourceType: PersonalModelSourceType;
+  sourceCreatedAt: string;
 }
 
 const emptySourceForm: SourceFormState = {
   title: "",
   content: "",
-  sourceType: "manual_note"
+  sourceType: "manual_note",
+  sourceCreatedAt: ""
 };
 
 export function PersonalModelPage() {
@@ -202,6 +204,7 @@ export function PersonalModelPage() {
         uri: null,
         usagePolicy: "default_available",
         sensitivity: "medium",
+        sourceCreatedAt: sourceForm.sourceCreatedAt ? parseLocalYMD(sourceForm.sourceCreatedAt) : null,
         metadata: { source: "admin" }
       });
       toast.success(`已导入资料，生成 ${detail.chunks.length} 个 chunk`);
@@ -580,7 +583,7 @@ export function PersonalModelPage() {
                     <Field label="Upload File">
                       <Input accept=".md,.txt" onChange={handleFileUpload} type="file" />
                     </Field>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-3">
                       <Field label="Title">
                         <Input
                           onChange={(event) =>
@@ -602,6 +605,18 @@ export function PersonalModelPage() {
                             }))
                           }
                           value={sourceForm.sourceType}
+                        />
+                      </Field>
+                      <Field label="Authored Date">
+                        <Input
+                          type="date"
+                          onChange={(event) =>
+                            setSourceForm((current) => ({
+                              ...current,
+                              sourceCreatedAt: event.target.value
+                            }))
+                          }
+                          value={sourceForm.sourceCreatedAt}
                         />
                       </Field>
                     </div>

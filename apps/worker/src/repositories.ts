@@ -302,6 +302,15 @@ export interface LongTaskEventRecord {
   createdAt: number;
 }
 
+export interface UserProfileRecord {
+  id: string;
+  name: string;
+  birthdayTimestamp: number | null;
+  gender: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AgentRepositories {
   createRun(input: Omit<RunRecord, "status" | "responseText" | "error">): Promise<RunRecord>;
   updateRun(
@@ -663,4 +672,6 @@ export interface AgentRepositories {
     ownerTgUserId: number;
     runId: string;
   }): Promise<ScheduleExecutionRecord | null>;
+  getUserProfile(id: string): Promise<UserProfileRecord | null>;
+  upsertUserProfile(input: UserProfileRecord): Promise<UserProfileRecord>;
 }

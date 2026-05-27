@@ -40,6 +40,9 @@ import {
   adminSkillsResponseSchema,
   adminSkillUpsertRequestSchema,
   adminTodosResponseSchema,
+  userProfileSchema,
+  type UserProfile,
+  type UserProfileUpdateRequest,
   type AdminAgentConfigResponse,
   type AdminAgentTestLlmResponse,
   type AdminAgentTestSearchResponse,
@@ -534,5 +537,22 @@ export function testSearch(
     "POST",
     { query },
     (input) => adminAgentTestSearchResponseSchema.parse(input)
+  );
+}
+
+export function loadProfile(): Promise<UserProfile> {
+  return fetchJson("/api/admin/profile", (input) =>
+    userProfileSchema.parse(input)
+  );
+}
+
+export function updateProfile(
+  request: UserProfileUpdateRequest
+): Promise<UserProfile> {
+  return sendJson(
+    "/api/admin/profile",
+    "PUT",
+    request,
+    (input) => userProfileSchema.parse(input)
   );
 }
