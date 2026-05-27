@@ -125,6 +125,24 @@
 
 ## Batch 2: Evidence And Source Governance
 
+状态：已完成。
+
+完成时间：2026-05-27。
+
+完成证据：
+
+- 已新增 `apps/worker/migrations/0006_personal_model_sources.sql`，包含 `source_documents`、`source_chunks` 和 `personal_model_evidence`。
+- 已在 `packages/shared` 增加 source/chunk/evidence 常量、schema 和 Admin DTO。
+- 已实现 Worker repository、D1 mapper、Admin API、serializer 和 D1 readiness 检查。
+- 已新增基础 source chunking，支持 Markdown/文本按标题、段落和长度切分，并保存 `normalized_content`、`chunk_index`、`token_count`、metadata。
+- 已扩展 Admin `Personal Model` 页面，支持手动导入 source、查看 chunks、更新 source 治理字段，并在 claim detail 中查看/添加 evidence。
+- 已保护 source 原文不可通过 Admin PATCH 改写；PATCH 只更新 title、uri、status、usage policy、sensitivity、时间和 metadata 等治理字段。
+- 已支持 claim 关联 `source_chunk`、conversation run、manual confirmation、admin edit 等证据类型。
+- 最终验证通过：
+  - `npm.cmd run typecheck`
+  - `npm.cmd test`：8 个测试文件，52 条测试
+  - `npm.cmd run build`
+
 目标：把“原始证据”和“结论型理解”分开，避免 personal model 变成不可追溯的主观判断。
 
 范围：
@@ -550,96 +568,95 @@
 
 ## Current Progress
 
-当前已完成 Batch 0 和 Batch 1。系统已经具备可治理的结构化个人理解模型 MVP：
+当前已完成 Batch 0、Batch 1 和 Batch 2。系统已经具备可治理、可追溯的结构化个人理解模型基础：
 
 - 用户能通过 Telegram 保存结构化个人理解。
 - Admin 能创建、查看、编辑、废弃 claim，并查看事件历史。
 - agent 能在 LLM fallback 中隐性使用有效 claim。
 - 测试证明 `do_not_use`、未来生效、非 active 的 claim 不会进入上下文。
+- Admin 能手动导入原始资料 source，并自动生成 chunks。
+- claim 可以关联 source chunk、run、manual confirmation、admin edit 等 evidence。
+- claim 详情能显示 evidence 链路和引用片段。
+- source 原文受保护，Admin PATCH 只能修改治理字段，不能改写原始内容。
 
 当前尚未完成：
 
-- 原始资料和结论型理解的证据链分离。
-- source document / chunk 导入。
-- claim 与 source/run/chunk 的 evidence 关联。
-- Admin Sources 页面。
 - Context assembler 的完整场景路由和 retrieval trace。
+- source chunk 尚未进入 runtime context selection。
+- `do_not_use` source 的运行时过滤需要在 Batch 3 context assembler 中强制实现并覆盖测试。
+- 自动网页抓取、GitHub/博客/QQ 空间等真实资料源批量接入尚未开始。
+- 向量检索和 hybrid retrieval 尚未开始。
 
 ## Next Development Task
 
-下一步进入 Batch 2：Evidence And Source Governance。
+下一步进入 Batch 3：Context Assembler And Scenario Routing。
 
-目标不是继续扩大 prompt 注入，而是先补上证据层，让 personal model claim 可以追溯到原始资料或对话来源，避免长期模型变成不可审计的主观结论。
+目标是把当前散落在 `executeLlmAgent` 里的 claim 注入逻辑收束成独立 context assembler，让 personal model 能稳定、可测试、可追踪地影响对话，同时把 source governance 真正纳入运行时过滤。
 
-### Batch 2 Recommended Scope
+### Batch 3 Recommended Scope
 
-本批建议作为一个完整闭环实现，不再拆成孤立的“只建表”或“只做页面”：
+本批建议围绕“选择什么上下文、为什么选择、为什么排除”建立一个完整闭环：
 
-1. 新增 D1 migration
-   - `source_documents`
-   - `source_chunks`
-   - `personal_model_evidence`
+1. 新增 context assembler 模块
+   - 从 `executeLlmAgent` 中抽出 personal model context selection。
+   - 输出 selected claims、selected chunks、excluded items 和 reason。
+   - 保持 token/条数上限。
 
-2. 增加 shared 常量和 schema
-   - source type
-   - source status
-   - source usage policy
-   - sensitivity
-   - evidence type
-   - Admin source/chunk/evidence DTO
+2. 实现场景分类与路由
+   - writing
+   - health
+   - relationship
+   - self_knowledge
+   - emotional_support
+   - work_decision
+   - technical_writing
+   - technical_collaboration
+   - global fallback
 
-3. 增加 Worker repository
-   - create/list/get/update source document
-   - create/list chunks
-   - create/list evidence
-   - claim detail 返回 evidence summary
+3. 实现 claim 选择策略
+   - active only
+   - 排除 `do_not_use`
+   - 时间有效过滤
+   - 高置信优先
+   - 场景匹配优先
+   - global claim 少量兜底
+   - sensitivity/usage policy 留出显式决策点
 
-4. 增加 Admin API
-   - `GET /api/admin/personal-model/sources`
-   - `POST /api/admin/personal-model/sources`
-   - `GET /api/admin/personal-model/sources/:id`
-   - `PATCH /api/admin/personal-model/sources/:id`
-   - `GET /api/admin/personal-model/claims/:id/evidence`
-   - `POST /api/admin/personal-model/claims/:id/evidence`
+4. 实现 source chunk 选择策略
+   - 先用 D1 keyword search 或 normalized content contains 的最小方案。
+   - 只选择 active source/chunk。
+   - 强制排除 `do_not_use` source。
+   - 按 source type、usage policy、sensitivity 过滤。
+   - 只在需要证据或文本上下文时注入少量 chunk。
 
-5. 增加 Admin UI
-   - `Personal Model / Sources` 视图
-   - 手动粘贴文本或 Markdown 导入
-   - 设置 title、uri、source_type、usage_policy、sensitivity
-   - 查看 chunks
-   - 在 claim detail 中查看和添加 evidence
+5. 增加 trace 记录
+   - 记录 selected claims/chunks。
+   - 记录 excluded item reason，例如 `do_not_use`、`expired`、`scenario_mismatch`、`source_hidden`。
+   - 可先写入 tool call metadata 或 personal model event，后续 Admin 展示再扩展。
 
-6. 实现基础 chunking
-   - Markdown 按标题和段落切分
-   - 普通文本按空行/长度切分
-   - 每个 chunk 保存 `chunk_index`、`content`、`normalized_content`、metadata
-
-7. 保护原始资料不可改写
-   - PATCH source 只允许改 metadata、usage_policy、status、sensitivity 等治理字段
-   - 不允许直接改 source/chunk 原文
-
-8. 测试与验证
-   - source import 创建 document 和 chunks
-   - source usage policy 可更新
-   - claim 可以关联 source chunk 或 run
-   - claim detail 能返回 evidence
-   - `do_not_use` source 不应被后续检索使用
+6. 测试与验证
+   - 写作问题优先选择 writing/global claim。
+   - 关系问题优先选择 relationship/emotional_support claim。
+   - 过期 current_state claim 不注入。
+   - `do_not_use` claim/source 不注入。
+   - hidden/deleted source 不注入。
+   - context assembler 单元测试覆盖场景、状态、策略和上限。
    - `npm.cmd run typecheck`
    - `npm.cmd test`
    - `npm.cmd run build`
 
-### Batch 2 Completion Marker
+### Batch 3 Completion Marker
 
-Batch 2 完成时，应能证明：
+Batch 3 完成时，应能证明：
 
 ```text
-用户可以在 Admin 导入一段原始资料；
-系统会保留原始资料和 chunks；
-一条 personal model claim 可以关联到具体 source chunk 或 run；
-Admin claim detail 能显示证据链；
-原始资料不能被随意改写，只能被治理、隐藏、排除或删除。
+同一句用户输入会先被归入合适场景；
+context assembler 会选择有限且相关的 claims/chunks；
+所有 do_not_use、过期、隐藏或策略不匹配的内容都会被排除；
+排除和选择原因可追踪；
+LLM fallback 使用 assembler 输出，而不是直接手写拼接 personal model claims。
 ```
 
-### Suggested First Step For Batch 2
+### Suggested First Step For Batch 3
 
-从 D1 migration 和 shared schema 开始，但同一批内必须继续打通 repository、Admin API、Admin UI 和测试。第一步建议新增 `0006_personal_model_sources.sql`，然后围绕 source document/chunk/evidence 建立最小 CRUD。
+先新增 `apps/worker/src/personalModelContext.ts`，把现有 LLM fallback 中的 claim selection 迁移进去，并用纯单元测试锁住当前行为；随后再加场景路由、source chunk selection 和 trace。

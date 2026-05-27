@@ -1,15 +1,28 @@
 import { useMemo, useState } from "react";
 import {
   personalModelConfidences,
+  personalModelEvidenceTypes,
+  personalModelEvidenceWeights,
   personalModelLayers,
   personalModelScenarios,
+  personalModelSensitivities,
+  personalModelSourceStatuses,
+  personalModelSourceTypes,
   personalModelStatuses,
   personalModelUsagePolicies,
   type AdminPersonalModelClaim,
   type AdminPersonalModelClaimEvent,
+  type AdminPersonalModelEvidence,
+  type AdminPersonalModelSourceChunk,
+  type AdminPersonalModelSourceDocument,
   type PersonalModelConfidence,
+  type PersonalModelEvidenceType,
+  type PersonalModelEvidenceWeight,
   type PersonalModelLayer,
   type PersonalModelScenario,
+  type PersonalModelSensitivity,
+  type PersonalModelSourceStatus,
+  type PersonalModelSourceType,
   type PersonalModelStatus,
   type PersonalModelUsagePolicy
 } from "@personal-agent/shared";
@@ -24,7 +37,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { createPersonalModelClaim, loadPersonalModelClaimDetail, loadPersonalModelClaims, updatePersonalModelClaim } from "@/lib/api";
+import { createPersonalModelClaim, createPersonalModelEvidence, createPersonalModelSource, loadPersonalModelClaimDetail, loadPersonalModelClaims, loadPersonalModelSourceDetail, loadPersonalModelSources, updatePersonalModelClaim, updatePersonalModelSource } from "@/lib/api";
 import { formatDateTime, truncateText } from "@/lib/format";
 import { EmptyState, Field, filterText, useAsyncData } from "./resource-common";
 
@@ -46,19 +59,53 @@ const emptyForm: ClaimFormState = {
   usagePolicy: "default_available"
 };
 
+interface SourceFormState {
+  title: string;
+  uri: string;
+  content: string;
+  sourceType: PersonalModelSourceType;
+  usagePolicy: PersonalModelUsagePolicy;
+  sensitivity: PersonalModelSensitivity;
+}
+
+const emptySourceForm: SourceFormState = {
+  title: "",
+  uri: "",
+  content: "",
+  sourceType: "manual_note",
+  usagePolicy: "default_available",
+  sensitivity: "medium"
+};
+
 export function PersonalModelPage() {
   const claims = useAsyncData(() => loadPersonalModelClaims(), []);
+  const sources = useAsyncData(() => loadPersonalModelSources(), []);
   const [query, setQuery] = useState("");
   const [scenario, setScenario] = useState("all");
   const [status, setStatus] = useState("all");
   const [form, setForm] = useState<ClaimFormState>(emptyForm);
+  const [sourceForm, setSourceForm] = useState<SourceFormState>(emptySourceForm);
   const [editing, setEditing] = useState<ClaimFormState>(emptyForm);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [events, setEvents] = useState<AdminPersonalModelClaimEvent[]>([]);
+  const [evidence, setEvidence] = useState<AdminPersonalModelEvidence[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [chunks, setChunks] = useState<AdminPersonalModelSourceChunk[]>([]);
+  const [selectedChunkId, setSelectedChunkId] = useState("");
+  const [evidenceType, setEvidenceType] =
+    useState<PersonalModelEvidenceType>("source_chunk");
+  const [evidenceWeight, setEvidenceWeight] =
+    useState<PersonalModelEvidenceWeight>("medium");
+  const [evidenceQuote, setEvidenceQuote] = useState("");
+  const [evidenceRunId, setEvidenceRunId] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function refreshClaims() {
     claims.setData(await loadPersonalModelClaims());
+  }
+
+  async function refreshSources() {
+    sources.setData(await loadPersonalModelSources());
   }
 
   const items = useMemo(
@@ -130,6 +177,7 @@ export function PersonalModelPage() {
     try {
       const detail = await loadPersonalModelClaimDetail(claim.id);
       setEvents(detail.events);
+      setEvidence(detail.evidence);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载详情失败");
     }
@@ -156,10 +204,119 @@ export function PersonalModelPage() {
       await refreshClaims();
       const detail = await loadPersonalModelClaimDetail(selectedClaimId);
       setEvents(detail.events);
+      setEvidence(detail.evidence);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitSource() {
+    if (!sourceForm.title.trim() || !sourceForm.content.trim()) {
+      toast.error("Title 和 Content 不能为空");
+      return;
+    }
+    setSaving(true);
+    try {
+      const detail = await createPersonalModelSource({
+        title: sourceForm.title.trim(),
+        content: sourceForm.content.trim(),
+        sourceType: sourceForm.sourceType,
+        uri: sourceForm.uri.trim() || null,
+        usagePolicy: sourceForm.usagePolicy,
+        sensitivity: sourceForm.sensitivity,
+        metadata: { source: "admin" }
+      });
+      toast.success(`已导入资料，生成 ${detail.chunks.length} 个 chunk`);
+      setSourceForm(emptySourceForm);
+      await refreshSources();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "导入失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function selectSource(source: AdminPersonalModelSourceDocument) {
+    setSelectedSourceId(source.id);
+    try {
+      const detail = await loadPersonalModelSourceDetail(source.id);
+      setChunks(detail.chunks);
+      setSelectedChunkId(detail.chunks[0]?.id ?? "");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载资料失败");
+    }
+  }
+
+  async function patchSource(
+    source: AdminPersonalModelSourceDocument,
+    request: {
+      status?: PersonalModelSourceStatus;
+      usagePolicy?: PersonalModelUsagePolicy;
+    }
+  ) {
+    try {
+      await updatePersonalModelSource({
+        id: source.id,
+        request
+      });
+      toast.success("已更新资料治理策略");
+      await refreshSources();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新失败");
+    }
+  }
+
+  async function addEvidence() {
+    if (!selectedClaimId) {
+      toast.error("请选择 claim");
+      return;
+    }
+    try {
+      const chunk = chunks.find((item) => item.id === selectedChunkId);
+      if (evidenceType === "source_chunk" && (!selectedSourceId || !chunk)) {
+        toast.error("请选择 source chunk");
+        return;
+      }
+      if (evidenceType === "conversation_run" && !evidenceRunId.trim()) {
+        toast.error("Run ID 不能为空");
+        return;
+      }
+      if (
+        evidenceType === "manual_confirmation" &&
+        !evidenceQuote.trim()
+      ) {
+        toast.error("Manual confirmation 需要 quote");
+        return;
+      }
+      await createPersonalModelEvidence({
+        claimId: selectedClaimId,
+        request: {
+          evidenceType,
+          sourceDocumentId:
+            evidenceType === "source_chunk" ? selectedSourceId : null,
+          sourceChunkId:
+            evidenceType === "source_chunk" ? selectedChunkId : null,
+          runId:
+            evidenceType === "conversation_run"
+              ? evidenceRunId.trim()
+              : null,
+          quote:
+            evidenceType === "source_chunk"
+              ? chunk?.content ?? null
+              : evidenceQuote.trim() || null,
+          weight: evidenceWeight
+        }
+      });
+      toast.success("已添加证据");
+      setEvidenceQuote("");
+      setEvidenceRunId("");
+      const detail = await loadPersonalModelClaimDetail(selectedClaimId);
+      setEvidence(detail.evidence);
+      setEvents(detail.events);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "添加证据失败");
     }
   }
 
@@ -374,6 +531,84 @@ export function PersonalModelPage() {
               </Button>
             </div>
             <div className="grid gap-2">
+              <h2 className="text-sm font-medium">Evidence</h2>
+              {evidence.length === 0 ? (
+                <EmptyState>暂无证据。</EmptyState>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Weight</TableHead>
+                      <TableHead>Quote</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {evidence.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.evidenceType}</TableCell>
+                        <TableCell>{item.sourceChunkId ?? item.runId}</TableCell>
+                        <TableCell>{item.weight}</TableCell>
+                        <TableCell className="max-w-md">
+                          {truncateText(item.quote ?? "", 160)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+              <div className="grid gap-3 md:grid-cols-[180px_1fr_180px_auto]">
+                <EnumSelect
+                  items={personalModelEvidenceTypes}
+                  onChange={(value) =>
+                    setEvidenceType(value as PersonalModelEvidenceType)
+                  }
+                  value={evidenceType}
+                />
+                {evidenceType === "source_chunk" ? (
+                  chunks.length > 0 ? (
+                    <EnumSelect
+                      items={chunks.map((chunk) => chunk.id)}
+                      onChange={setSelectedChunkId}
+                      value={selectedChunkId}
+                    />
+                  ) : (
+                    <Input disabled value="先选择一个包含 chunks 的 source" />
+                  )
+                ) : null}
+                {evidenceType === "conversation_run" ? (
+                  <Input
+                    onChange={(event) => setEvidenceRunId(event.target.value)}
+                    placeholder="Run ID"
+                    value={evidenceRunId}
+                  />
+                ) : null}
+                {evidenceType !== "source_chunk" &&
+                evidenceType !== "conversation_run" ? (
+                  <Input
+                    onChange={(event) => setEvidenceQuote(event.target.value)}
+                    placeholder="Quote / confirmation"
+                    value={evidenceQuote}
+                  />
+                ) : null}
+                <EnumSelect
+                  items={personalModelEvidenceWeights}
+                  onChange={(value) =>
+                    setEvidenceWeight(value as PersonalModelEvidenceWeight)
+                  }
+                  value={evidenceWeight}
+                />
+                <Button
+                  disabled={evidenceType === "source_chunk" && chunks.length === 0}
+                  onClick={() => void addEvidence()}
+                  type="button"
+                >
+                  Add Evidence
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2">
               <h2 className="text-sm font-medium">Events</h2>
               {events.length === 0 ? (
                 <EmptyState>暂无事件。</EmptyState>
@@ -403,6 +638,129 @@ export function PersonalModelPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sources</CardTitle>
+          <CardDescription>
+            导入原始资料并生成 chunks。原文不可在这里修改，只能治理使用策略。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Title">
+              <Input
+                onChange={(event) =>
+                  setSourceForm((current) => ({
+                    ...current,
+                    title: event.target.value
+                  }))
+                }
+                value={sourceForm.title}
+              />
+            </Field>
+            <Field label="URI">
+              <Input
+                onChange={(event) =>
+                  setSourceForm((current) => ({
+                    ...current,
+                    uri: event.target.value
+                  }))
+                }
+                value={sourceForm.uri}
+              />
+            </Field>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Field label="Source Type">
+              <EnumSelect
+                items={personalModelSourceTypes}
+                onChange={(value) =>
+                  setSourceForm((current) => ({
+                    ...current,
+                    sourceType: value as PersonalModelSourceType
+                  }))
+                }
+                value={sourceForm.sourceType}
+              />
+            </Field>
+            <Field label="Usage">
+              <EnumSelect
+                items={personalModelUsagePolicies}
+                onChange={(value) =>
+                  setSourceForm((current) => ({
+                    ...current,
+                    usagePolicy: value as PersonalModelUsagePolicy
+                  }))
+                }
+                value={sourceForm.usagePolicy}
+              />
+            </Field>
+            <Field label="Sensitivity">
+              <EnumSelect
+                items={personalModelSensitivities}
+                onChange={(value) =>
+                  setSourceForm((current) => ({
+                    ...current,
+                    sensitivity: value as PersonalModelSensitivity
+                  }))
+                }
+                value={sourceForm.sensitivity}
+              />
+            </Field>
+          </div>
+          <Field label="Content">
+            <Textarea
+              onChange={(event) =>
+                setSourceForm((current) => ({
+                  ...current,
+                  content: event.target.value
+                }))
+              }
+              value={sourceForm.content}
+            />
+          </Field>
+          <div>
+            <Button disabled={saving} onClick={() => void submitSource()}>
+              Import Source
+            </Button>
+          </div>
+          <SourcesTable
+            items={sources.data?.items ?? []}
+            loading={sources.loading}
+            onPatch={(source, request) => void patchSource(source, request)}
+            onSelect={(source) => void selectSource(source)}
+            selectedId={selectedSourceId}
+          />
+          {selectedSourceId ? (
+            <div className="grid gap-2">
+              <h2 className="text-sm font-medium">Chunks</h2>
+              {chunks.length === 0 ? (
+                <EmptyState>暂无 chunks。</EmptyState>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Content</TableHead>
+                      <TableHead>Tokens</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {chunks.map((chunk) => (
+                      <TableRow key={chunk.id}>
+                        <TableCell>{chunk.chunkIndex}</TableCell>
+                        <TableCell>{truncateText(chunk.content, 180)}</TableCell>
+                        <TableCell>{chunk.tokenCount}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
     </>
   );
 }
@@ -547,6 +905,90 @@ function ClaimsTable(props: {
               />
             </TableCell>
             <TableCell>{formatDateTime(claim.updatedAt)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function SourcesTable(props: {
+  items: AdminPersonalModelSourceDocument[];
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (source: AdminPersonalModelSourceDocument) => void;
+  onPatch: (
+    source: AdminPersonalModelSourceDocument,
+    request: {
+      status?: PersonalModelSourceStatus;
+      usagePolicy?: PersonalModelUsagePolicy;
+    }
+  ) => void;
+}) {
+  if (props.loading) {
+    return <Skeleton className="h-48" />;
+  }
+  if (props.items.length === 0) {
+    return <EmptyState>暂无资料源。</EmptyState>;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Title</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Usage</TableHead>
+          <TableHead>Ingested</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {props.items.map((source) => (
+          <TableRow
+            className={props.selectedId === source.id ? "bg-muted/50" : ""}
+            key={source.id}
+          >
+            <TableCell className="max-w-md">
+              <div className="flex flex-col gap-1">
+                <span>{truncateText(source.title, 120)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {source.id}
+                </span>
+                <Button
+                  className="w-fit px-0"
+                  onClick={() => props.onSelect(source)}
+                  size="sm"
+                  type="button"
+                  variant="link"
+                >
+                  Chunks
+                </Button>
+              </div>
+            </TableCell>
+            <TableCell>{source.sourceType}</TableCell>
+            <TableCell>
+              <EnumSelect
+                items={personalModelSourceStatuses}
+                onChange={(value) =>
+                  props.onPatch(source, {
+                    status: value as PersonalModelSourceStatus
+                  })
+                }
+                value={source.status}
+              />
+            </TableCell>
+            <TableCell>
+              <EnumSelect
+                items={personalModelUsagePolicies}
+                onChange={(value) =>
+                  props.onPatch(source, {
+                    usagePolicy: value as PersonalModelUsagePolicy
+                  })
+                }
+                value={source.usagePolicy}
+              />
+            </TableCell>
+            <TableCell>{formatDateTime(source.ingestedAt)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

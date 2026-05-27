@@ -1,7 +1,13 @@
 import {
   toPersonalModelClaim,
+  toPersonalModelEvidence,
   toPersonalModelEvent,
+  toPersonalModelSourceChunk,
+  toPersonalModelSourceDocument,
   type PersonalModelClaimRow,
+  type PersonalModelEvidenceRow,
+  type PersonalModelSourceChunkRow,
+  type PersonalModelSourceDocumentRow,
   type PersonalModelEventRow
 } from "./mappers.js";
 import { type AgentRepositories } from "../../repositories.js";
@@ -17,6 +23,15 @@ export function createD1PersonalModelRepositories(
   | "listActivePersonalModelClaims"
   | "createPersonalModelEvent"
   | "listPersonalModelEvents"
+  | "createPersonalModelSourceDocument"
+  | "updatePersonalModelSourceDocument"
+  | "getPersonalModelSourceDocument"
+  | "listPersonalModelSourceDocuments"
+  | "createPersonalModelSourceChunk"
+  | "getPersonalModelSourceChunk"
+  | "listPersonalModelSourceChunks"
+  | "createPersonalModelEvidence"
+  | "listPersonalModelEvidence"
 > {
   return {
     async createPersonalModelClaim(input) {
@@ -203,6 +218,223 @@ export function createD1PersonalModelRepositories(
         .all<PersonalModelEventRow>();
 
       return (results ?? []).map(toPersonalModelEvent);
+    },
+
+    async createPersonalModelSourceDocument(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO source_documents (
+            id, owner_tg_user_id, source_type, title, uri, content,
+            normalized_content, status, usage_policy, sensitivity,
+            source_created_at, source_updated_at, ingested_at, metadata_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.ownerTgUserId,
+          input.sourceType,
+          input.title,
+          input.uri,
+          input.content,
+          input.normalizedContent,
+          input.status,
+          input.usagePolicy,
+          input.sensitivity,
+          input.sourceCreatedAt,
+          input.sourceUpdatedAt,
+          input.ingestedAt,
+          input.metadataJson
+        )
+        .first<PersonalModelSourceDocumentRow>();
+
+      if (!row) {
+        throw new Error("Failed to create source document");
+      }
+
+      return toPersonalModelSourceDocument(row);
+    },
+
+    async updatePersonalModelSourceDocument(input) {
+      const current = await db
+        .prepare(
+          `SELECT * FROM source_documents
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .first<PersonalModelSourceDocumentRow>();
+
+      if (!current) {
+        return null;
+      }
+
+      const patch = input.patch;
+      const row = await db
+        .prepare(
+          `UPDATE source_documents
+          SET source_type = ?, title = ?, uri = ?, status = ?,
+            usage_policy = ?, sensitivity = ?, source_created_at = ?,
+            source_updated_at = ?, metadata_json = ?
+          WHERE owner_tg_user_id = ? AND id = ?
+          RETURNING *`
+        )
+        .bind(
+          patch.sourceType ?? current.source_type,
+          patch.title ?? current.title,
+          patch.uri !== undefined ? patch.uri : current.uri,
+          patch.status ?? current.status,
+          patch.usagePolicy ?? current.usage_policy,
+          patch.sensitivity ?? current.sensitivity,
+          patch.sourceCreatedAt !== undefined
+            ? patch.sourceCreatedAt
+            : current.source_created_at,
+          patch.sourceUpdatedAt !== undefined
+            ? patch.sourceUpdatedAt
+            : current.source_updated_at,
+          patch.metadataJson ?? current.metadata_json,
+          input.ownerTgUserId,
+          input.id
+        )
+        .first<PersonalModelSourceDocumentRow>();
+
+      return row ? toPersonalModelSourceDocument(row) : null;
+    },
+
+    async getPersonalModelSourceDocument(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM source_documents
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .first<PersonalModelSourceDocumentRow>();
+
+      return row ? toPersonalModelSourceDocument(row) : null;
+    },
+
+    async listPersonalModelSourceDocuments(input) {
+      const sourceType = input.sourceType ?? null;
+      const status = input.status ?? null;
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM source_documents
+          WHERE owner_tg_user_id = ?
+            AND (? IS NULL OR source_type = ?)
+            AND (? IS NULL OR status = ?)
+          ORDER BY ingested_at DESC
+          LIMIT ?`
+        )
+        .bind(
+          input.ownerTgUserId,
+          sourceType,
+          sourceType,
+          status,
+          status,
+          input.limit
+        )
+        .all<PersonalModelSourceDocumentRow>();
+
+      return (results ?? []).map(toPersonalModelSourceDocument);
+    },
+
+    async createPersonalModelSourceChunk(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO source_chunks (
+            id, document_id, owner_tg_user_id, chunk_index, content,
+            normalized_content, token_count, metadata_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.documentId,
+          input.ownerTgUserId,
+          input.chunkIndex,
+          input.content,
+          input.normalizedContent,
+          input.tokenCount,
+          input.metadataJson,
+          input.createdAt
+        )
+        .first<PersonalModelSourceChunkRow>();
+
+      if (!row) {
+        throw new Error("Failed to create source chunk");
+      }
+
+      return toPersonalModelSourceChunk(row);
+    },
+
+    async listPersonalModelSourceChunks(input) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM source_chunks
+          WHERE owner_tg_user_id = ? AND document_id = ?
+          ORDER BY chunk_index ASC
+          LIMIT ?`
+        )
+        .bind(input.ownerTgUserId, input.documentId, input.limit)
+        .all<PersonalModelSourceChunkRow>();
+
+      return (results ?? []).map(toPersonalModelSourceChunk);
+    },
+
+    async getPersonalModelSourceChunk(input) {
+      const row = await db
+        .prepare(
+          `SELECT * FROM source_chunks
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .first<PersonalModelSourceChunkRow>();
+
+      return row ? toPersonalModelSourceChunk(row) : null;
+    },
+
+    async createPersonalModelEvidence(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO personal_model_evidence (
+            id, claim_id, owner_tg_user_id, evidence_type,
+            source_document_id, source_chunk_id, run_id, quote, weight,
+            created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.claimId,
+          input.ownerTgUserId,
+          input.evidenceType,
+          input.sourceDocumentId,
+          input.sourceChunkId,
+          input.runId,
+          input.quote,
+          input.weight,
+          input.createdAt
+        )
+        .first<PersonalModelEvidenceRow>();
+
+      if (!row) {
+        throw new Error("Failed to create personal model evidence");
+      }
+
+      return toPersonalModelEvidence(row);
+    },
+
+    async listPersonalModelEvidence(input) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM personal_model_evidence
+          WHERE owner_tg_user_id = ? AND claim_id = ?
+          ORDER BY created_at DESC
+          LIMIT ?`
+        )
+        .bind(input.ownerTgUserId, input.claimId, input.limit)
+        .all<PersonalModelEvidenceRow>();
+
+      return (results ?? []).map(toPersonalModelEvidence);
     }
   };
 }

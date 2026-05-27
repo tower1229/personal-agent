@@ -6,9 +6,13 @@ import {
   type MemoryStatus,
   type PersonalModelConfidence,
   type PersonalModelEventType,
+  type PersonalModelEvidenceType,
+  type PersonalModelEvidenceWeight,
   type PersonalModelLayer,
   type PersonalModelScenario,
   type PersonalModelSensitivity,
+  type PersonalModelSourceStatus,
+  type PersonalModelSourceType,
   type PersonalModelStatus,
   type PersonalModelUsagePolicy,
   type RunStatus,
@@ -30,7 +34,10 @@ import {
   type LongTaskStepRecord,
   type MemoryRecord,
   type PersonalModelClaimRecord,
+  type PersonalModelEvidenceRecord,
   type PersonalModelEventRecord,
+  type PersonalModelSourceChunkRecord,
+  type PersonalModelSourceDocumentRecord,
   type RunnableSkillRecord,
   type RunRecord,
   type SkillRecord,
@@ -123,6 +130,48 @@ export interface PersonalModelEventRow {
   owner_tg_user_id: number;
   event_type: PersonalModelEventType;
   payload_json: string;
+  created_at: number;
+}
+
+export interface PersonalModelSourceDocumentRow {
+  id: string;
+  owner_tg_user_id: number;
+  source_type: PersonalModelSourceType;
+  title: string;
+  uri: string | null;
+  content: string;
+  normalized_content: string;
+  status: PersonalModelSourceStatus;
+  usage_policy: PersonalModelUsagePolicy;
+  sensitivity: PersonalModelSensitivity;
+  source_created_at: number | null;
+  source_updated_at: number | null;
+  ingested_at: number;
+  metadata_json: string;
+}
+
+export interface PersonalModelSourceChunkRow {
+  id: string;
+  document_id: string;
+  owner_tg_user_id: number;
+  chunk_index: number;
+  content: string;
+  normalized_content: string;
+  token_count: number | null;
+  metadata_json: string;
+  created_at: number;
+}
+
+export interface PersonalModelEvidenceRow {
+  id: string;
+  claim_id: string;
+  owner_tg_user_id: number;
+  evidence_type: PersonalModelEvidenceType;
+  source_document_id: string | null;
+  source_chunk_id: string | null;
+  run_id: string | null;
+  quote: string | null;
+  weight: PersonalModelEvidenceWeight;
   created_at: number;
 }
 
@@ -346,6 +395,60 @@ export function toPersonalModelEvent(
     ownerTgUserId: row.owner_tg_user_id,
     eventType: row.event_type,
     payloadJson: row.payload_json,
+    createdAt: row.created_at
+  };
+}
+
+export function toPersonalModelSourceDocument(
+  row: PersonalModelSourceDocumentRow
+): PersonalModelSourceDocumentRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    sourceType: row.source_type,
+    title: row.title,
+    uri: row.uri,
+    content: row.content,
+    normalizedContent: row.normalized_content,
+    status: row.status,
+    usagePolicy: row.usage_policy,
+    sensitivity: row.sensitivity,
+    sourceCreatedAt: row.source_created_at,
+    sourceUpdatedAt: row.source_updated_at,
+    ingestedAt: row.ingested_at,
+    metadataJson: row.metadata_json
+  };
+}
+
+export function toPersonalModelSourceChunk(
+  row: PersonalModelSourceChunkRow
+): PersonalModelSourceChunkRecord {
+  return {
+    id: row.id,
+    documentId: row.document_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    chunkIndex: row.chunk_index,
+    content: row.content,
+    normalizedContent: row.normalized_content,
+    tokenCount: row.token_count,
+    metadataJson: row.metadata_json,
+    createdAt: row.created_at
+  };
+}
+
+export function toPersonalModelEvidence(
+  row: PersonalModelEvidenceRow
+): PersonalModelEvidenceRecord {
+  return {
+    id: row.id,
+    claimId: row.claim_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    evidenceType: row.evidence_type,
+    sourceDocumentId: row.source_document_id,
+    sourceChunkId: row.source_chunk_id,
+    runId: row.run_id,
+    quote: row.quote,
+    weight: row.weight,
     createdAt: row.created_at
   };
 }

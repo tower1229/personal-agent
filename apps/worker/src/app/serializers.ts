@@ -5,7 +5,10 @@ import {
   type LongTaskStepRecord,
   type MemoryRecord,
   type PersonalModelClaimRecord,
+  type PersonalModelEvidenceRecord,
   type PersonalModelEventRecord,
+  type PersonalModelSourceChunkRecord,
+  type PersonalModelSourceDocumentRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
   type ScheduleRecord,
@@ -99,6 +102,55 @@ export function toAdminPersonalModelEvent(event: PersonalModelEventRecord) {
     eventType: event.eventType,
     payloadJson: event.payloadJson,
     createdAt: event.createdAt
+  };
+}
+
+export function toAdminPersonalModelSourceDocument(
+  source: PersonalModelSourceDocumentRecord
+) {
+  return {
+    id: source.id,
+    sourceType: source.sourceType,
+    title: source.title,
+    uri: source.uri,
+    content: source.content,
+    status: source.status,
+    usagePolicy: source.usagePolicy,
+    sensitivity: source.sensitivity,
+    sourceCreatedAt: source.sourceCreatedAt,
+    sourceUpdatedAt: source.sourceUpdatedAt,
+    ingestedAt: source.ingestedAt,
+    metadataJson: source.metadataJson
+  };
+}
+
+export function toAdminPersonalModelSourceChunk(
+  chunk: PersonalModelSourceChunkRecord
+) {
+  return {
+    id: chunk.id,
+    documentId: chunk.documentId,
+    chunkIndex: chunk.chunkIndex,
+    content: chunk.content,
+    tokenCount: chunk.tokenCount,
+    metadataJson: chunk.metadataJson,
+    createdAt: chunk.createdAt
+  };
+}
+
+export function toAdminPersonalModelEvidence(
+  evidence: PersonalModelEvidenceRecord
+) {
+  return {
+    id: evidence.id,
+    claimId: evidence.claimId,
+    evidenceType: evidence.evidenceType,
+    sourceDocumentId: evidence.sourceDocumentId,
+    sourceChunkId: evidence.sourceChunkId,
+    runId: evidence.runId,
+    quote: evidence.quote,
+    weight: evidence.weight,
+    createdAt: evidence.createdAt
   };
 }
 

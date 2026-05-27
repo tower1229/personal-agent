@@ -286,13 +286,19 @@ describe("worker system and bot commands", () => {
         { name: "runs", present: true },
         { name: "skills", present: false },
         { name: "personal_model_claims", present: false },
-        { name: "personal_model_events", present: false }
+        { name: "personal_model_events", present: false },
+        { name: "source_documents", present: false },
+        { name: "source_chunks", present: false },
+        { name: "personal_model_evidence", present: false }
       ]),
       missingTables: expect.arrayContaining([
         "skills",
         "schedules",
         "personal_model_claims",
-        "personal_model_events"
+        "personal_model_events",
+        "source_documents",
+        "source_chunks",
+        "personal_model_evidence"
       ])
     });
   });
@@ -495,6 +501,314 @@ describe("worker system and bot commands", () => {
       "created",
       "updated"
     ]);
+  });
+
+  it("imports personal model sources, chunks content, and lets claims cite evidence", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+
+    const claimResponse = await app.request(
+      "/api/admin/personal-model/claims",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          claim: "失衡时优先关注恢复",
+          layer: "preference",
+          scenario: "life_decision",
+          confidence: "high",
+          status: "active",
+          usagePolicy: "default_available",
+          sensitivity: "medium",
+          metadata: {}
+        })
+      },
+      env
+    );
+    const claim = (await claimResponse.json()) as { id: string };
+
+    const unauthenticated = await app.request(
+      "/api/admin/personal-model/sources",
+      {},
+      env
+    );
+    expect(unauthenticated.status).toBe(401);
+
+    const sourceResponse = await app.request(
+      "/api/admin/personal-model/sources",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          sourceType: "manual_note",
+          title: "个人模型访谈摘录",
+          uri: "note://interview/batch-2",
+          content:
+            "写作表达、生活管理、自我认知、情绪陪伴是第一优先级。\n\n失衡时优先关注恢复，而不是继续推进。",
+          usagePolicy: "default_available",
+          sensitivity: "medium",
+          metadata: { importedBy: "test" }
+        })
+      },
+      env
+    );
+    expect(sourceResponse.status).toBe(201);
+    const sourceDetail = (await sourceResponse.json()) as {
+      source: { id: string; title: string; content: string };
+      chunks: Array<{ id: string; documentId: string; content: string }>;
+    };
+    expect(sourceDetail.source).toMatchObject({
+      title: "个人模型访谈摘录",
+      content:
+        "写作表达、生活管理、自我认知、情绪陪伴是第一优先级。\n\n失衡时优先关注恢复，而不是继续推进。"
+    });
+    expect(sourceDetail.chunks).toHaveLength(2);
+    expect(sourceDetail.chunks[0]).toMatchObject({
+      documentId: sourceDetail.source.id,
+      content: "写作表达、生活管理、自我认知、情绪陪伴是第一优先级。"
+    });
+
+    const patchedSource = await app.request(
+      `/api/admin/personal-model/sources/${sourceDetail.source.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          title: "个人模型访谈摘录 v2",
+          status: "hidden",
+          content: "这段不应该覆盖原文"
+        })
+      },
+      env
+    );
+    await expect(patchedSource.json()).resolves.toMatchObject({
+      title: "个人模型访谈摘录 v2",
+      status: "hidden",
+      content:
+        "写作表达、生活管理、自我认知、情绪陪伴是第一优先级。\n\n失衡时优先关注恢复，而不是继续推进。"
+    });
+
+    const evidenceResponse = await app.request(
+      `/api/admin/personal-model/claims/${claim.id}/evidence`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          evidenceType: "source_chunk",
+          sourceDocumentId: sourceDetail.source.id,
+          sourceChunkId: sourceDetail.chunks[1]?.id,
+          quote: "失衡时优先关注恢复",
+          weight: "strong"
+        })
+      },
+      env
+    );
+    expect(evidenceResponse.status).toBe(201);
+    await expect(evidenceResponse.json()).resolves.toMatchObject({
+      claimId: claim.id,
+      evidenceType: "source_chunk",
+      sourceDocumentId: sourceDetail.source.id,
+      sourceChunkId: sourceDetail.chunks[1]?.id,
+      quote: "失衡时优先关注恢复",
+      weight: "strong"
+    });
+
+    const claimDetail = await app.request(
+      `/api/admin/personal-model/claims/${claim.id}`,
+      {
+        headers: { Cookie: cookie }
+      },
+      env
+    );
+    await expect(claimDetail.json()).resolves.toMatchObject({
+      claim: {
+        id: claim.id
+      },
+      evidence: [
+        {
+          evidenceType: "source_chunk",
+          sourceDocumentId: sourceDetail.source.id,
+          sourceChunkId: sourceDetail.chunks[1]?.id,
+          weight: "strong"
+        }
+      ],
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "created"
+        }),
+        expect.objectContaining({
+          eventType: "updated"
+        })
+      ])
+    });
+    expect(repositories.personalModelSourceDocuments[0]?.normalizedContent).toBe(
+      "写作表达、生活管理、自我认知、情绪陪伴是第一优先级。 失衡时优先关注恢复，而不是继续推进。"
+    );
+    expect(repositories.personalModelEvidence).toHaveLength(1);
+  });
+
+  it("rejects evidence that does not match an owned source, chunk, or run", async () => {
+    const { app } = createTestApp();
+    const cookie = await ownerCookie();
+    const claimResponse = await app.request(
+      "/api/admin/personal-model/claims",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          claim: "证据必须可信",
+          layer: "preference",
+          scenario: "global",
+          confidence: "high",
+          status: "active",
+          usagePolicy: "default_available",
+          sensitivity: "medium",
+          metadata: {}
+        })
+      },
+      env
+    );
+    const claim = (await claimResponse.json()) as { id: string };
+    const sourceResponse = await app.request(
+      "/api/admin/personal-model/sources",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          sourceType: "manual_note",
+          title: "Evidence source",
+          content: "第一段。\n\n第二段。",
+          usagePolicy: "default_available",
+          sensitivity: "medium",
+          metadata: {}
+        })
+      },
+      env
+    );
+    const sourceDetail = (await sourceResponse.json()) as {
+      source: { id: string };
+      chunks: Array<{ id: string }>;
+    };
+
+    const missingChunk = await app.request(
+      `/api/admin/personal-model/claims/${claim.id}/evidence`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          evidenceType: "source_chunk",
+          sourceDocumentId: sourceDetail.source.id,
+          sourceChunkId: "missing-chunk",
+          weight: "medium"
+        })
+      },
+      env
+    );
+    expect(missingChunk.status).toBe(400);
+    await expect(missingChunk.json()).resolves.toEqual({
+      error: "Source chunk not found for source document"
+    });
+
+    const missingRun = await app.request(
+      `/api/admin/personal-model/claims/${claim.id}/evidence`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          evidenceType: "conversation_run",
+          runId: "missing-run",
+          weight: "medium"
+        })
+      },
+      env
+    );
+    expect(missingRun.status).toBe(400);
+    await expect(missingRun.json()).resolves.toEqual({
+      error: "Run not found"
+    });
+
+    const invalidManualConfirmation = await app.request(
+      `/api/admin/personal-model/claims/${claim.id}/evidence`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          evidenceType: "manual_confirmation",
+          sourceDocumentId: sourceDetail.source.id,
+          quote: "确认",
+          weight: "medium"
+        })
+      },
+      env
+    );
+    expect(invalidManualConfirmation.status).toBe(400);
+    await expect(invalidManualConfirmation.json()).resolves.toEqual({
+      error: "manual_confirmation evidence cannot include source ids or runId"
+    });
+
+    const validManualConfirmation = await app.request(
+      `/api/admin/personal-model/claims/${claim.id}/evidence`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          evidenceType: "manual_confirmation",
+          quote: "用户明确确认",
+          weight: "strong"
+        })
+      },
+      env
+    );
+    expect(validManualConfirmation.status).toBe(201);
+
+    const validSourceChunk = await app.request(
+      `/api/admin/personal-model/claims/${claim.id}/evidence`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          evidenceType: "source_chunk",
+          sourceDocumentId: sourceDetail.source.id,
+          sourceChunkId: sourceDetail.chunks[0]?.id,
+          weight: "strong"
+        })
+      },
+      env
+    );
+    expect(validSourceChunk.status).toBe(201);
   });
 
   it("injects active personal model claims into LLM context and excludes do_not_use claims", async () => {

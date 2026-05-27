@@ -12,9 +12,13 @@ import {
   memoryTypes,
   personalModelConfidences,
   personalModelEventTypes,
+  personalModelEvidenceTypes,
+  personalModelEvidenceWeights,
   personalModelLayers,
   personalModelScenarios,
   personalModelSensitivities,
+  personalModelSourceStatuses,
+  personalModelSourceTypes,
   personalModelStatuses,
   personalModelUsagePolicies,
   runStatuses,
@@ -531,6 +535,16 @@ export const personalModelSensitivitySchema = z.enum(
   personalModelSensitivities
 );
 export const personalModelEventTypeSchema = z.enum(personalModelEventTypes);
+export const personalModelSourceTypeSchema = z.enum(personalModelSourceTypes);
+export const personalModelSourceStatusSchema = z.enum(
+  personalModelSourceStatuses
+);
+export const personalModelEvidenceTypeSchema = z.enum(
+  personalModelEvidenceTypes
+);
+export const personalModelEvidenceWeightSchema = z.enum(
+  personalModelEvidenceWeights
+);
 
 export const adminPersonalModelClaimSchema = z.object({
   id: z.string().min(1),
@@ -551,6 +565,55 @@ export const adminPersonalModelClaimSchema = z.object({
 
 export type AdminPersonalModelClaim = z.infer<
   typeof adminPersonalModelClaimSchema
+>;
+
+export const adminPersonalModelSourceDocumentSchema = z.object({
+  id: z.string().min(1),
+  sourceType: personalModelSourceTypeSchema,
+  title: z.string().min(1),
+  uri: z.string().nullable(),
+  content: z.string(),
+  status: personalModelSourceStatusSchema,
+  usagePolicy: personalModelUsagePolicySchema,
+  sensitivity: personalModelSensitivitySchema,
+  sourceCreatedAt: z.number().int().min(0).nullable(),
+  sourceUpdatedAt: z.number().int().min(0).nullable(),
+  ingestedAt: z.number().int().min(0),
+  metadataJson: z.string()
+});
+
+export type AdminPersonalModelSourceDocument = z.infer<
+  typeof adminPersonalModelSourceDocumentSchema
+>;
+
+export const adminPersonalModelSourceChunkSchema = z.object({
+  id: z.string().min(1),
+  documentId: z.string().min(1),
+  chunkIndex: z.number().int().min(0),
+  content: z.string(),
+  tokenCount: z.number().int().min(0).nullable(),
+  metadataJson: z.string(),
+  createdAt: z.number().int().min(0)
+});
+
+export type AdminPersonalModelSourceChunk = z.infer<
+  typeof adminPersonalModelSourceChunkSchema
+>;
+
+export const adminPersonalModelEvidenceSchema = z.object({
+  id: z.string().min(1),
+  claimId: z.string().min(1),
+  evidenceType: personalModelEvidenceTypeSchema,
+  sourceDocumentId: z.string().min(1).nullable(),
+  sourceChunkId: z.string().min(1).nullable(),
+  runId: z.string().min(1).nullable(),
+  quote: z.string().nullable(),
+  weight: personalModelEvidenceWeightSchema,
+  createdAt: z.number().int().min(0)
+});
+
+export type AdminPersonalModelEvidence = z.infer<
+  typeof adminPersonalModelEvidenceSchema
 >;
 
 export const adminPersonalModelClaimsResponseSchema = z.object({
@@ -575,7 +638,8 @@ export type AdminPersonalModelClaimEvent = z.infer<
 
 export const adminPersonalModelClaimDetailResponseSchema = z.object({
   claim: adminPersonalModelClaimSchema,
-  events: z.array(adminPersonalModelClaimEventSchema)
+  events: z.array(adminPersonalModelClaimEventSchema),
+  evidence: z.array(adminPersonalModelEvidenceSchema).default([])
 });
 
 export type AdminPersonalModelClaimDetailResponse = z.infer<
@@ -624,6 +688,76 @@ export const adminPersonalModelClaimUpdateRequestSchema = z.object({
 
 export type AdminPersonalModelClaimUpdateRequest = z.infer<
   typeof adminPersonalModelClaimUpdateRequestSchema
+>;
+
+export const adminPersonalModelSourcesResponseSchema = z.object({
+  items: z.array(adminPersonalModelSourceDocumentSchema)
+});
+
+export type AdminPersonalModelSourcesResponse = z.infer<
+  typeof adminPersonalModelSourcesResponseSchema
+>;
+
+export const adminPersonalModelSourceDetailResponseSchema = z.object({
+  source: adminPersonalModelSourceDocumentSchema,
+  chunks: z.array(adminPersonalModelSourceChunkSchema)
+});
+
+export type AdminPersonalModelSourceDetailResponse = z.infer<
+  typeof adminPersonalModelSourceDetailResponseSchema
+>;
+
+export const adminPersonalModelSourceCreateRequestSchema = z.object({
+  title: z.string().min(1),
+  content: z.string().min(1),
+  sourceType: personalModelSourceTypeSchema.default("manual_note"),
+  uri: z.string().min(1).nullable().optional(),
+  usagePolicy: personalModelUsagePolicySchema.default("default_available"),
+  sensitivity: personalModelSensitivitySchema.default("medium"),
+  sourceCreatedAt: z.number().int().min(0).nullable().optional(),
+  sourceUpdatedAt: z.number().int().min(0).nullable().optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+
+export type AdminPersonalModelSourceCreateRequest = z.infer<
+  typeof adminPersonalModelSourceCreateRequestSchema
+>;
+
+export const adminPersonalModelSourceUpdateRequestSchema = z.object({
+  title: z.string().min(1).optional(),
+  uri: z.string().min(1).nullable().optional(),
+  sourceType: personalModelSourceTypeSchema.optional(),
+  status: personalModelSourceStatusSchema.optional(),
+  usagePolicy: personalModelUsagePolicySchema.optional(),
+  sensitivity: personalModelSensitivitySchema.optional(),
+  sourceCreatedAt: z.number().int().min(0).nullable().optional(),
+  sourceUpdatedAt: z.number().int().min(0).nullable().optional(),
+  metadata: z.record(z.unknown()).optional()
+});
+
+export type AdminPersonalModelSourceUpdateRequest = z.infer<
+  typeof adminPersonalModelSourceUpdateRequestSchema
+>;
+
+export const adminPersonalModelEvidenceCreateRequestSchema = z.object({
+  evidenceType: personalModelEvidenceTypeSchema.default("source_chunk"),
+  sourceDocumentId: z.string().min(1).nullable().optional(),
+  sourceChunkId: z.string().min(1).nullable().optional(),
+  runId: z.string().min(1).nullable().optional(),
+  quote: z.string().nullable().optional(),
+  weight: personalModelEvidenceWeightSchema.default("medium")
+});
+
+export type AdminPersonalModelEvidenceCreateRequest = z.infer<
+  typeof adminPersonalModelEvidenceCreateRequestSchema
+>;
+
+export const adminPersonalModelEvidenceResponseSchema = z.object({
+  items: z.array(adminPersonalModelEvidenceSchema)
+});
+
+export type AdminPersonalModelEvidenceResponse = z.infer<
+  typeof adminPersonalModelEvidenceResponseSchema
 >;
 
 export const adminApprovalSchema = z.object({

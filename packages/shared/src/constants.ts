@@ -105,6 +105,50 @@ export const personalModelEventTypes = [
 export type PersonalModelEventType =
   (typeof personalModelEventTypes)[number];
 
+export const personalModelSourceTypes = [
+  "conversation",
+  "manual_note",
+  "writing",
+  "blog",
+  "weekly",
+  "qq_export",
+  "weibo_export",
+  "github_personal",
+  "github_work",
+  "health_log",
+  "relationship_note",
+  "personality_framework"
+] as const;
+export type PersonalModelSourceType =
+  (typeof personalModelSourceTypes)[number];
+
+export const personalModelSourceStatuses = [
+  "active",
+  "hidden",
+  "deleted"
+] as const;
+export type PersonalModelSourceStatus =
+  (typeof personalModelSourceStatuses)[number];
+
+export const personalModelEvidenceTypes = [
+  "source_chunk",
+  "conversation_run",
+  "manual_confirmation",
+  "admin_edit",
+  "framework_consistency",
+  "behavioral_observation"
+] as const;
+export type PersonalModelEvidenceType =
+  (typeof personalModelEvidenceTypes)[number];
+
+export const personalModelEvidenceWeights = [
+  "weak",
+  "medium",
+  "strong"
+] as const;
+export type PersonalModelEvidenceWeight =
+  (typeof personalModelEvidenceWeights)[number];
+
 export const approvalRequestStatuses = [
   "pending",
   "rejected",

@@ -18,7 +18,10 @@ const requiredD1Tables = [
   "schedules",
   "schedule_executions",
   "personal_model_claims",
-  "personal_model_events"
+  "personal_model_events",
+  "source_documents",
+  "source_chunks",
+  "personal_model_evidence"
 ] as const;
 
 export function ownerId(env: WorkerEnv): number {

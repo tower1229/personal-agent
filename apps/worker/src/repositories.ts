@@ -6,9 +6,13 @@ import {
   type MemoryStatus,
   type PersonalModelConfidence,
   type PersonalModelEventType,
+  type PersonalModelEvidenceType,
+  type PersonalModelEvidenceWeight,
   type PersonalModelLayer,
   type PersonalModelScenario,
   type PersonalModelSensitivity,
+  type PersonalModelSourceStatus,
+  type PersonalModelSourceType,
   type PersonalModelStatus,
   type PersonalModelUsagePolicy,
   type RunStatus,
@@ -102,6 +106,48 @@ export interface PersonalModelEventRecord {
   ownerTgUserId: number;
   eventType: PersonalModelEventType;
   payloadJson: string;
+  createdAt: number;
+}
+
+export interface PersonalModelSourceDocumentRecord {
+  id: string;
+  ownerTgUserId: number;
+  sourceType: PersonalModelSourceType;
+  title: string;
+  uri: string | null;
+  content: string;
+  normalizedContent: string;
+  status: PersonalModelSourceStatus;
+  usagePolicy: PersonalModelUsagePolicy;
+  sensitivity: PersonalModelSensitivity;
+  sourceCreatedAt: number | null;
+  sourceUpdatedAt: number | null;
+  ingestedAt: number;
+  metadataJson: string;
+}
+
+export interface PersonalModelSourceChunkRecord {
+  id: string;
+  documentId: string;
+  ownerTgUserId: number;
+  chunkIndex: number;
+  content: string;
+  normalizedContent: string;
+  tokenCount: number | null;
+  metadataJson: string;
+  createdAt: number;
+}
+
+export interface PersonalModelEvidenceRecord {
+  id: string;
+  claimId: string;
+  ownerTgUserId: number;
+  evidenceType: PersonalModelEvidenceType;
+  sourceDocumentId: string | null;
+  sourceChunkId: string | null;
+  runId: string | null;
+  quote: string | null;
+  weight: PersonalModelEvidenceWeight;
   createdAt: number;
 }
 
@@ -356,6 +402,57 @@ export interface AgentRepositories {
     claimId: string;
     limit: number;
   }): Promise<PersonalModelEventRecord[]>;
+  createPersonalModelSourceDocument(
+    input: PersonalModelSourceDocumentRecord
+  ): Promise<PersonalModelSourceDocumentRecord>;
+  updatePersonalModelSourceDocument(input: {
+    ownerTgUserId: number;
+    id: string;
+    patch: Partial<
+      Pick<
+        PersonalModelSourceDocumentRecord,
+        | "sourceType"
+        | "title"
+        | "uri"
+        | "status"
+        | "usagePolicy"
+        | "sensitivity"
+        | "sourceCreatedAt"
+        | "sourceUpdatedAt"
+        | "metadataJson"
+      >
+    >;
+  }): Promise<PersonalModelSourceDocumentRecord | null>;
+  getPersonalModelSourceDocument(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<PersonalModelSourceDocumentRecord | null>;
+  listPersonalModelSourceDocuments(input: {
+    ownerTgUserId: number;
+    limit: number;
+    sourceType?: PersonalModelSourceType;
+    status?: PersonalModelSourceStatus;
+  }): Promise<PersonalModelSourceDocumentRecord[]>;
+  createPersonalModelSourceChunk(
+    input: PersonalModelSourceChunkRecord
+  ): Promise<PersonalModelSourceChunkRecord>;
+  getPersonalModelSourceChunk(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<PersonalModelSourceChunkRecord | null>;
+  listPersonalModelSourceChunks(input: {
+    ownerTgUserId: number;
+    documentId: string;
+    limit: number;
+  }): Promise<PersonalModelSourceChunkRecord[]>;
+  createPersonalModelEvidence(
+    input: PersonalModelEvidenceRecord
+  ): Promise<PersonalModelEvidenceRecord>;
+  listPersonalModelEvidence(input: {
+    ownerTgUserId: number;
+    claimId: string;
+    limit: number;
+  }): Promise<PersonalModelEvidenceRecord[]>;
   createSkill(input: {
     ownerTgUserId: number;
     manifest: SkillManifest;

@@ -18,7 +18,10 @@ import {
   type LongTaskStepRecord,
   type MemoryRecord,
   type PersonalModelClaimRecord,
+  type PersonalModelEvidenceRecord,
   type PersonalModelEventRecord,
+  type PersonalModelSourceChunkRecord,
+  type PersonalModelSourceDocumentRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
   type ScheduleRecord,
@@ -93,6 +96,9 @@ export function createFakeRepositories(): AgentRepositories & {
   memories: MemoryRecord[];
   personalModelClaims: PersonalModelClaimRecord[];
   personalModelEvents: PersonalModelEventRecord[];
+  personalModelSourceDocuments: PersonalModelSourceDocumentRecord[];
+  personalModelSourceChunks: PersonalModelSourceChunkRecord[];
+  personalModelEvidence: PersonalModelEvidenceRecord[];
   approvals: ApprovalRequestRecord[];
   skills: SkillRecord[];
   skillVersions: SkillVersionRecord[];
@@ -111,6 +117,9 @@ export function createFakeRepositories(): AgentRepositories & {
     memories: [] as MemoryRecord[],
     personalModelClaims: [] as PersonalModelClaimRecord[],
     personalModelEvents: [] as PersonalModelEventRecord[],
+    personalModelSourceDocuments: [] as PersonalModelSourceDocumentRecord[],
+    personalModelSourceChunks: [] as PersonalModelSourceChunkRecord[],
+    personalModelEvidence: [] as PersonalModelEvidenceRecord[],
     approvals: [] as ApprovalRequestRecord[],
     skills: [] as SkillRecord[],
     skillVersions: [] as SkillVersionRecord[],
@@ -143,6 +152,15 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     get personalModelEvents() {
       return state.personalModelEvents;
+    },
+    get personalModelSourceDocuments() {
+      return state.personalModelSourceDocuments;
+    },
+    get personalModelSourceChunks() {
+      return state.personalModelSourceChunks;
+    },
+    get personalModelEvidence() {
+      return state.personalModelEvidence;
     },
     get approvals() {
       return state.approvals;
@@ -420,6 +438,88 @@ export function createFakeRepositories(): AgentRepositories & {
           (event) =>
             event.ownerTgUserId === input.ownerTgUserId &&
             event.claimId === input.claimId
+        )
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, input.limit);
+    },
+    async createPersonalModelSourceDocument(input) {
+      const source: PersonalModelSourceDocumentRecord = { ...input };
+      state.personalModelSourceDocuments.push(source);
+      return source;
+    },
+    async updatePersonalModelSourceDocument(input) {
+      const source = state.personalModelSourceDocuments.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+      );
+      if (!source) {
+        return null;
+      }
+      for (const [key, value] of Object.entries(input.patch)) {
+        if (value !== undefined) {
+          Object.assign(source, { [key]: value });
+        }
+      }
+      return source;
+    },
+    async getPersonalModelSourceDocument(input) {
+      return (
+        state.personalModelSourceDocuments.find(
+          (source) =>
+            source.ownerTgUserId === input.ownerTgUserId &&
+            source.id === input.id
+        ) ?? null
+      );
+    },
+    async listPersonalModelSourceDocuments(input) {
+      return state.personalModelSourceDocuments
+        .filter(
+          (source) =>
+            source.ownerTgUserId === input.ownerTgUserId &&
+            (!input.sourceType || source.sourceType === input.sourceType) &&
+            (!input.status || source.status === input.status)
+        )
+        .slice()
+        .sort((left, right) => right.ingestedAt - left.ingestedAt)
+        .slice(0, input.limit);
+    },
+    async createPersonalModelSourceChunk(input) {
+      const chunk: PersonalModelSourceChunkRecord = { ...input };
+      state.personalModelSourceChunks.push(chunk);
+      return chunk;
+    },
+    async getPersonalModelSourceChunk(input) {
+      return (
+        state.personalModelSourceChunks.find(
+          (chunk) =>
+            chunk.ownerTgUserId === input.ownerTgUserId &&
+            chunk.id === input.id
+        ) ?? null
+      );
+    },
+    async listPersonalModelSourceChunks(input) {
+      return state.personalModelSourceChunks
+        .filter(
+          (chunk) =>
+            chunk.ownerTgUserId === input.ownerTgUserId &&
+            chunk.documentId === input.documentId
+        )
+        .slice()
+        .sort((left, right) => left.chunkIndex - right.chunkIndex)
+        .slice(0, input.limit);
+    },
+    async createPersonalModelEvidence(input) {
+      const evidence: PersonalModelEvidenceRecord = { ...input };
+      state.personalModelEvidence.push(evidence);
+      return evidence;
+    },
+    async listPersonalModelEvidence(input) {
+      return state.personalModelEvidence
+        .filter(
+          (evidence) =>
+            evidence.ownerTgUserId === input.ownerTgUserId &&
+            evidence.claimId === input.claimId
         )
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)

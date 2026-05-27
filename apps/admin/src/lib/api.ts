@@ -14,6 +14,13 @@ import {
   adminPersonalModelClaimSchema,
   adminPersonalModelClaimsResponseSchema,
   adminPersonalModelClaimUpdateRequestSchema,
+  adminPersonalModelEvidenceCreateRequestSchema,
+  adminPersonalModelEvidenceSchema,
+  adminPersonalModelSourceCreateRequestSchema,
+  adminPersonalModelSourceDetailResponseSchema,
+  adminPersonalModelSourceDocumentSchema,
+  adminPersonalModelSourcesResponseSchema,
+  adminPersonalModelSourceUpdateRequestSchema,
   adminRunDetailResponseSchema,
   adminRunsResponseSchema,
   adminScheduleExecutionsResponseSchema,
@@ -43,6 +50,13 @@ import {
   type AdminPersonalModelClaimDetailResponse,
   type AdminPersonalModelClaimsResponse,
   type AdminPersonalModelClaimUpdateRequest,
+  type AdminPersonalModelEvidence,
+  type AdminPersonalModelEvidenceCreateRequest,
+  type AdminPersonalModelSourceCreateRequest,
+  type AdminPersonalModelSourceDetailResponse,
+  type AdminPersonalModelSourceDocument,
+  type AdminPersonalModelSourcesResponse,
+  type AdminPersonalModelSourceUpdateRequest,
   type AdminRunDetailResponse,
   type AdminRunsResponse,
   type AdminSchedule,
@@ -390,6 +404,59 @@ export function updatePersonalModelClaim(input: {
       )
     },
     (body) => adminPersonalModelClaimSchema.parse(body)
+  );
+}
+
+export function loadPersonalModelSources(): Promise<AdminPersonalModelSourcesResponse> {
+  return fetchJson("/api/admin/personal-model/sources", (input) =>
+    adminPersonalModelSourcesResponseSchema.parse(input)
+  );
+}
+
+export function loadPersonalModelSourceDetail(
+  id: string
+): Promise<AdminPersonalModelSourceDetailResponse> {
+  return fetchJson(`/api/admin/personal-model/sources/${id}`, (input) =>
+    adminPersonalModelSourceDetailResponseSchema.parse(input)
+  );
+}
+
+export function createPersonalModelSource(
+  request: AdminPersonalModelSourceCreateRequest
+): Promise<AdminPersonalModelSourceDetailResponse> {
+  return sendJson(
+    "/api/admin/personal-model/sources",
+    "POST",
+    adminPersonalModelSourceCreateRequestSchema.parse(request),
+    (input) => adminPersonalModelSourceDetailResponseSchema.parse(input)
+  );
+}
+
+export function updatePersonalModelSource(input: {
+  id: string;
+  request: AdminPersonalModelSourceUpdateRequest;
+}): Promise<AdminPersonalModelSourceDocument> {
+  return requestJson(
+    `/api/admin/personal-model/sources/${input.id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(
+        adminPersonalModelSourceUpdateRequestSchema.parse(input.request)
+      )
+    },
+    (body) => adminPersonalModelSourceDocumentSchema.parse(body)
+  );
+}
+
+export function createPersonalModelEvidence(input: {
+  claimId: string;
+  request: AdminPersonalModelEvidenceCreateRequest;
+}): Promise<AdminPersonalModelEvidence> {
+  return sendJson(
+    `/api/admin/personal-model/claims/${input.claimId}/evidence`,
+    "POST",
+    adminPersonalModelEvidenceCreateRequestSchema.parse(input.request),
+    (body) => adminPersonalModelEvidenceSchema.parse(body)
   );
 }
 
