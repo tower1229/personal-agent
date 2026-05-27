@@ -6,14 +6,14 @@
 - [ ] `npm run build`
 - [ ] `npm test`
 - [ ] Confirm Admin SPA routes lazy-load correctly.
-- [ ] Confirm Worker tests cover auth, Telegram webhook, skills, schedules, workflows, LLM/search, and run detail.
+- [ ] Confirm Worker tests cover auth, Telegram webhook, skills, schedules, LLM/search, and run detail.
 
 ## Cloudflare
 
 - [ ] D1 migrations applied remotely.
 - [ ] Worker secrets present and rotated when needed.
 - [ ] `wrangler.toml` points to the intended D1 database and Worker name.
-- [ ] Workflow binding and Cron Trigger are enabled.
+- [ ] Cron Trigger is enabled.
 - [ ] Deploy completed with `npm run deploy:worker`.
 
 ## Telegram

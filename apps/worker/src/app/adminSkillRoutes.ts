@@ -26,8 +26,6 @@ import {
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
-  adminWorkflowRunDetailResponseSchema,
-  adminWorkflowRunsResponseSchema,
   skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
@@ -45,7 +43,6 @@ import { executeLlmAgent } from "../agent.js";
 import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
 import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
 import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
-import { unauthorizedWorkflowStepTools, unsupportedWorkflowStepTypes } from "../workflowValidation.js";
 import { type AgentRepositories } from "../repositories.js";
 import { type WorkerEnv } from "../types.js";
 import {
@@ -66,9 +63,7 @@ import {
   toAdminSkillRouteDecision,
   toAdminSkillRun,
   toAdminTodo,
-  toAdminToolCall,
-  toAdminWorkflowRun,
-  toAdminWorkflowStep
+  toAdminToolCall
 } from "./serializers.js";
 
 import { type WorkerRouteContext } from "./routeContext.js";
@@ -198,25 +193,6 @@ export function registerAdminSkillRoutes(
       return c.json({ error: "Skill not found" }, 404);
     }
     const manifest = skillManifestSchema.parse(skill.draftManifest);
-    if (manifest.kind === "workflow") {
-      const unsupported = unsupportedWorkflowStepTypes(manifest);
-      if (unsupported.length > 0) {
-        return c.json(
-          { error: `Unsupported workflow step types: ${unsupported.join(", ")}` },
-          400
-        );
-      }
-      const unauthorized = unauthorizedWorkflowStepTools(manifest);
-      if (unauthorized.length > 0) {
-        return c.json(
-          {
-            error: `Workflow steps require allowed tools: ${unauthorized.join(", ")}`
-          },
-          400
-        );
-      }
-    }
-
     const version = await repositories(c.env).publishSkill({
       ownerTgUserId: authenticatedOwnerId,
       id: c.req.param("id"),

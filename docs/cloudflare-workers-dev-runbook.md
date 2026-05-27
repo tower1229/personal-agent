@@ -1,6 +1,6 @@
 # Cloudflare Workers.dev Runbook
 
-本文是 Phase 6.5 的上线执行手册，目标是把当前 Cloudflare Worker 版本部署到 `workers.dev`，并验证 Telegram、Admin、D1、Workflow、Schedule、LLM 和联网搜索闭环。
+本文是 Phase 6.5 的上线执行手册，目标是把当前 Cloudflare Worker 版本部署到 `workers.dev`，并验证 Telegram、Admin、D1、Schedule、LLM 和联网搜索闭环。
 
 当前已决策：
 
@@ -194,14 +194,6 @@ curl.exe "https://api.telegram.org/bot8966479686:AAH-wXkTI9VfkKCihaWbC-bsvbr78FM
 - [ ] trigger phrase 能触发
 - [ ] Admin 能看到 skill run / route decision
 
-### Workflow
-
-- [ ] Admin 创建 workflow skill，template 只包含 `tool` / `wait` / `send_telegram` / `llm` / `web_search` / `fetch_url`
-- [ ] 发布并启用 workflow skill
-- [ ] Telegram `/skill <workflowId> input` 返回已开始执行
-- [ ] Admin 能看到 workflow run 和 workflow steps
-- [ ] 失败 step 会标记 failed 并保留错误摘要
-
 ### Schedule
 
 - [ ] Admin 创建 daily schedule
@@ -244,5 +236,5 @@ curl.exe -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/deleteWebhook
 - [ ] owner Telegram Login 成功。
 - [ ] Telegram webhook 能处理 owner 消息。
 - [ ] D1 remote migration 已应用。
-- [ ] Skill / Workflow / Schedule / LLM / Search smoke 均至少跑通一次。
-- [ ] 失败路径在 Admin trace 中可定位到 run / tool_call / workflow_step / schedule_execution。
+- [ ] Skill / Schedule / LLM / Search smoke 均至少跑通一次。
+- [ ] 失败路径在 Admin trace 中可定位到 run / tool_call / schedule_execution。

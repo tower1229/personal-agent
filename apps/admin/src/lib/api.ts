@@ -5,6 +5,8 @@ import {
   adminApprovalsResponseSchema,
   adminAuthConfigResponseSchema,
   adminD1ReadinessResponseSchema,
+  adminLongTaskDetailResponseSchema,
+  adminLongTasksResponseSchema,
   adminMeResponseSchema,
   adminMemoriesResponseSchema,
   adminRunDetailResponseSchema,
@@ -21,14 +23,14 @@ import {
   adminSkillsResponseSchema,
   adminSkillUpsertRequestSchema,
   adminTodosResponseSchema,
-  adminWorkflowRunDetailResponseSchema,
-  adminWorkflowRunsResponseSchema,
   type AdminAgentConfigResponse,
   type AdminAgentTestLlmResponse,
   type AdminAgentTestSearchResponse,
   type AdminApprovalsResponse,
   type AdminAuthConfigResponse,
   type AdminD1ReadinessResponse,
+  type AdminLongTaskDetailResponse,
+  type AdminLongTasksResponse,
   type AdminMeResponse,
   type AdminMemoriesResponse,
   type AdminRunDetailResponse,
@@ -43,9 +45,7 @@ import {
   type AdminSkillTestRunResponse,
   type AdminSkillsResponse,
   type AdminSkillUpsertRequest,
-  type AdminTodosResponse,
-  type AdminWorkflowRunDetailResponse,
-  type AdminWorkflowRunsResponse
+  type AdminTodosResponse
 } from "@personal-agent/shared";
 
 export interface DashboardData {
@@ -57,7 +57,7 @@ export interface DashboardData {
   skills: AdminSkillsResponse;
   skillRuns: AdminSkillRunsResponse;
   routeDecisions: AdminSkillRouteDecisionsResponse;
-  workflowRuns: AdminWorkflowRunsResponse;
+  longTasks: AdminLongTasksResponse;
   schedules: AdminSchedulesResponse;
   scheduleExecutions: AdminScheduleExecutionsResponse;
 }
@@ -151,7 +151,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     skills,
     skillRuns,
     routeDecisions,
-    workflowRuns,
+    longTasks,
     schedules,
     scheduleExecutions
   ] = await Promise.all([
@@ -163,7 +163,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     loadSkills(),
     loadSkillRuns(),
     loadSkillRouteDecisions(),
-    loadWorkflowRuns(),
+    loadLongTasks(),
     loadSchedules(),
     loadScheduleExecutions()
   ]);
@@ -177,7 +177,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     skills,
     skillRuns,
     routeDecisions,
-    workflowRuns,
+    longTasks,
     schedules,
     scheduleExecutions
   };
@@ -259,18 +259,30 @@ export function loadSkillRouteDecisions(): Promise<AdminSkillRouteDecisionsRespo
   );
 }
 
-export function loadWorkflowRuns(): Promise<AdminWorkflowRunsResponse> {
-  return fetchJson("/api/admin/workflow-runs", (input) =>
-    adminWorkflowRunsResponseSchema.parse(input)
+export function loadLongTasks(): Promise<AdminLongTasksResponse> {
+  return fetchJson("/api/admin/long-tasks", (input) =>
+    adminLongTasksResponseSchema.parse(input)
   );
 }
 
-export function loadWorkflowRunDetail(
+export function loadLongTaskDetail(
   id: string
-): Promise<AdminWorkflowRunDetailResponse> {
-  return fetchJson(`/api/admin/workflow-runs/${id}`, (input) =>
-    adminWorkflowRunDetailResponseSchema.parse(input)
+): Promise<AdminLongTaskDetailResponse> {
+  return fetchJson(`/api/admin/long-tasks/${id}`, (input) =>
+    adminLongTaskDetailResponseSchema.parse(input)
   );
+}
+
+export async function pauseLongTask(id: string): Promise<void> {
+  await postEmpty(`/api/admin/long-tasks/${id}/pause`);
+}
+
+export async function resumeLongTask(id: string): Promise<void> {
+  await postEmpty(`/api/admin/long-tasks/${id}/resume`);
+}
+
+export async function cancelLongTask(id: string): Promise<void> {
+  await postEmpty(`/api/admin/long-tasks/${id}/cancel`);
 }
 
 export function loadSchedules(): Promise<AdminSchedulesResponse> {

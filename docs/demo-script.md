@@ -20,8 +20,6 @@ Open Admin runs and confirm run trace plus tool calls are recorded.
 
 Create a chat skill in Admin, add a trigger phrase, publish it, enable it, then trigger it from Telegram. Verify skill route decision, skill run, and tool calls in run detail.
 
-Create a workflow skill with supported steps, publish it, then trigger it with `/skill <id> input`. Verify workflow run and step timeline.
-
 ## 4. Schedules
 
 Create a daily schedule with a built-in command text. Run it manually with Run now, then check schedule executions and the generated run.

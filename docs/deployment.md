@@ -4,7 +4,7 @@ This is the production path for the Cloudflare Worker version.
 
 ## Prerequisites
 
-- Cloudflare account with Workers, D1, and Workflows enabled.
+- Cloudflare account with Workers and D1 enabled.
 - Telegram bot token and owner Telegram numeric user id.
 - Telegram Login domain configured to the workers.dev origin.
 - Optional LLM and Brave Search keys.

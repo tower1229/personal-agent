@@ -11,6 +11,16 @@ import {
 } from "./agent.js";
 import { type SearchClient, type UrlFetcher } from "./externalTools.js";
 import { type LlmClient } from "./llm.js";
+import {
+  canCancelLongTask,
+  canPauseLongTask,
+  canResumeLongTask,
+  classifyTaskComplexityWithLlm,
+  executeLongTaskForRecord,
+  formatCompletedLongTask,
+  formatLongTaskStatus,
+  startLongTask
+} from "./longTasks.js";
 import { type AgentRepositories } from "./repositories.js";
 import {
   getTelegramChatId,
@@ -19,7 +29,6 @@ import {
 } from "./telegram.js";
 import { type TelegramWebhookUpdate } from "@personal-agent/shared";
 import { type RunnableSkillRecord } from "./repositories.js";
-import { type WorkflowSkillPayload } from "./types.js";
 
 export interface BotRuntime extends AgentRuntime {
   repositories: AgentRepositories;
@@ -28,12 +37,6 @@ export interface BotRuntime extends AgentRuntime {
   searchClient?: SearchClient;
   urlFetcher?: UrlFetcher;
   maxToolRounds: number;
-  workflowStarter?: {
-    create(input: {
-      id: string;
-      params: WorkflowSkillPayload;
-    }): Promise<{ id?: string } | unknown>;
-  };
   now: () => number;
   generateId: () => string;
   generateApprovalCode: () => string;
@@ -79,8 +82,9 @@ const COMPLETE_TODO_PATTERN = /^完成待办\s+(\d+)$/u;
 const REMEMBER_PATTERN = /^记住[:：]\s*(.+)$/u;
 const SEARCH_MEMORY_PATTERN = /^(搜索记忆|你记得)\s*(.+)$/u;
 const DELETE_MEMORY_PATTERN = /^删除记忆\s+(\d+)$/u;
-const APPROVAL_PATTERN = /^(确认|取消)\s+([A-Za-z0-9-]+)$/u;
+const APPROVAL_PATTERN = /^(确认)\s+([A-Za-z0-9-]+)$|^(取消)\s+(\d{6})$/u;
 const EXPLICIT_SKILL_PATTERN = /^\/skill\s+([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/u;
+const LONG_TASK_CONTROL_PATTERN = /^(状态|暂停|继续|取消)(?:\s+([A-Za-z0-9_-]+))?$/u;
 const APPROVAL_CODE_ATTEMPTS = 3;
 
 export function normalizeMemoryContent(content: string): string {
@@ -130,6 +134,15 @@ function blockedToolResult(toolName: string): CommandResult {
     input: { requestedTool: toolName },
     output: { blocked: true }
   };
+}
+
+async function resolveLongTask(context: CommandContext, id?: string) {
+  return id
+    ? context.runtime.repositories.getLongTask({
+        ownerTgUserId: context.ownerTgUserId,
+        id
+      })
+    : context.runtime.repositories.getLatestActiveLongTask(context.ownerTgUserId);
 }
 
 async function recordToolCall(
@@ -208,7 +221,7 @@ export async function executeCommand(
   if (text === "/start") {
     return {
       responseText:
-        "Cloudflare Bot 已接入。当前支持待办、记忆、删除确认、skill、workflow、schedule、LLM 和联网搜索。",
+        "Cloudflare Bot 已接入。当前支持待办、记忆、删除确认、skill、schedule、LLM 和联网搜索。",
       toolName: "bot_status",
       riskLevel: "read",
       input: { text },
@@ -409,8 +422,8 @@ export async function executeCommand(
 
   const approvalDecision = APPROVAL_PATTERN.exec(text);
   if (approvalDecision) {
-    const decision = approvalDecision[1];
-    const code = approvalDecision[2] ?? "";
+    const decision = approvalDecision[1] ?? approvalDecision[3];
+    const code = approvalDecision[2] ?? approvalDecision[4] ?? "";
     const approval = await repositories.findPendingApprovalByCode({
       ownerTgUserId: context.ownerTgUserId,
       code
@@ -504,6 +517,173 @@ export async function executeCommand(
       riskLevel: "destructive",
       input: { code, decision, memoryId: deleted.id },
       output: { status: "executed" }
+    };
+  }
+
+  const longTaskControl = LONG_TASK_CONTROL_PATTERN.exec(text);
+  if (longTaskControl) {
+    const action = longTaskControl[1] ?? "";
+    const id = longTaskControl[2];
+    const task = await resolveLongTask(context, id);
+    if (!task) {
+      return {
+        responseText: id
+          ? `没有找到长任务 ${id}。`
+          : "没有找到未完成的长任务。",
+        toolName: "long_task_control",
+        riskLevel: "read",
+        input: { action, id },
+        output: { found: false }
+      };
+    }
+
+    if (action === "状态") {
+      const steps = await repositories.listLongTaskSteps(task.id);
+      return {
+        responseText: formatLongTaskStatus({ task, steps }),
+        toolName: "long_task_status",
+        riskLevel: "read",
+        input: { action, id: task.id },
+        output: { taskId: task.id, status: task.status }
+      };
+    }
+
+    if (action === "暂停") {
+      if (!canPauseLongTask(task)) {
+        return {
+          responseText: `长任务 ${task.id} 当前状态为 ${task.status}，不能暂停。`,
+          toolName: "long_task_pause",
+          riskLevel: "read",
+          input: { action, id: task.id },
+          output: { taskId: task.id, status: task.status, updated: false }
+        };
+      }
+      await repositories.updateLongTask({
+        id: task.id,
+        status: "paused",
+        currentStepId: task.currentStepId,
+        outputText: task.outputText,
+        error: task.error,
+        updatedAt: context.runtime.now()
+      });
+      await repositories.createLongTaskEvent({
+        id: context.runtime.generateId(),
+        longTaskId: task.id,
+        ownerTgUserId: context.ownerTgUserId,
+        stepId: null,
+        eventType: "paused",
+        payloadJson: JSON.stringify({ source: "telegram" }),
+        createdAt: context.runtime.now()
+      });
+      return {
+        responseText: `已暂停长任务 ${task.id}。`,
+        toolName: "long_task_pause",
+        riskLevel: "write_low",
+        input: { action, id: task.id },
+        output: { taskId: task.id }
+      };
+    }
+
+    if (action === "取消") {
+      if (!canCancelLongTask(task)) {
+        return {
+          responseText: `长任务 ${task.id} 当前状态为 ${task.status}，不能取消。`,
+          toolName: "long_task_cancel",
+          riskLevel: "read",
+          input: { action, id: task.id },
+          output: { taskId: task.id, status: task.status, updated: false }
+        };
+      }
+      await repositories.updateLongTask({
+        id: task.id,
+        status: "cancelled",
+        currentStepId: task.currentStepId,
+        outputText: task.outputText,
+        error: "用户取消",
+        updatedAt: context.runtime.now()
+      });
+      await repositories.createLongTaskEvent({
+        id: context.runtime.generateId(),
+        longTaskId: task.id,
+        ownerTgUserId: context.ownerTgUserId,
+        stepId: null,
+        eventType: "cancelled",
+        payloadJson: JSON.stringify({ source: "telegram" }),
+        createdAt: context.runtime.now()
+      });
+      return {
+        responseText: `已取消长任务 ${task.id}。`,
+        toolName: "long_task_cancel",
+        riskLevel: "write_low",
+        input: { action, id: task.id },
+        output: { taskId: task.id }
+      };
+    }
+
+    if (!canResumeLongTask(task)) {
+      return {
+        responseText: `长任务 ${task.id} 当前状态为 ${task.status}，不能继续。`,
+        toolName: "long_task_resume",
+        riskLevel: "read",
+        input: { action, id: task.id },
+        output: { taskId: task.id, status: task.status, updated: false }
+      };
+    }
+    const steps = await repositories.listLongTaskSteps(task.id);
+    const blocked = steps.find((step) => step.status === "blocked");
+    if (blocked) {
+      await repositories.updateLongTaskStep({
+        id: blocked.id,
+        status: "skipped",
+        outputJson: JSON.stringify({ skippedByUserConfirmation: true }),
+        error: null,
+        completedAt: context.runtime.now()
+      });
+    }
+    const runningTask = {
+      ...task,
+      status: "running" as const,
+      error: null,
+      updatedAt: context.runtime.now()
+    };
+    await repositories.updateLongTask({
+      id: task.id,
+      status: "running",
+      currentStepId: task.currentStepId,
+      outputText: task.outputText,
+      error: null,
+      updatedAt: context.runtime.now()
+    });
+    await repositories.createLongTaskEvent({
+      id: context.runtime.generateId(),
+      longTaskId: task.id,
+      ownerTgUserId: context.ownerTgUserId,
+      stepId: blocked?.id ?? null,
+      eventType: "resumed",
+      payloadJson: JSON.stringify({ source: "telegram" }),
+      createdAt: context.runtime.now()
+    });
+    await executeLongTaskForRecord({
+      runtime: context.runtime,
+      task: runningTask
+    });
+    const updated = await repositories.getLongTask({
+      ownerTgUserId: context.ownerTgUserId,
+      id: task.id
+    });
+    return {
+      responseText: updated
+        ? updated.status === "succeeded" && updated.outputText
+          ? formatCompletedLongTask(updated, updated.outputText)
+          : formatLongTaskStatus({
+              task: updated,
+              steps: await repositories.listLongTaskSteps(updated.id)
+            })
+        : `已继续长任务 ${task.id}。`,
+      toolName: "long_task_resume",
+      riskLevel: "write_low",
+      input: { action, id: task.id },
+      output: { taskId: task.id }
     };
   }
 
@@ -679,72 +859,6 @@ export async function executeSkill(input: {
   }
 }
 
-async function startWorkflowSkill(input: {
-  runId: string;
-  ownerTgUserId: number;
-  match: SkillMatch;
-  runtime: BotRuntime;
-}): Promise<CommandResult> {
-  if (!input.runtime.workflowStarter) {
-    throw new Error("Workflow runner binding is not configured");
-  }
-
-  const workflowRunId = input.runtime.generateId();
-  const now = input.runtime.now();
-  await input.runtime.repositories.createWorkflowRun({
-    id: workflowRunId,
-    runId: input.runId,
-    ownerTgUserId: input.ownerTgUserId,
-    skillId: input.match.runnable.skill.id,
-    skillVersionId: input.match.runnable.version.id,
-    cloudflareWorkflowInstanceId: workflowRunId,
-    source: "telegram",
-    status: "running",
-    inputText: input.match.inputText,
-    outputText: null,
-    error: null,
-    createdAt: now,
-    updatedAt: now
-  });
-
-  try {
-    await input.runtime.workflowStarter.create({
-      id: workflowRunId,
-      params: {
-        workflowRunId,
-        runId: input.runId,
-        ownerTgUserId: input.ownerTgUserId,
-        skillId: input.match.runnable.skill.id,
-        skillVersionId: input.match.runnable.version.id,
-        manifest: input.match.runnable.version.manifest,
-        inputText: input.match.inputText
-      }
-    });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Workflow runner start failed";
-    await input.runtime.repositories.updateWorkflowRun({
-      id: workflowRunId,
-      status: "failed",
-      outputText: null,
-      error: message,
-      updatedAt: input.runtime.now()
-    });
-    throw error;
-  }
-
-  return {
-    responseText: `已开始执行 workflow：${input.match.runnable.version.manifest.name}`,
-    toolName: "workflow_skill_start",
-    riskLevel: "read",
-    input: {
-      skillId: input.match.runnable.skill.id,
-      skillVersionId: input.match.runnable.version.id
-    },
-    output: { workflowRunId }
-  };
-}
-
 async function executeCommandOrLlmFallback(input: {
   runId: string;
   ownerTgUserId: number;
@@ -760,6 +874,27 @@ async function executeCommandOrLlmFallback(input: {
 
   if (commandResult.toolName !== "fallback") {
     return commandResult;
+  }
+
+  const decision = await classifyTaskComplexityWithLlm({
+    text: input.text,
+    runtime: input.runtime
+  });
+  if (decision.mode === "long_task") {
+    const started = await startLongTask({
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      text: input.text,
+      decision,
+      runtime: input.runtime
+    });
+    return {
+      responseText: started.responseText,
+      toolName: "long_task_start",
+      riskLevel: "external_send",
+      input: { text: input.text },
+      output: { taskId: started.task.id }
+    };
   }
 
   return agentResultToCommandResult(
@@ -810,19 +945,12 @@ export async function handleOwnerUpdate(
     });
 
     const result = match
-      ? match.runnable.version.manifest.kind === "workflow"
-        ? await startWorkflowSkill({
-            runId: run.id,
-            ownerTgUserId: input.ownerTgUserId,
-            match,
-            runtime: input.runtime
-          })
-        : await executeSkill({
-            runId: run.id,
-            ownerTgUserId: input.ownerTgUserId,
-            match,
-            runtime: input.runtime
-          })
+      ? await executeSkill({
+          runId: run.id,
+          ownerTgUserId: input.ownerTgUserId,
+          match,
+          runtime: input.runtime
+        })
       : agentResultToCommandResult(
           await executeCommandOrLlmFallback({
             runId: run.id,
@@ -833,8 +961,7 @@ export async function handleOwnerUpdate(
         );
 
     if (
-      (!match && result.toolName !== "llm_agent") ||
-      match?.runnable.version.manifest.kind === "workflow"
+      !match && result.toolName !== "llm_agent"
     ) {
       await recordToolCall(
         {

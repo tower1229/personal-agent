@@ -8,7 +8,7 @@ This project is now focused on Cloudflare-native agent engineering.
 - Telegram Login verification and owner-only sessions.
 - D1 repository design with explicit prepared statements.
 - Shared schema contracts across Worker and React Admin.
-- Workflow skill execution and step tracing.
+- Automatic long-task planning, bounded execution, Cron continuation, and Admin step tracing.
 - Dynamic schedules with one Cron Trigger and D1 idempotency.
 - LLM tool calling without provider SDK lock-in.
 - Admin UX for traces, skills, schedules, and diagnostics.

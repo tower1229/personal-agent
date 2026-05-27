@@ -12,8 +12,6 @@ import {
   type AdminSkillDetail,
   type AdminSkillListItem,
   type AdminTodo,
-  type AdminWorkflowRun,
-  type AdminWorkflowRunDetailResponse,
   type BuiltInToolName,
   type SkillKind
 } from "@personal-agent/shared";
@@ -35,8 +33,6 @@ import {
   loadSkillRuns,
   loadSkills,
   loadTodos,
-  loadWorkflowRunDetail,
-  loadWorkflowRuns,
   publishSkill,
   runScheduleNow,
   saveSchedule,
@@ -192,7 +188,7 @@ export function SkillsPage() {
             <Link to="/admin/skills/new">New Skill</Link>
           </Button>
         }
-        description="管理声明式 chat/workflow skill、发布版本和测试运行。"
+        description="管理声明式 chat skill、发布版本和测试运行。"
         title="Skills"
       />
       <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -216,7 +212,6 @@ export function SkillsPage() {
                   <SelectGroup>
                     <SelectItem value="all">All kinds</SelectItem>
                     <SelectItem value="chat">Chat</SelectItem>
-                    <SelectItem value="workflow">Workflow</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -263,7 +258,7 @@ export function SkillsPage() {
           <CardHeader>
             <CardTitle>{isNew ? "Create Skill" : "Skill Detail"}</CardTitle>
             <CardDescription>
-              保存 draft 后再发布；workflow template 使用 JSON textarea。
+              保存 draft 后再发布。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
@@ -307,7 +302,6 @@ export function SkillsPage() {
                       <SelectContent>
                         <SelectGroup>
                           <SelectItem value="chat">Chat</SelectItem>
-                          <SelectItem value="workflow">Workflow</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -390,17 +384,6 @@ export function SkillsPage() {
                     ))}
                   </div>
                 </div>
-                <Field label="Workflow template JSON">
-                  <Textarea
-                    disabled={isDeletedSkill}
-                    onChange={(event) =>
-                      setForm({ ...form, workflowTemplate: event.target.value })
-                    }
-                    rows={8}
-                    value={form.workflowTemplate}
-                  />
-                </Field>
-
                 <div className="flex flex-wrap gap-2">
                   {!isDeletedSkill ? (
                     <>

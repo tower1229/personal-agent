@@ -11,16 +11,14 @@ flowchart LR
   Router --> Agent[LLM Agent]
   Agent --> Tools[Built-in Tools]
   Tools --> D1
-  Router --> WF[Cloudflare Workflows]
   Cron[Single Cron Trigger] --> Schedules[Schedule Poller]
   Schedules --> D1
   Schedules --> TGAPI[Telegram Bot API]
-  WF --> TGAPI
 ```
 
 ## Runtime Boundaries
 
-- `apps/worker`: Hono Worker, Telegram webhook, Admin API, auth callback, scheduled handler, Workflow class, D1 repositories, LLM/search/fetch clients.
+- `apps/worker`: Hono Worker, Telegram webhook, Admin API, auth callback, scheduled handler, D1 repositories, LLM/search/fetch clients.
 - `apps/admin`: React/Vite SPA served by Worker assets. Routes under `/admin` are client-side routes.
 - `packages/shared`: stable schemas, DTOs, constants, and types shared by Worker and Admin.
 
@@ -41,11 +39,13 @@ The SPA checks `/api/admin/me`. Unauthenticated users see Telegram Login. The ca
 
 ## Data Model
 
-D1 stores runs, tool calls, todos, memories, approvals, skills, skill versions, route decisions, skill runs, workflow runs, workflow steps, schedules, and schedule executions. Repositories use prepared statements directly and keep D1-specific details out of shared schemas.
+D1 stores runs, tool calls, todos, memories, approvals, skills, skill versions, route decisions, skill runs, schedules, schedule executions, long tasks, long task steps, and long task events. Repositories use prepared statements directly and keep D1-specific details out of shared schemas.
 
 ## Long Tasks And Schedules
 
-Workflow skills run through Cloudflare Workflows. Dynamic schedules are stored in D1 and executed by a single minute Cron Trigger. Schedule executions use an idempotency key on schedule id plus scheduled time.
+Dynamic schedules are stored in D1 and executed by a single minute Cron Trigger. Schedule executions use an idempotency key on schedule id plus scheduled time.
+
+Automatic long-task planning runs before the ordinary LLM fallback for non-command Telegram messages. Complex requests create a persisted task, planner steps, and events; the executor runs bounded steps inline and the minute Cron resumes stale running tasks. The removed workflow skill system is not part of this path.
 
 ## External Calls
 

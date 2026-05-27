@@ -12,8 +12,9 @@ const requiredD1Tables = [
   "skill_versions",
   "skill_route_decisions",
   "skill_runs",
-  "workflow_runs",
-  "workflow_steps",
+  "long_tasks",
+  "long_task_steps",
+  "long_task_events",
   "schedules",
   "schedule_executions"
 ] as const;

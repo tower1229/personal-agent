@@ -21,9 +21,9 @@ const SkillsPage = lazy(() =>
     default: module.SkillsPage
   }))
 );
-const WorkflowsPage = lazy(() =>
-  import("@/pages/workflows-page").then((module) => ({
-    default: module.WorkflowsPage
+const LongTasksPage = lazy(() =>
+  import("@/pages/long-tasks-page").then((module) => ({
+    default: module.LongTasksPage
   }))
 );
 const SchedulesPage = lazy(() =>
@@ -92,8 +92,8 @@ export function App() {
             <Route element={<SkillsPage />} path="/admin/skills" />
             <Route element={<SkillsPage />} path="/admin/skills/new" />
             <Route element={<SkillsPage />} path="/admin/skills/:id" />
-            <Route element={<WorkflowsPage />} path="/admin/workflows" />
-            <Route element={<WorkflowsPage />} path="/admin/workflows/:id" />
+            <Route element={<LongTasksPage />} path="/admin/long-tasks" />
+            <Route element={<LongTasksPage />} path="/admin/long-tasks/:id" />
             <Route element={<SchedulesPage />} path="/admin/schedules" />
             <Route element={<SchedulesPage />} path="/admin/schedules/new" />
             <Route element={<SchedulesPage />} path="/admin/schedules/:id" />

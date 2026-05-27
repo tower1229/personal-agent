@@ -7,11 +7,6 @@ directory = "../admin/dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-[[workflows]]
-name = "workflow-skill-runner"
-binding = "WORKFLOW_SKILL_RUNNER"
-class_name = "WorkflowSkillRunner"
-
 [triggers]
 crons = [ "* * * * *" ]
 

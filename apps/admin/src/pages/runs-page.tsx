@@ -12,8 +12,6 @@ import {
   type AdminSkillDetail,
   type AdminSkillListItem,
   type AdminTodo,
-  type AdminWorkflowRun,
-  type AdminWorkflowRunDetailResponse,
   type BuiltInToolName,
   type SkillKind
 } from "@personal-agent/shared";
@@ -35,8 +33,6 @@ import {
   loadSkillRuns,
   loadSkills,
   loadTodos,
-  loadWorkflowRunDetail,
-  loadWorkflowRuns,
   publishSkill,
   runScheduleNow,
   saveSchedule,
@@ -93,7 +89,7 @@ function RunsListPage() {
   return (
     <>
       <PageHeader
-        description="统一 trace 中心。打开详情可以看到 tool calls、skill、workflow 和 schedule 关联。"
+        description="统一 trace 中心。打开详情可以看到 tool calls、skill 和 schedule 关联。"
         title="Runs"
       />
       <Card>
@@ -256,8 +252,8 @@ function RunTrace(props: { detail: AdminRunDetailResponse }) {
         <TraceSection title="Skill Run">
           <CodeBlock value={detail.skillRun ?? "No skill run"} />
         </TraceSection>
-        <TraceSection title="Workflow">
-          <CodeBlock value={detail.workflowRun ?? "No workflow run"} />
+        <TraceSection title="Long Task">
+          <CodeBlock value={detail.longTask ?? "No long task"} />
         </TraceSection>
         <TraceSection title="Schedule">
           <CodeBlock value={detail.scheduleExecution ?? "No schedule execution"} />
@@ -266,4 +262,3 @@ function RunTrace(props: { detail: AdminRunDetailResponse }) {
     </div>
   );
 }
-

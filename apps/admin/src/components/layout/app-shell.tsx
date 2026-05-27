@@ -7,7 +7,7 @@ import {
   ClipboardCheckIcon,
   DatabaseIcon,
   GaugeIcon,
-  GitBranchIcon,
+  ListChecksIcon,
   LogOutIcon,
   MenuIcon,
   SettingsIcon,
@@ -45,7 +45,7 @@ const primaryNav: NavItem[] = [
   { label: "Overview", to: "/admin", icon: GaugeIcon },
   { label: "Runs", to: "/admin/runs", icon: ActivityIcon },
   { label: "Skills", to: "/admin/skills", icon: BotIcon },
-  { label: "Workflows", to: "/admin/workflows", icon: GitBranchIcon },
+  { label: "Long Tasks", to: "/admin/long-tasks", icon: ListChecksIcon },
   { label: "Schedules", to: "/admin/schedules", icon: CalendarClockIcon },
   { label: "Approvals", to: "/admin/approvals", icon: ClipboardCheckIcon }
 ];

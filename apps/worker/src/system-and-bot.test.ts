@@ -4,7 +4,6 @@ import { createWorkerApp, runScheduled } from "./app.js";
 import { executeAgentTool } from "./agent.js";
 import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./externalTools.js";
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
-import { executeWorkflowSkillRun } from "./workflowExecutor.js";
 import { type TelegramClient } from "./telegram.js";
 import {
   chatSkillManifest,
@@ -18,8 +17,7 @@ import {
   env,
   ownerCookie,
   ownerUpdate,
-  postWebhook,
-  workflowSkillManifest
+  postWebhook
 } from "./test-helpers/fakeRepositories.js";
 
 describe("worker system and bot commands", () => {

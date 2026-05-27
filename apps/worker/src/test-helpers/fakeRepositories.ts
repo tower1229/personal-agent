@@ -13,6 +13,9 @@ import {
 import {
   type AgentRepositories,
   type ApprovalRequestRecord,
+  type LongTaskEventRecord,
+  type LongTaskRecord,
+  type LongTaskStepRecord,
   type MemoryRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
@@ -22,9 +25,7 @@ import {
   type SkillRunRecord,
   type SkillVersionRecord,
   type TodoRecord,
-  type ToolCallRecord,
-  type WorkflowRunRecord,
-  type WorkflowStepRecord
+  type ToolCallRecord
 } from "../repositories.js";
 import { type TelegramClient } from "../telegram.js";
 import { type WorkerEnv } from "../types.js";
@@ -79,27 +80,7 @@ export function chatSkillManifest(input: {
     allowedTools: input.allowedTools ?? [],
     riskLevel: "read" as const,
     autoRunThreshold: 0.75,
-    confirmThreshold: 0.45,
-    workflowTemplate: []
-  };
-}
-
-export function workflowSkillManifest(
-  id: string,
-  workflowTemplate = [
-    {
-      id: "reply",
-      type: "tool" as const,
-      input: {
-        text: "列出我的待办"
-      }
-    }
-  ]
-) {
-  return {
-    ...chatSkillManifest({ id }),
-    kind: "workflow" as const,
-    workflowTemplate
+    confirmThreshold: 0.45
   };
 }
 
@@ -113,8 +94,9 @@ export function createFakeRepositories(): AgentRepositories & {
   skillVersions: SkillVersionRecord[];
   skillRouteDecisions: SkillRouteDecisionRecord[];
   skillRuns: SkillRunRecord[];
-  workflowRuns: WorkflowRunRecord[];
-  workflowSteps: WorkflowStepRecord[];
+  longTasks: LongTaskRecord[];
+  longTaskSteps: LongTaskStepRecord[];
+  longTaskEvents: LongTaskEventRecord[];
   schedules: ScheduleRecord[];
   scheduleExecutions: ScheduleExecutionRecord[];
 } {
@@ -128,8 +110,9 @@ export function createFakeRepositories(): AgentRepositories & {
     skillVersions: [] as SkillVersionRecord[],
     skillRouteDecisions: [] as SkillRouteDecisionRecord[],
     skillRuns: [] as SkillRunRecord[],
-    workflowRuns: [] as WorkflowRunRecord[],
-    workflowSteps: [] as WorkflowStepRecord[],
+    longTasks: [] as LongTaskRecord[],
+    longTaskSteps: [] as LongTaskStepRecord[],
+    longTaskEvents: [] as LongTaskEventRecord[],
     schedules: [] as ScheduleRecord[],
     scheduleExecutions: [] as ScheduleExecutionRecord[],
     nextTodoId: 1,
@@ -164,11 +147,14 @@ export function createFakeRepositories(): AgentRepositories & {
     get skillRuns() {
       return state.skillRuns;
     },
-    get workflowRuns() {
-      return state.workflowRuns;
+    get longTasks() {
+      return state.longTasks;
     },
-    get workflowSteps() {
-      return state.workflowSteps;
+    get longTaskSteps() {
+      return state.longTaskSteps;
+    },
+    get longTaskEvents() {
+      return state.longTaskEvents;
     },
     get schedules() {
       return state.schedules;
@@ -550,67 +536,121 @@ export function createFakeRepositories(): AgentRepositories & {
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
     },
-    async createWorkflowRun(input) {
-      state.workflowRuns.push(input);
+    async createLongTask(input) {
+      state.longTasks.push(input);
       return input;
     },
-    async updateWorkflowRun(input) {
-      const workflowRun = state.workflowRuns.find((item) => item.id === input.id);
-      if (!workflowRun) {
+    async updateLongTask(input) {
+      const task = state.longTasks.find((item) => item.id === input.id);
+      if (!task) {
         return;
       }
-      workflowRun.status = input.status;
-      workflowRun.outputText = input.outputText ?? null;
-      workflowRun.error = input.error ?? null;
-      workflowRun.cloudflareWorkflowInstanceId =
-        input.cloudflareWorkflowInstanceId ??
-        workflowRun.cloudflareWorkflowInstanceId;
-      workflowRun.updatedAt = input.updatedAt;
+      task.status = input.status;
+      task.title = input.title ?? task.title;
+      task.plannerReason = input.plannerReason ?? task.plannerReason;
+      task.currentStepId =
+        input.currentStepId === undefined ? task.currentStepId : input.currentStepId;
+      task.outputText =
+        input.outputText === undefined ? task.outputText : input.outputText;
+      task.error = input.error === undefined ? task.error : input.error;
+      task.replanCount = input.replanCount ?? task.replanCount;
+      task.updatedAt = input.updatedAt;
     },
-    async getWorkflowRun(input) {
+    async getLongTask(input) {
       return (
-        state.workflowRuns.find(
-          (item) =>
-            item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+        state.longTasks.find(
+          (task) =>
+            task.ownerTgUserId === input.ownerTgUserId && task.id === input.id
         ) ?? null
       );
     },
-    async listWorkflowRuns(ownerTgUserId, limit) {
-      return state.workflowRuns
-        .filter((workflowRun) => workflowRun.ownerTgUserId === ownerTgUserId)
-        .slice()
-        .sort((left, right) => right.createdAt - left.createdAt)
-        .slice(0, limit);
-    },
-    async getWorkflowRunForRun(input) {
+    async getLatestActiveLongTask(ownerTgUserId) {
       return (
-        state.workflowRuns
+        state.longTasks
           .filter(
-            (workflowRun) =>
-              workflowRun.ownerTgUserId === input.ownerTgUserId &&
-              workflowRun.runId === input.runId
+            (task) =>
+              task.ownerTgUserId === ownerTgUserId &&
+              ["planning", "running", "waiting_for_user", "paused"].includes(
+                task.status
+              )
+          )
+          .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null
+      );
+    },
+    async getLongTaskForRun(input) {
+      return (
+        state.longTasks
+          .filter(
+            (task) =>
+              task.ownerTgUserId === input.ownerTgUserId &&
+              task.runId === input.runId
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
     },
-    async createWorkflowStep(input) {
-      state.workflowSteps.push(input);
+    async listLongTasks(ownerTgUserId, limit) {
+      return state.longTasks
+        .filter((task) => task.ownerTgUserId === ownerTgUserId)
+        .slice()
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, limit);
+    },
+    async listResumableLongTasks(now, limit) {
+      return state.longTasks
+        .filter(
+          (task) => task.status === "running" && task.updatedAt <= now - 30000
+        )
+        .slice()
+        .sort((left, right) => left.updatedAt - right.updatedAt)
+        .slice(0, limit);
+    },
+    async createLongTaskStep(input) {
+      state.longTaskSteps.push(input);
       return input;
     },
-    async updateWorkflowStep(input) {
-      const workflowStep = state.workflowSteps.find((item) => item.id === input.id);
-      if (!workflowStep) {
+    async updateLongTaskStep(input) {
+      const step = state.longTaskSteps.find((item) => item.id === input.id);
+      if (!step) {
         return;
       }
-      workflowStep.status = input.status;
-      workflowStep.outputJson = input.outputJson ?? null;
-      workflowStep.error = input.error ?? null;
-      workflowStep.completedAt = input.completedAt ?? null;
+      step.status = input.status;
+      step.outputJson =
+        input.outputJson === undefined ? step.outputJson : input.outputJson;
+      step.error = input.error === undefined ? step.error : input.error;
+      step.startedAt =
+        input.startedAt === undefined ? step.startedAt : input.startedAt;
+      step.completedAt =
+        input.completedAt === undefined ? step.completedAt : input.completedAt;
     },
-    async listWorkflowSteps(workflowRunId) {
-      return state.workflowSteps.filter(
-        (workflowStep) => workflowStep.workflowRunId === workflowRunId
-      );
+    async claimNextLongTaskStep(input) {
+      const step = state.longTaskSteps
+        .filter(
+          (item) =>
+            item.longTaskId === input.longTaskId && item.status === "pending"
+        )
+        .sort((left, right) => left.position - right.position)[0];
+      if (!step) {
+        return null;
+      }
+      step.status = "running";
+      step.startedAt = input.startedAt;
+      return step;
+    },
+    async listLongTaskSteps(longTaskId) {
+      return state.longTaskSteps
+        .filter((step) => step.longTaskId === longTaskId)
+        .slice()
+        .sort((left, right) => left.position - right.position);
+    },
+    async createLongTaskEvent(input) {
+      state.longTaskEvents.push(input);
+      return input;
+    },
+    async listLongTaskEvents(longTaskId) {
+      return state.longTaskEvents
+        .filter((event) => event.longTaskId === longTaskId)
+        .slice()
+        .sort((left, right) => left.createdAt - right.createdAt);
     },
     async createSchedule(input) {
       state.schedules.push(input);
@@ -783,7 +823,9 @@ export function createFakeTelegramClient(options: { fail?: boolean } = {}):
   };
 }
 
-export function createFakeLlmClient(options: { fail?: boolean; alwaysTool?: boolean } = {}):
+export function createFakeLlmClient(
+  options: { fail?: boolean; alwaysTool?: boolean; plannerContent?: string } = {}
+):
   LlmClient & { calls: LlmMessage[][] } {
   const calls: LlmMessage[][] = [];
 
@@ -795,6 +837,52 @@ export function createFakeLlmClient(options: { fail?: boolean; alwaysTool?: bool
       }
       calls.push(input.messages);
       const latest = input.messages.at(-1);
+      const systemText = input.messages[0]?.content ?? "";
+      if (systemText.includes("任务复杂度分类器")) {
+        const text = latest?.content ?? "";
+        const isLongTask =
+          /调研|研究|比较|对比|报告|规划|计划|方案|分析|多步|整理|搜索.*并/u.test(
+            text
+          ) || text.length >= 120;
+        return {
+          content: JSON.stringify({
+            mode: isLongTask ? "long_task" : "simple",
+            score: isLongTask ? 0.8 : 0.2,
+            reason: isLongTask ? "fake complex request" : "fake simple request"
+          }),
+          toolCalls: []
+        };
+      }
+      if (systemText.includes("长任务规划器")) {
+        if (options.plannerContent !== undefined) {
+          return {
+            content: options.plannerContent,
+            toolCalls: []
+          };
+        }
+        return {
+          content: JSON.stringify({
+            title: "测试长任务",
+            steps: [
+              {
+                title: "收集信息",
+                description: "搜索网页",
+                toolPolicy: "external_send",
+                successCriteria: "拿到搜索结果"
+              },
+              {
+                title: "总结结果",
+                description: "整理结论",
+                toolPolicy: "none",
+                successCriteria: "输出总结"
+              }
+            ],
+            userConfirmationRequired: false,
+            confirmationQuestion: null
+          }),
+          toolCalls: []
+        };
+      }
       if (latest?.role === "tool") {
         if (latest.content?.includes('"blocked":true')) {
           return {
@@ -963,9 +1051,9 @@ export function createFakeD1Database(tableNames: string[]): D1Database {
 export function createTestApp(
   options: {
     telegramFails?: boolean;
-    workflowStarterFails?: boolean;
     llmFails?: boolean;
     llmAlwaysTool?: boolean;
+    plannerContent?: string;
     searchFails?: boolean;
     fetchFails?: boolean;
   } = {}
@@ -976,11 +1064,11 @@ export function createTestApp(
   });
   const llmClient = createFakeLlmClient({
     fail: options.llmFails,
-    alwaysTool: options.llmAlwaysTool
+    alwaysTool: options.llmAlwaysTool,
+    plannerContent: options.plannerContent
   });
   const searchClient = createFakeSearchClient({ fail: options.searchFails });
   const urlFetcher = createFakeUrlFetcher({ fail: options.fetchFails });
-  const workflowCreates: Array<{ id: string; params: unknown }> = [];
   let id = 0;
   const app = createWorkerApp({
     repositories,
@@ -988,15 +1076,6 @@ export function createTestApp(
     llmClient,
     searchClient,
     urlFetcher,
-    workflowStarter: {
-      async create(input) {
-        if (options.workflowStarterFails) {
-          throw new Error("workflow start failed");
-        }
-        workflowCreates.push(input);
-        return {};
-      }
-    },
     now: () => 1000 + id,
     generateId: () => {
       id += 1;
@@ -1009,7 +1088,6 @@ export function createTestApp(
     app,
     repositories,
     telegramClient,
-    workflowCreates,
     llmClient,
     searchClient,
     urlFetcher

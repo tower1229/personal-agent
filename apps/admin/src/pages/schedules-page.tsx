@@ -12,8 +12,6 @@ import {
   type AdminSkillDetail,
   type AdminSkillListItem,
   type AdminTodo,
-  type AdminWorkflowRun,
-  type AdminWorkflowRunDetailResponse,
   type BuiltInToolName,
   type SkillKind
 } from "@personal-agent/shared";
@@ -35,8 +33,6 @@ import {
   loadSkillRuns,
   loadSkills,
   loadTodos,
-  loadWorkflowRunDetail,
-  loadWorkflowRuns,
   publishSkill,
   runScheduleNow,
   saveSchedule,

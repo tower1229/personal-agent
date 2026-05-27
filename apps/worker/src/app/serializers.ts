@@ -1,5 +1,8 @@
 import {
   type ApprovalRequestRecord,
+  type LongTaskEventRecord,
+  type LongTaskRecord,
+  type LongTaskStepRecord,
   type MemoryRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
@@ -8,9 +11,7 @@ import {
   type SkillRouteDecisionRecord,
   type SkillRunRecord,
   type TodoRecord,
-  type ToolCallRecord,
-  type WorkflowRunRecord,
-  type WorkflowStepRecord
+  type ToolCallRecord
 } from "../repositories.js";
 
 export function toAdminRun(run: RunRecord) {
@@ -124,35 +125,50 @@ export function toAdminSkillRouteDecision(decision: SkillRouteDecisionRecord) {
   };
 }
 
-export function toAdminWorkflowRun(workflowRun: WorkflowRunRecord) {
+export function toAdminLongTask(task: LongTaskRecord) {
   return {
-    id: workflowRun.id,
-    runId: workflowRun.runId,
-    skillId: workflowRun.skillId,
-    skillVersionId: workflowRun.skillVersionId,
-    source: workflowRun.source,
-    status: workflowRun.status,
-    inputText: workflowRun.inputText,
-    outputText: workflowRun.outputText,
-    error: workflowRun.error,
-    createdAt: workflowRun.createdAt,
-    updatedAt: workflowRun.updatedAt
+    id: task.id,
+    runId: task.runId,
+    title: task.title,
+    originalInput: task.originalInput,
+    status: task.status,
+    complexityScore: task.complexityScore,
+    plannerReason: task.plannerReason,
+    currentStepId: task.currentStepId,
+    outputText: task.outputText,
+    error: task.error,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt
   };
 }
 
-export function toAdminWorkflowStep(workflowStep: WorkflowStepRecord) {
+export function toAdminLongTaskStep(step: LongTaskStepRecord) {
   return {
-    id: workflowStep.id,
-    workflowRunId: workflowStep.workflowRunId,
-    stepId: workflowStep.stepId,
-    stepType: workflowStep.stepType,
-    status: workflowStep.status,
-    inputJson: workflowStep.inputJson,
-    outputJson: workflowStep.outputJson,
-    error: workflowStep.error,
-    startedAt: workflowStep.startedAt,
-    completedAt: workflowStep.completedAt,
-    createdAt: workflowStep.createdAt
+    id: step.id,
+    longTaskId: step.longTaskId,
+    position: step.position,
+    title: step.title,
+    description: step.description,
+    status: step.status,
+    toolPolicy: step.toolPolicy,
+    successCriteria: step.successCriteria,
+    inputJson: step.inputJson,
+    outputJson: step.outputJson,
+    error: step.error,
+    startedAt: step.startedAt,
+    completedAt: step.completedAt,
+    createdAt: step.createdAt
+  };
+}
+
+export function toAdminLongTaskEvent(event: LongTaskEventRecord) {
+  return {
+    id: event.id,
+    longTaskId: event.longTaskId,
+    stepId: event.stepId,
+    eventType: event.eventType,
+    payloadJson: event.payloadJson,
+    createdAt: event.createdAt
   };
 }
 

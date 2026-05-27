@@ -5,6 +5,9 @@ import {
   documentIndexStatuses,
   documentSourceTypes,
   evalCategories,
+  longTaskStatuses,
+  longTaskStepStatuses,
+  longTaskToolPolicies,
   memoryStatuses,
   memoryTypes,
   runStatuses,
@@ -15,26 +18,16 @@ import {
   skillRunStatuses,
   todoStatuses,
   toolCallStatuses,
-  toolRiskLevels,
-  workflowRunSources,
-  workflowSkillStepTypes
+  toolRiskLevels
 } from "./constants.js";
 
 export const toolRiskLevelSchema = z.enum(toolRiskLevels);
 export const builtInToolNameSchema = z.enum(builtInToolNames);
 export const skillKindSchema = z.enum(skillKinds);
-export const workflowSkillStepTypeSchema = z.enum(workflowSkillStepTypes);
 export const scheduleCadenceSchema = z.enum(scheduleCadences);
-
-export const workflowSkillStepSchema = z.object({
-  id: z.string().min(1),
-  type: workflowSkillStepTypeSchema,
-  name: z.string().min(1).optional(),
-  input: z.record(z.unknown()).optional(),
-  nextStepId: z.string().min(1).optional()
-});
-
-export type WorkflowSkillStep = z.infer<typeof workflowSkillStepSchema>;
+export const longTaskStatusSchema = z.enum(longTaskStatuses);
+export const longTaskStepStatusSchema = z.enum(longTaskStepStatuses);
+export const longTaskToolPolicySchema = z.enum(longTaskToolPolicies);
 
 export const skillManifestSchema = z.object({
   id: z.string().min(1),
@@ -48,8 +41,7 @@ export const skillManifestSchema = z.object({
   allowedTools: z.array(builtInToolNameSchema).default([]),
   riskLevel: toolRiskLevelSchema.default("read"),
   autoRunThreshold: z.number().min(0).max(1).default(0.75),
-  confirmThreshold: z.number().min(0).max(1).default(0.45),
-  workflowTemplate: z.array(workflowSkillStepSchema).default([])
+  confirmThreshold: z.number().min(0).max(1).default(0.45)
 });
 
 export type SkillManifest = z.infer<typeof skillManifestSchema>;
@@ -304,12 +296,32 @@ export type AdminAgentTestSearchResponse = z.infer<
   typeof adminAgentTestSearchResponseSchema
 >;
 
-export const adminWorkflowStepSchema = z.object({
+export const adminLongTaskSchema = z.object({
   id: z.string().min(1),
-  workflowRunId: z.string().min(1),
-  stepId: z.string().min(1),
-  stepType: workflowSkillStepTypeSchema,
-  status: z.enum(["running", "succeeded", "failed", "skipped"]),
+  runId: z.string().min(1),
+  title: z.string().min(1),
+  originalInput: z.string(),
+  status: longTaskStatusSchema,
+  complexityScore: z.number().min(0).max(1),
+  plannerReason: z.string(),
+  currentStepId: z.string().min(1).nullable(),
+  outputText: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminLongTask = z.infer<typeof adminLongTaskSchema>;
+
+export const adminLongTaskStepSchema = z.object({
+  id: z.string().min(1),
+  longTaskId: z.string().min(1),
+  position: z.number().int().min(1),
+  title: z.string().min(1),
+  description: z.string(),
+  status: longTaskStepStatusSchema,
+  toolPolicy: longTaskToolPolicySchema,
+  successCriteria: z.string(),
   inputJson: z.string(),
   outputJson: z.string().nullable(),
   error: z.string().nullable(),
@@ -318,39 +330,35 @@ export const adminWorkflowStepSchema = z.object({
   createdAt: z.number().int().min(0)
 });
 
-export type AdminWorkflowStep = z.infer<typeof adminWorkflowStepSchema>;
+export type AdminLongTaskStep = z.infer<typeof adminLongTaskStepSchema>;
 
-export const adminWorkflowRunSchema = z.object({
+export const adminLongTaskEventSchema = z.object({
   id: z.string().min(1),
-  runId: z.string().min(1),
-  skillId: z.string().min(1),
-  skillVersionId: z.string().min(1),
-  source: z.enum(workflowRunSources),
-  status: z.enum(["running", "succeeded", "failed"]),
-  inputText: z.string(),
-  outputText: z.string().nullable(),
-  error: z.string().nullable(),
-  createdAt: z.number().int().min(0),
-  updatedAt: z.number().int().min(0)
+  longTaskId: z.string().min(1),
+  stepId: z.string().min(1).nullable(),
+  eventType: z.string().min(1),
+  payloadJson: z.string(),
+  createdAt: z.number().int().min(0)
 });
 
-export type AdminWorkflowRun = z.infer<typeof adminWorkflowRunSchema>;
+export type AdminLongTaskEvent = z.infer<typeof adminLongTaskEventSchema>;
 
-export const adminWorkflowRunsResponseSchema = z.object({
-  items: z.array(adminWorkflowRunSchema)
+export const adminLongTasksResponseSchema = z.object({
+  items: z.array(adminLongTaskSchema)
 });
 
-export type AdminWorkflowRunsResponse = z.infer<
-  typeof adminWorkflowRunsResponseSchema
+export type AdminLongTasksResponse = z.infer<
+  typeof adminLongTasksResponseSchema
 >;
 
-export const adminWorkflowRunDetailResponseSchema = z.object({
-  workflowRun: adminWorkflowRunSchema,
-  steps: z.array(adminWorkflowStepSchema)
+export const adminLongTaskDetailResponseSchema = z.object({
+  task: adminLongTaskSchema,
+  steps: z.array(adminLongTaskStepSchema),
+  events: z.array(adminLongTaskEventSchema)
 });
 
-export type AdminWorkflowRunDetailResponse = z.infer<
-  typeof adminWorkflowRunDetailResponseSchema
+export type AdminLongTaskDetailResponse = z.infer<
+  typeof adminLongTaskDetailResponseSchema
 >;
 
 export const adminScheduleSchema = z.object({
@@ -463,7 +471,7 @@ export const adminRunDetailResponseSchema = z.object({
   toolCalls: z.array(adminToolCallSchema),
   skillRouteDecision: adminSkillRouteDecisionSchema.nullable(),
   skillRun: adminSkillRunSummarySchema.nullable(),
-  workflowRun: adminWorkflowRunSchema.nullable(),
+  longTask: adminLongTaskSchema.nullable(),
   scheduleExecution: adminScheduleExecutionSchema.nullable()
 });
 

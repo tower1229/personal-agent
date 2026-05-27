@@ -4,7 +4,7 @@
 
 - Improve Admin visual polish after real-world use.
 - Add richer run search and filtering.
-- Add safer workflow authoring with structured step editors.
+- Add automatic long-task planning and step trace.
 - Add deployment smoke automation for workers.dev.
 
 ## Agent Capability
@@ -18,11 +18,11 @@
 
 - Add document ingestion using Cloudflare-native storage.
 - Store large artifacts outside D1.
-- Add vector search when the document workflow is ready.
+- Add vector search when document ingestion is ready.
 - Expose document and retrieval traces in Admin.
 
 ## Reliability
 
 - Add D1 backup/export runbook.
-- Add alerting around failed scheduled executions and workflow failures.
+- Add alerting around failed scheduled executions and long-task failures.
 - Add rate-limit and timeout diagnostics per external provider.

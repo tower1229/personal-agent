@@ -4,7 +4,6 @@ import { createWorkerApp, runScheduled } from "./app.js";
 import { executeAgentTool } from "./agent.js";
 import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./externalTools.js";
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
-import { executeWorkflowSkillRun } from "./workflowExecutor.js";
 import { type TelegramClient } from "./telegram.js";
 import {
   chatSkillManifest,
@@ -18,8 +17,7 @@ import {
   env,
   ownerCookie,
   ownerUpdate,
-  postWebhook,
-  workflowSkillManifest
+  postWebhook
 } from "./test-helpers/fakeRepositories.js";
 
 describe("skill routing and execution", () => {
@@ -145,7 +143,8 @@ describe("skill routing and execution", () => {
       triggerType: "none",
       matchedSkillId: null
     });
-    expect(telegramClient.messages[1]?.text).toBe("LLM 回复：规划 后天任务");
+    expect(telegramClient.messages[1]?.text).toContain("已创建长任务");
+    expect(repositories.longTasks).toHaveLength(1);
   });
 
   it("blocks tools outside skill allowlists and keeps destructive approval required", async () => {

@@ -1,5 +1,8 @@
 import {
   type ApprovalRequestStatus,
+  type LongTaskStatus,
+  type LongTaskStepStatus,
+  type LongTaskToolPolicy,
   type MemoryStatus,
   type RunStatus,
   type ScheduleCadence,
@@ -10,15 +13,14 @@ import {
   type SkillRunStatus,
   type TodoStatus,
   type ToolCallStatus,
-  type ToolRiskLevel,
-  type WorkflowRunSource,
-  type WorkflowSkillStepType,
-  type WorkflowStatus,
-  type WorkflowStepStatus
+  type ToolRiskLevel
 } from "@personal-agent/shared";
 import {
   type AgentRepositories,
   type ApprovalRequestRecord,
+  type LongTaskEventRecord,
+  type LongTaskRecord,
+  type LongTaskStepRecord,
   type MemoryRecord,
   type RunnableSkillRecord,
   type RunRecord,
@@ -29,9 +31,7 @@ import {
   type ScheduleExecutionRecord,
   type ScheduleRecord,
   type TodoRecord,
-  type ToolCallRecord,
-  type WorkflowRunRecord,
-  type WorkflowStepRecord
+  type ToolCallRecord
 } from "../../repositories.js";
 
 export interface RunRow {
@@ -138,37 +138,6 @@ export interface SkillRunRow {
   updated_at: number;
 }
 
-export interface WorkflowRunRow {
-  id: string;
-  run_id: string;
-  owner_tg_user_id: number;
-  skill_id: string;
-  skill_version_id: string;
-  cloudflare_workflow_instance_id: string | null;
-  source: WorkflowRunSource;
-  status: WorkflowStatus;
-  input_text: string;
-  output_text: string | null;
-  error: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
-export interface WorkflowStepRow {
-  id: string;
-  workflow_run_id: string;
-  owner_tg_user_id: number;
-  step_id: string;
-  step_type: WorkflowSkillStepType;
-  status: WorkflowStepStatus;
-  input_json: string;
-  output_json: string | null;
-  error: string | null;
-  started_at: number | null;
-  completed_at: number | null;
-  created_at: number;
-}
-
 export interface ScheduleRow {
   id: string;
   owner_tg_user_id: number;
@@ -197,6 +166,51 @@ export interface ScheduleExecutionRow {
   error: string | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface LongTaskRow {
+  id: string;
+  run_id: string;
+  owner_tg_user_id: number;
+  title: string;
+  original_input: string;
+  status: LongTaskStatus;
+  complexity_score: number;
+  planner_reason: string;
+  current_step_id: string | null;
+  output_text: string | null;
+  error: string | null;
+  replan_count: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface LongTaskStepRow {
+  id: string;
+  long_task_id: string;
+  owner_tg_user_id: number;
+  position: number;
+  title: string;
+  description: string;
+  status: LongTaskStepStatus;
+  tool_policy: LongTaskToolPolicy;
+  success_criteria: string;
+  input_json: string;
+  output_json: string | null;
+  error: string | null;
+  started_at: number | null;
+  completed_at: number | null;
+  created_at: number;
+}
+
+export interface LongTaskEventRow {
+  id: string;
+  long_task_id: string;
+  owner_tg_user_id: number;
+  step_id: string | null;
+  event_type: string;
+  payload_json: string;
+  created_at: number;
 }
 
 export function toRun(row: RunRow): RunRecord {
@@ -327,41 +341,6 @@ export function toSkillRun(row: SkillRunRow): SkillRunRecord {
   };
 }
 
-export function toWorkflowRun(row: WorkflowRunRow): WorkflowRunRecord {
-  return {
-    id: row.id,
-    runId: row.run_id,
-    ownerTgUserId: row.owner_tg_user_id,
-    skillId: row.skill_id,
-    skillVersionId: row.skill_version_id,
-    cloudflareWorkflowInstanceId: row.cloudflare_workflow_instance_id,
-    source: row.source,
-    status: row.status,
-    inputText: row.input_text,
-    outputText: row.output_text,
-    error: row.error,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  };
-}
-
-export function toWorkflowStep(row: WorkflowStepRow): WorkflowStepRecord {
-  return {
-    id: row.id,
-    workflowRunId: row.workflow_run_id,
-    ownerTgUserId: row.owner_tg_user_id,
-    stepId: row.step_id,
-    stepType: row.step_type,
-    status: row.status,
-    inputJson: row.input_json,
-    outputJson: row.output_json,
-    error: row.error,
-    startedAt: row.started_at,
-    completedAt: row.completed_at,
-    createdAt: row.created_at
-  };
-}
-
 export function toSchedule(row: ScheduleRow): ScheduleRecord {
   return {
     id: row.id,
@@ -395,6 +374,57 @@ export function toScheduleExecution(
     error: row.error,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+export function toLongTask(row: LongTaskRow): LongTaskRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    title: row.title,
+    originalInput: row.original_input,
+    status: row.status,
+    complexityScore: row.complexity_score,
+    plannerReason: row.planner_reason,
+    currentStepId: row.current_step_id,
+    outputText: row.output_text,
+    error: row.error,
+    replanCount: row.replan_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function toLongTaskStep(row: LongTaskStepRow): LongTaskStepRecord {
+  return {
+    id: row.id,
+    longTaskId: row.long_task_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    position: row.position,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    toolPolicy: row.tool_policy,
+    successCriteria: row.success_criteria,
+    inputJson: row.input_json,
+    outputJson: row.output_json,
+    error: row.error,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at
+  };
+}
+
+export function toLongTaskEvent(row: LongTaskEventRow): LongTaskEventRecord {
+  return {
+    id: row.id,
+    longTaskId: row.long_task_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    stepId: row.step_id,
+    eventType: row.event_type,
+    payloadJson: row.payload_json,
+    createdAt: row.created_at
   };
 }
 

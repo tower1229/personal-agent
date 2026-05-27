@@ -20,7 +20,6 @@ export interface SkillFormState {
   triggerPhrases: string;
   instructions: string;
   allowedTools: BuiltInToolName[];
-  workflowTemplate: string;
 }
 
 export interface ScheduleFormState {
@@ -41,8 +40,7 @@ export const emptySkillForm: SkillFormState = {
   enabled: true,
   triggerPhrases: "",
   instructions: "",
-  allowedTools: ["list_todos", "search_memory"],
-  workflowTemplate: "[]"
+  allowedTools: ["list_todos", "search_memory"]
 };
 
 export const emptyScheduleForm: ScheduleFormState = {
@@ -123,8 +121,7 @@ export function formFromSkill(skill: AdminSkillDetail): SkillFormState {
     enabled: skill.enabled,
     triggerPhrases: skill.manifest.triggerPhrases.join("\n"),
     instructions: skill.manifest.instructions,
-    allowedTools: [...skill.manifest.allowedTools],
-    workflowTemplate: JSON.stringify(skill.manifest.workflowTemplate, null, 2)
+    allowedTools: [...skill.manifest.allowedTools]
   };
 }
 
@@ -144,8 +141,7 @@ export function manifestFromForm(form: SkillFormState) {
     allowedTools: form.allowedTools,
     riskLevel: "read",
     autoRunThreshold: 0.75,
-    confirmThreshold: 0.45,
-    workflowTemplate: JSON.parse(form.workflowTemplate || "[]") as unknown
+    confirmThreshold: 0.45
   });
 }
 
@@ -188,4 +184,3 @@ export function useAsyncData<T>(loader: () => Promise<T>, deps: unknown[] = []) 
 
   return { data, error, loading, setData };
 }
-

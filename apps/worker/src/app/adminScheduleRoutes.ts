@@ -26,8 +26,6 @@ import {
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
-  adminWorkflowRunDetailResponseSchema,
-  adminWorkflowRunsResponseSchema,
   skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
@@ -45,7 +43,6 @@ import { executeLlmAgent } from "../agent.js";
 import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
 import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
 import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
-import { unauthorizedWorkflowStepTools, unsupportedWorkflowStepTypes } from "../workflowValidation.js";
 import { type AgentRepositories } from "../repositories.js";
 import { type WorkerEnv } from "../types.js";
 import {
@@ -66,9 +63,7 @@ import {
   toAdminSkillRouteDecision,
   toAdminSkillRun,
   toAdminTodo,
-  toAdminToolCall,
-  toAdminWorkflowRun,
-  toAdminWorkflowStep
+  toAdminToolCall
 } from "./serializers.js";
 
 import { type WorkerRouteContext } from "./routeContext.js";

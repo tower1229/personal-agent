@@ -1,5 +1,8 @@
 import {
   type ApprovalRequestStatus,
+  type LongTaskStatus,
+  type LongTaskStepStatus,
+  type LongTaskToolPolicy,
   type MemoryStatus,
   type RunStatus,
   type ScheduleCadence,
@@ -9,11 +12,7 @@ import {
   type SkillRunStatus,
   type TodoStatus,
   type ToolCallStatus,
-  type ToolRiskLevel,
-  type WorkflowRunSource,
-  type WorkflowSkillStepType,
-  type WorkflowStatus,
-  type WorkflowStepStatus
+  type ToolRiskLevel
 } from "@personal-agent/shared";
 
 export interface RunRecord {
@@ -125,37 +124,6 @@ export interface SkillRunRecord {
   updatedAt: number;
 }
 
-export interface WorkflowRunRecord {
-  id: string;
-  runId: string;
-  ownerTgUserId: number;
-  skillId: string;
-  skillVersionId: string;
-  cloudflareWorkflowInstanceId: string | null;
-  source: WorkflowRunSource;
-  status: WorkflowStatus;
-  inputText: string;
-  outputText: string | null;
-  error: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface WorkflowStepRecord {
-  id: string;
-  workflowRunId: string;
-  ownerTgUserId: number;
-  stepId: string;
-  stepType: WorkflowSkillStepType;
-  status: WorkflowStepStatus;
-  inputJson: string;
-  outputJson: string | null;
-  error: string | null;
-  startedAt: number | null;
-  completedAt: number | null;
-  createdAt: number;
-}
-
 export interface ScheduleRecord {
   id: string;
   ownerTgUserId: number;
@@ -184,6 +152,51 @@ export interface ScheduleExecutionRecord {
   error: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface LongTaskRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  title: string;
+  originalInput: string;
+  status: LongTaskStatus;
+  complexityScore: number;
+  plannerReason: string;
+  currentStepId: string | null;
+  outputText: string | null;
+  error: string | null;
+  replanCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface LongTaskStepRecord {
+  id: string;
+  longTaskId: string;
+  ownerTgUserId: number;
+  position: number;
+  title: string;
+  description: string;
+  status: LongTaskStepStatus;
+  toolPolicy: LongTaskToolPolicy;
+  successCriteria: string;
+  inputJson: string;
+  outputJson: string | null;
+  error: string | null;
+  startedAt: number | null;
+  completedAt: number | null;
+  createdAt: number;
+}
+
+export interface LongTaskEventRecord {
+  id: string;
+  longTaskId: string;
+  ownerTgUserId: number;
+  stepId: string | null;
+  eventType: string;
+  payloadJson: string;
+  createdAt: number;
 }
 
 export interface AgentRepositories {
@@ -323,36 +336,45 @@ export interface AgentRepositories {
     ownerTgUserId: number;
     runId: string;
   }): Promise<SkillRunRecord | null>;
-  createWorkflowRun(input: WorkflowRunRecord): Promise<WorkflowRunRecord>;
-  updateWorkflowRun(input: {
+  createLongTask(input: LongTaskRecord): Promise<LongTaskRecord>;
+  updateLongTask(input: {
     id: string;
-    status: WorkflowStatus;
+    status: LongTaskStatus;
+    title?: string;
+    plannerReason?: string;
+    currentStepId?: string | null;
     outputText?: string | null;
     error?: string | null;
-    cloudflareWorkflowInstanceId?: string | null;
+    replanCount?: number;
     updatedAt: number;
   }): Promise<void>;
-  getWorkflowRun(input: {
+  getLongTask(input: {
     ownerTgUserId: number;
     id: string;
-  }): Promise<WorkflowRunRecord | null>;
-  listWorkflowRuns(
-    ownerTgUserId: number,
-    limit: number
-  ): Promise<WorkflowRunRecord[]>;
-  getWorkflowRunForRun(input: {
+  }): Promise<LongTaskRecord | null>;
+  getLatestActiveLongTask(ownerTgUserId: number): Promise<LongTaskRecord | null>;
+  getLongTaskForRun(input: {
     ownerTgUserId: number;
     runId: string;
-  }): Promise<WorkflowRunRecord | null>;
-  createWorkflowStep(input: WorkflowStepRecord): Promise<WorkflowStepRecord>;
-  updateWorkflowStep(input: {
+  }): Promise<LongTaskRecord | null>;
+  listLongTasks(ownerTgUserId: number, limit: number): Promise<LongTaskRecord[]>;
+  listResumableLongTasks(now: number, limit: number): Promise<LongTaskRecord[]>;
+  createLongTaskStep(input: LongTaskStepRecord): Promise<LongTaskStepRecord>;
+  updateLongTaskStep(input: {
     id: string;
-    status: WorkflowStepStatus;
+    status: LongTaskStepStatus;
     outputJson?: string | null;
     error?: string | null;
+    startedAt?: number | null;
     completedAt?: number | null;
   }): Promise<void>;
-  listWorkflowSteps(workflowRunId: string): Promise<WorkflowStepRecord[]>;
+  claimNextLongTaskStep(input: {
+    longTaskId: string;
+    startedAt: number;
+  }): Promise<LongTaskStepRecord | null>;
+  listLongTaskSteps(longTaskId: string): Promise<LongTaskStepRecord[]>;
+  createLongTaskEvent(input: LongTaskEventRecord): Promise<LongTaskEventRecord>;
+  listLongTaskEvents(longTaskId: string): Promise<LongTaskEventRecord[]>;
   createSchedule(input: ScheduleRecord): Promise<ScheduleRecord>;
   updateSchedule(input: {
     ownerTgUserId: number;

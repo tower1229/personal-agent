@@ -54,24 +54,6 @@ export const documentIndexStatuses = [
 ] as const;
 export type DocumentIndexStatus = (typeof documentIndexStatuses)[number];
 
-export const workflowStatuses = ["running", "succeeded", "failed"] as const;
-export type WorkflowStatus = (typeof workflowStatuses)[number];
-
-export const workflowStepStatuses = [
-  "running",
-  "succeeded",
-  "failed",
-  "skipped"
-] as const;
-export type WorkflowStepStatus = (typeof workflowStepStatuses)[number];
-
-export const workflowRunSources = [
-  "telegram",
-  "admin_test",
-  "schedule"
-] as const;
-export type WorkflowRunSource = (typeof workflowRunSources)[number];
-
 export const scheduleCadences = ["daily", "weekly"] as const;
 export type ScheduleCadence = (typeof scheduleCadences)[number];
 
@@ -82,6 +64,36 @@ export const scheduleExecutionStatuses = [
 ] as const;
 export type ScheduleExecutionStatus =
   (typeof scheduleExecutionStatuses)[number];
+
+export const longTaskStatuses = [
+  "planning",
+  "running",
+  "waiting_for_user",
+  "paused",
+  "succeeded",
+  "failed",
+  "cancelled"
+] as const;
+export type LongTaskStatus = (typeof longTaskStatuses)[number];
+
+export const longTaskStepStatuses = [
+  "pending",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped",
+  "blocked"
+] as const;
+export type LongTaskStepStatus = (typeof longTaskStepStatuses)[number];
+
+export const longTaskToolPolicies = [
+  "none",
+  "read",
+  "write_low",
+  "external_send",
+  "destructive"
+] as const;
+export type LongTaskToolPolicy = (typeof longTaskToolPolicies)[number];
 
 export const evalCategories = [
   "casual_chat",
@@ -110,7 +122,7 @@ export const toolRiskLevels = [
 ] as const;
 export type ToolRiskLevel = (typeof toolRiskLevels)[number];
 
-export const skillKinds = ["chat", "workflow"] as const;
+export const skillKinds = ["chat"] as const;
 export type SkillKind = (typeof skillKinds)[number];
 
 export const skillStatuses = [
@@ -143,18 +155,3 @@ export const builtInToolNames = [
   "fetch_url"
 ] as const;
 export type BuiltInToolName = (typeof builtInToolNames)[number];
-
-export const workflowSkillStepTypes = [
-  "llm",
-  "tool",
-  "web_search",
-  "fetch_url",
-  "rag_search",
-  "wait",
-  "approval",
-  "condition",
-  "send_telegram",
-  "save_artifact"
-] as const;
-export type WorkflowSkillStepType =
-  (typeof workflowSkillStepTypes)[number];

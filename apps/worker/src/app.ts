@@ -27,8 +27,6 @@ import {
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
-  adminWorkflowRunDetailResponseSchema,
-  adminWorkflowRunsResponseSchema,
   skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
@@ -56,6 +54,7 @@ import {
   type LlmClient
 } from "./llm.js";
 import { executeLlmAgent } from "./agent.js";
+import { resumeDueLongTasks } from "./longTasks.js";
 import {
   createTelegramClient,
   getTelegramUpdateUserId,
@@ -69,10 +68,6 @@ import {
   pollDueSchedules
 } from "./schedules.js";
 import {
-  unauthorizedWorkflowStepTools,
-  unsupportedWorkflowStepTypes
-} from "./workflowValidation.js";
-import {
   type AgentRepositories,
   type ApprovalRequestRecord,
   type MemoryRecord,
@@ -83,9 +78,7 @@ import {
   type SkillRouteDecisionRecord,
   type SkillRunRecord,
   type TodoRecord,
-  type ToolCallRecord,
-  type WorkflowRunRecord,
-  type WorkflowStepRecord
+  type ToolCallRecord
 } from "./repositories.js";
 
 import { registerWorkerRoutes } from "./app/routes.js";
@@ -108,9 +101,7 @@ import {
   toAdminSkillRouteDecision,
   toAdminSkillRun,
   toAdminTodo,
-  toAdminToolCall,
-  toAdminWorkflowRun,
-  toAdminWorkflowStep
+  toAdminToolCall
 } from "./app/serializers.js";
 
 interface WorkerAppOptions {
@@ -119,7 +110,6 @@ interface WorkerAppOptions {
   llmClient?: LlmClient;
   searchClient?: SearchClient;
   urlFetcher?: UrlFetcher;
-  workflowStarter?: BotRuntime["workflowStarter"];
   now?: () => number;
   generateId?: () => string;
   generateApprovalCode?: () => string;
@@ -181,8 +171,7 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       now: options.now ?? Date.now,
       generateId: options.generateId ?? defaultGenerateId,
       generateApprovalCode:
-        options.generateApprovalCode ?? defaultGenerateApprovalCode,
-      workflowStarter: options.workflowStarter ?? env.WORKFLOW_SKILL_RUNNER
+        options.generateApprovalCode ?? defaultGenerateApprovalCode
     };
   }
 
@@ -223,9 +212,7 @@ export async function runScheduled(
   options: WorkerAppOptions = {},
   scheduledTime = Date.now()
 ) {
-  return pollDueSchedules({
-    now: scheduledTime,
-    runtime: {
+  const runtime: BotRuntime = {
       repositories: options.repositories ?? createD1Repositories(env.DB),
       telegramClient:
         options.telegramClient ??
@@ -263,8 +250,21 @@ export async function runScheduled(
       now: options.now ?? Date.now,
       generateId: options.generateId ?? defaultGenerateId,
       generateApprovalCode:
-        options.generateApprovalCode ?? defaultGenerateApprovalCode,
-      workflowStarter: options.workflowStarter ?? env.WORKFLOW_SKILL_RUNNER
-    }
-  });
+        options.generateApprovalCode ?? defaultGenerateApprovalCode
+    };
+  const [schedules, longTasks] = await Promise.all([
+    pollDueSchedules({
+      now: scheduledTime,
+      runtime
+    }),
+    resumeDueLongTasks({
+      now: scheduledTime,
+      runtime
+    })
+  ]);
+
+  return {
+    ...schedules,
+    longTasks
+  };
 }

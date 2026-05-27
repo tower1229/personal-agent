@@ -4,7 +4,6 @@ import { createWorkerApp, runScheduled } from "./app.js";
 import { executeAgentTool } from "./agent.js";
 import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./externalTools.js";
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
-import { executeWorkflowSkillRun } from "./workflowExecutor.js";
 import { type TelegramClient } from "./telegram.js";
 import {
   chatSkillManifest,
@@ -18,8 +17,7 @@ import {
   env,
   ownerCookie,
   ownerUpdate,
-  postWebhook,
-  workflowSkillManifest
+  postWebhook
 } from "./test-helpers/fakeRepositories.js";
 
 describe("admin data and run traces", () => {
@@ -75,21 +73,6 @@ describe("admin data and run traces", () => {
       createdAt: 1011,
       updatedAt: 1012
     });
-    repositories.workflowRuns.push({
-      id: "workflow-run-1",
-      runId,
-      ownerTgUserId: 1229,
-      skillId: "morning",
-      skillVersionId: "workflow-version-1",
-      cloudflareWorkflowInstanceId: "cf-1",
-      source: "telegram",
-      status: "succeeded",
-      inputText: "Trace 详情",
-      outputText: "done",
-      error: null,
-      createdAt: 1013,
-      updatedAt: 1014
-    });
     repositories.scheduleExecutions.push({
       id: "schedule-execution-1",
       scheduleId: "schedule-1",
@@ -133,10 +116,6 @@ describe("admin data and run traces", () => {
       },
       skillRun: {
         id: "skill-run-1",
-        runId
-      },
-      workflowRun: {
-        id: "workflow-run-1",
         runId
       },
       scheduleExecution: {

@@ -11,8 +11,6 @@ import {
   toSkillVersion,
   toTodo,
   toToolCall,
-  toWorkflowRun,
-  toWorkflowStep,
   type ApprovalRequestRow,
   type MemoryRow,
   type RunRow,
@@ -23,9 +21,7 @@ import {
   type SkillRunRow,
   type SkillVersionRow,
   type TodoRow,
-  type ToolCallRow,
-  type WorkflowRunRow,
-  type WorkflowStepRow
+  type ToolCallRow
 } from "./mappers.js";
 import { type AgentRepositories, type RunnableSkillRecord } from "../../repositories.js";
 

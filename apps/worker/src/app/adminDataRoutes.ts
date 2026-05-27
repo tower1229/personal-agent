@@ -26,8 +26,6 @@ import {
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
-  adminWorkflowRunDetailResponseSchema,
-  adminWorkflowRunsResponseSchema,
   skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
@@ -45,7 +43,6 @@ import { executeLlmAgent } from "../agent.js";
 import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
 import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
 import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
-import { unauthorizedWorkflowStepTools, unsupportedWorkflowStepTypes } from "../workflowValidation.js";
 import { type AgentRepositories } from "../repositories.js";
 import { type WorkerEnv } from "../types.js";
 import {
@@ -57,6 +54,7 @@ import {
 } from "./helpers.js";
 import {
   toAdminApproval,
+  toAdminLongTask,
   toAdminMemory,
   toAdminRun,
   toAdminSchedule,
@@ -66,9 +64,7 @@ import {
   toAdminSkillRouteDecision,
   toAdminSkillRun,
   toAdminTodo,
-  toAdminToolCall,
-  toAdminWorkflowRun,
-  toAdminWorkflowStep
+  toAdminToolCall
 } from "./serializers.js";
 
 import { type WorkerRouteContext } from "./routeContext.js";
@@ -125,7 +121,7 @@ export function registerAdminDataRoutes(
       toolCalls,
       skillRouteDecision,
       skillRun,
-      workflowRun,
+      longTask,
       scheduleExecution
     ] = await Promise.all([
       repo.listToolCallsForRun({
@@ -140,7 +136,7 @@ export function registerAdminDataRoutes(
         ownerTgUserId: authenticatedOwnerId,
         runId: run.id
       }),
-      repo.getWorkflowRunForRun({
+      repo.getLongTaskForRun({
         ownerTgUserId: authenticatedOwnerId,
         runId: run.id
       }),
@@ -158,7 +154,7 @@ export function registerAdminDataRoutes(
           ? toAdminSkillRouteDecision(skillRouteDecision)
           : null,
         skillRun: skillRun ? toAdminSkillRun(skillRun) : null,
-        workflowRun: workflowRun ? toAdminWorkflowRun(workflowRun) : null,
+        longTask: longTask ? toAdminLongTask(longTask) : null,
         scheduleExecution: scheduleExecution
           ? toAdminScheduleExecution(scheduleExecution)
           : null
