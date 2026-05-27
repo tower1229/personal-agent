@@ -21,6 +21,11 @@ import {
   adminPersonalModelSourceDocumentSchema,
   adminPersonalModelSourcesResponseSchema,
   adminPersonalModelSourceUpdateRequestSchema,
+  adminPersonalModelMetacognitionLogsResponseSchema,
+  personalModelUnderstandingGapDtoSchema,
+  adminPersonalModelUnderstandingGapsResponseSchema,
+  adminPersonalModelUnderstandingGapCreateRequestSchema,
+  adminPersonalModelUnderstandingGapUpdateRequestSchema,
   adminRunDetailResponseSchema,
   adminRunsResponseSchema,
   adminScheduleExecutionsResponseSchema,
@@ -57,6 +62,11 @@ import {
   type AdminPersonalModelSourceDocument,
   type AdminPersonalModelSourcesResponse,
   type AdminPersonalModelSourceUpdateRequest,
+  type AdminPersonalModelMetacognitionLogsResponse,
+  type PersonalModelUnderstandingGapDto,
+  type AdminPersonalModelUnderstandingGapsResponse,
+  type AdminPersonalModelUnderstandingGapCreateRequest,
+  type AdminPersonalModelUnderstandingGapUpdateRequest,
   type AdminRunDetailResponse,
   type AdminRunsResponse,
   type AdminSchedule,
@@ -457,6 +467,34 @@ export function createPersonalModelEvidence(input: {
     "POST",
     adminPersonalModelEvidenceCreateRequestSchema.parse(input.request),
     (body) => adminPersonalModelEvidenceSchema.parse(body)
+  );
+}
+
+export function loadPersonalModelMetacognitionLogs(): Promise<AdminPersonalModelMetacognitionLogsResponse> {
+  return fetchJson("/api/admin/personal-model/metacognition-logs", (input) =>
+    adminPersonalModelMetacognitionLogsResponseSchema.parse(input)
+  );
+}
+
+export function loadPersonalModelUnderstandingGaps(): Promise<AdminPersonalModelUnderstandingGapsResponse> {
+  return fetchJson("/api/admin/personal-model/understanding-gaps", (input) =>
+    adminPersonalModelUnderstandingGapsResponseSchema.parse(input)
+  );
+}
+
+export function updatePersonalModelUnderstandingGapStatus(input: {
+  id: string;
+  request: AdminPersonalModelUnderstandingGapUpdateRequest;
+}): Promise<{ success: boolean }> {
+  return requestJson(
+    `/api/admin/personal-model/understanding-gaps/${input.id}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(
+        adminPersonalModelUnderstandingGapUpdateRequestSchema.parse(input.request)
+      )
+    },
+    (body) => body as { success: boolean }
   );
 }
 

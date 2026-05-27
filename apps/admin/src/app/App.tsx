@@ -46,6 +46,16 @@ const ApprovalsPage = lazy(() =>
     default: module.ApprovalsPage
   }))
 );
+const GapsPage = lazy(() =>
+  import("@/pages/gaps-page").then((module) => ({
+    default: module.GapsPage
+  }))
+);
+const MetacognitionPage = lazy(() =>
+  import("@/pages/metacognition-page").then((module) => ({
+    default: module.MetacognitionPage
+  }))
+);
 const SettingsPage = lazy(() =>
   import("@/pages/settings-page").then((module) => ({
     default: module.SettingsPage
@@ -108,6 +118,8 @@ export function App() {
               element={<PersonalModelPage />}
               path="/admin/personal-model"
             />
+            <Route element={<GapsPage />} path="/admin/personal-model/gaps" />
+            <Route element={<MetacognitionPage />} path="/admin/personal-model/metacognition" />
             <Route element={<ApprovalsPage />} path="/admin/approvals" />
             <Route element={<SettingsPage />} path="/admin/settings" />
             <Route

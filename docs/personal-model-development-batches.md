@@ -262,6 +262,9 @@
 - 完成 `adminPersonalModelRoutes.ts` 中 MetacognitionLogs 和 UnderstandingGaps 的增删查改 endpoints (`GET`, `POST`, `PATCH`)。
 - `personalModelContext.ts` 中集成了 open `understanding_gaps`，使未解之谜作为 context 的一部分，引导 Agent 补齐认知。
 - `helpers.ts` 将新表加入了 D1 readiness 检查。
+- 在 Admin API 中实现了自动联动：管理员修改 claim 的置信度或标记过期时，系统自动生成元认知日志。
+- 为 Admin UI 新增了 `Gaps` 和 `Metacognition Logs` 页面并在左侧边栏添加入口。
+- 为 LLM Agent 增加了 `record_understanding_gap` 和 `record_metacognition_log` 工具，使得 Agent 具备自主反思能力。
 - 所有 `typecheck` 成功通过。
 
 目标：让 agent 不只保存结论，还能记录自己如何理解用户、哪里被纠正、哪里不确定。

@@ -85,6 +85,8 @@ const CREATE_TODO_PATTERN = /^(新增待办|创建待办)[:：]\s*(.+)$/u;
 const COMPLETE_TODO_PATTERN = /^完成待办\s+(\d+)$/u;
 const REMEMBER_PATTERN = /^记住[:：]\s*(.+)$/u;
 const RECORD_UNDERSTANDING_PATTERN = /^记录理解[:：]\s*(.+)$/u;
+const RECORD_GAP_PATTERN = /^记录缺口[:：]\s*(.+)$/u;
+const CORRECT_UNDERSTANDING_PATTERN = /^修正理解[:：]\s*(.+)$/u;
 const SEARCH_MEMORY_PATTERN = /^(搜索记忆|你记得)\s*(.+)$/u;
 const DELETE_MEMORY_PATTERN = /^删除记忆\s+(\d+)$/u;
 const APPROVAL_PATTERN = /^(确认)\s+([A-Za-z0-9-]+)$|^(取消)\s+(\d{6})$/u;
@@ -436,6 +438,68 @@ export async function executeCommand(
         scenario: parsedClaim.scenario
       },
       output: { id: claim.id }
+    };
+  }
+
+  const recordGap = RECORD_GAP_PATTERN.exec(text);
+  if (recordGap) {
+    const parsedGap = parsePersonalModelClaimInput(recordGap[1] ?? "");
+    if (!parsedGap) {
+      return {
+        responseText: "缺口内容不能为空。可选格式：记录缺口：[preference/writing] 为什么不喜欢吃香菜",
+        toolName: "record_understanding_gap",
+        riskLevel: "write_low",
+        input: { text },
+        output: { created: false }
+      };
+    }
+    const now = context.runtime.now();
+    await repositories.createPersonalModelUnderstandingGap({
+      id: context.runtime.generateId(),
+      ownerTgUserId: context.ownerTgUserId,
+      scenario: parsedGap.scenario,
+      gapDescription: parsedGap.claim,
+      status: "open",
+      createdAt: now,
+      updatedAt: now
+    });
+    return {
+      responseText: `已记录认知缺口。`,
+      toolName: "record_understanding_gap",
+      riskLevel: "write_low",
+      input: { scenario: parsedGap.scenario, gapDescription: parsedGap.claim },
+      output: { recorded: true }
+    };
+  }
+
+  const correctUnderstanding = CORRECT_UNDERSTANDING_PATTERN.exec(text);
+  if (correctUnderstanding) {
+    const content = trimRequired(correctUnderstanding[1] ?? "");
+    if (!content) {
+      return {
+        responseText: "修正内容不能为空。",
+        toolName: "record_metacognition_log",
+        riskLevel: "write_low",
+        input: { text },
+        output: { recorded: false }
+      };
+    }
+    const now = context.runtime.now();
+    await repositories.createPersonalModelMetacognitionLog({
+      id: context.runtime.generateId(),
+      ownerTgUserId: context.ownerTgUserId,
+      reflectionType: "correction",
+      content,
+      relatedClaimId: null,
+      relatedGapId: null,
+      createdAt: now
+    });
+    return {
+      responseText: `已记录理解修正。`,
+      toolName: "record_metacognition_log",
+      riskLevel: "write_low",
+      input: { content },
+      output: { recorded: true }
     };
   }
 

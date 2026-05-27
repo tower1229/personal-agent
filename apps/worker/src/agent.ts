@@ -12,6 +12,7 @@ import {
 } from "./llm.js";
 import { type AgentRepositories } from "./repositories.js";
 import { assemblePersonalModelContext } from "./personalModelContext.js";
+import { type PersonalModelScenario } from "@personal-agent/shared";
 
 export interface AgentRuntime {
   repositories: AgentRepositories;
@@ -297,6 +298,47 @@ export async function executeAgentTool(input: {
         input: { url },
         output: fetched
       };
+    } else if (input.toolName === "record_understanding_gap") {
+      const scenario = stringArg(input.args, "scenario") as PersonalModelScenario | "" || "global";
+      const gapDescription = stringArg(input.args, "gapDescription") || "";
+      if (gapDescription) {
+        await input.runtime.repositories.createPersonalModelUnderstandingGap({
+          id: input.runtime.generateId(),
+          ownerTgUserId: input.ownerTgUserId,
+          scenario,
+          gapDescription,
+          status: "open",
+          createdAt: input.runtime.now(),
+          updatedAt: input.runtime.now()
+        });
+      }
+      result = {
+        responseText: gapDescription ? "已记录认知缺口。" : "缺少描述。",
+        toolName: "record_understanding_gap",
+        riskLevel: "write_low",
+        input: { scenario, gapDescription },
+        output: gapDescription ? { recorded: true } : { recorded: false }
+      };
+    } else if (input.toolName === "record_metacognition_log") {
+      const content = stringArg(input.args, "content") || "";
+      if (content) {
+        await input.runtime.repositories.createPersonalModelMetacognitionLog({
+          id: input.runtime.generateId(),
+          ownerTgUserId: input.ownerTgUserId,
+          reflectionType: "correction",
+          content,
+          relatedClaimId: null,
+          relatedGapId: null,
+          createdAt: input.runtime.now()
+        });
+      }
+      result = {
+        responseText: content ? "已记录修正理解（元认知）。" : "缺少内容。",
+        toolName: "record_metacognition_log",
+        riskLevel: "write_low",
+        input: { content },
+        output: content ? { recorded: true } : { recorded: false }
+      };
     } else {
       throw new Error(`Unknown tool: ${input.toolName}`);
     }
@@ -428,6 +470,35 @@ const toolDefinitions: Record<BuiltInToolName, LlmToolDefinition> = {
         type: "object",
         properties: { url: { type: "string" } },
         required: ["url"]
+      }
+    }
+  },
+  record_understanding_gap: {
+    type: "function",
+    function: {
+      name: "record_understanding_gap",
+      description: "Record a gap in your understanding about the user when you realize you need more information to assist them properly.",
+      parameters: {
+        type: "object",
+        properties: {
+          scenario: { type: "string", description: "The scenario, e.g. global, writing, relationship, etc." },
+          gapDescription: { type: "string", description: "What you don't know and need to find out." }
+        },
+        required: ["scenario", "gapDescription"]
+      }
+    }
+  },
+  record_metacognition_log: {
+    type: "function",
+    function: {
+      name: "record_metacognition_log",
+      description: "Record a reflection or correction when the user points out a misunderstanding or corrects your previous assumptions.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "Detailed description of what you misunderstood and what the correct understanding is." }
+        },
+        required: ["content"]
       }
     }
   }

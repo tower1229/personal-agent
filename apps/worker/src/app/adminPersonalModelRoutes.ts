@@ -191,6 +191,28 @@ export function registerAdminPersonalModelRoutes(
       createdAt: now
     });
 
+    if (body.data.status === "deprecated" || body.data.status === "archived") {
+      await repo.createPersonalModelMetacognitionLog({
+        id: (options.generateId ?? defaultGenerateId)(),
+        ownerTgUserId: authenticatedOwnerId,
+        reflectionType: "conflict_resolution",
+        content: `Admin marked claim as ${body.data.status}.`,
+        relatedClaimId: claim.id,
+        relatedGapId: null,
+        createdAt: now
+      });
+    } else if (body.data.confidence === "low" || body.data.confidence === "medium") {
+      await repo.createPersonalModelMetacognitionLog({
+        id: (options.generateId ?? defaultGenerateId)(),
+        ownerTgUserId: authenticatedOwnerId,
+        reflectionType: "correction",
+        content: `Admin adjusted confidence to ${body.data.confidence}.`,
+        relatedClaimId: claim.id,
+        relatedGapId: null,
+        createdAt: now
+      });
+    }
+
     return c.json(toAdminPersonalModelClaim(claim));
   });
 

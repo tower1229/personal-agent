@@ -274,6 +274,8 @@ export const builtInToolNames = [
   "search_memory",
   "delete_memory_request",
   "web_search",
-  "fetch_url"
+  "fetch_url",
+  "record_understanding_gap",
+  "record_metacognition_log"
 ] as const;
 export type BuiltInToolName = (typeof builtInToolNames)[number];

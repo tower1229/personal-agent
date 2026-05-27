@@ -924,16 +924,20 @@ export type PersonalModelUnderstandingGapDto = z.infer<typeof personalModelUnder
 export const adminPersonalModelMetacognitionLogsResponseSchema = z.object({
   items: z.array(personalModelMetacognitionLogDtoSchema)
 });
+export type AdminPersonalModelMetacognitionLogsResponse = z.infer<typeof adminPersonalModelMetacognitionLogsResponseSchema>;
 
 export const adminPersonalModelUnderstandingGapsResponseSchema = z.object({
   items: z.array(personalModelUnderstandingGapDtoSchema)
 });
+export type AdminPersonalModelUnderstandingGapsResponse = z.infer<typeof adminPersonalModelUnderstandingGapsResponseSchema>;
 
 export const adminPersonalModelUnderstandingGapUpdateRequestSchema = z.object({
   status: personalModelUnderstandingGapStatusSchema
 });
+export type AdminPersonalModelUnderstandingGapUpdateRequest = z.infer<typeof adminPersonalModelUnderstandingGapUpdateRequestSchema>;
 
 export const adminPersonalModelUnderstandingGapCreateRequestSchema = z.object({
   scenario: personalModelScenarioSchema,
   gapDescription: z.string().min(1)
 });
+export type AdminPersonalModelUnderstandingGapCreateRequest = z.infer<typeof adminPersonalModelUnderstandingGapCreateRequestSchema>;
