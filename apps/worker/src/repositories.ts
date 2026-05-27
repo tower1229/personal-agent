@@ -437,6 +437,7 @@ export interface AgentRepositories {
   createPersonalModelSourceDocument(
     input: PersonalModelSourceDocumentRecord
   ): Promise<PersonalModelSourceDocumentRecord>;
+  deletePersonalModelSourceDocument(input: { ownerTgUserId: number; id: string }): Promise<void>;
   updatePersonalModelSourceDocument(input: {
     ownerTgUserId: number;
     id: string;

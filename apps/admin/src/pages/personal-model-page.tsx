@@ -38,7 +38,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { createPersonalModelClaim, createPersonalModelEvidence, createPersonalModelSource, loadPersonalModelClaimDetail, loadPersonalModelClaims, loadPersonalModelSourceDetail, loadPersonalModelSources, updatePersonalModelClaim, updatePersonalModelSource } from "@/lib/api";
+import { createPersonalModelClaim, createPersonalModelEvidence, createPersonalModelSource, deletePersonalModelSource, loadPersonalModelClaimDetail, loadPersonalModelClaims, loadPersonalModelSourceDetail, loadPersonalModelSources, updatePersonalModelClaim, updatePersonalModelSource } from "@/lib/api";
 import { formatDateTime, parseLocalYMD, truncateText } from "@/lib/format";
 import { EmptyState, Field, filterText, useAsyncData } from "./resource-common";
 
@@ -225,11 +225,26 @@ export function PersonalModelPage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
-      setSourceForm((current) => ({
-        ...current,
+      const updates: Partial<SourceFormState> = {
         title: file.name.replace(/\.[^/.]+$/, ""),
         content
-      }));
+      };
+
+      // Parse YAML frontmatter for title and date
+      const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      if (fmMatch) {
+        const fm = fmMatch[1];
+        const titleMatch = fm.match(/^title:\s*(.+)$/m);
+        if (titleMatch) {
+          updates.title = titleMatch[1].trim();
+        }
+        const dateMatch = fm.match(/^date:\s*(\d{4}-\d{2}-\d{2})/m);
+        if (dateMatch) {
+          updates.sourceCreatedAt = dateMatch[1];
+        }
+      }
+
+      setSourceForm((current) => ({ ...current, ...updates }));
     };
     reader.onerror = () => toast.error("读取文件失败");
     reader.readAsText(file);
@@ -572,14 +587,14 @@ export function PersonalModelPage() {
                 <DialogTrigger asChild>
                   <Button>Import Source</Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto overflow-x-hidden">
                   <DialogHeader>
                     <DialogTitle>Import Source</DialogTitle>
                     <DialogDescription>
                       直接粘贴文本，或上传 Markdown / TXT 文件。
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="grid gap-4 py-4">
+                  <div className="grid gap-4 py-4 min-w-0">
                     <Field label="Upload File">
                       <Input accept=".md,.txt" onChange={handleFileUpload} type="file" />
                     </Field>
@@ -622,7 +637,7 @@ export function PersonalModelPage() {
                     </div>
                     <Field label="Content">
                       <Textarea
-                        className="min-h-[200px]"
+                        className="min-h-[200px] break-all"
                         onChange={(event) =>
                           setSourceForm((current) => ({
                             ...current,
@@ -656,6 +671,20 @@ export function PersonalModelPage() {
           <SourcesTable
             items={sources.data?.items ?? []}
             loading={sources.loading}
+            onDelete={async (source) => {
+              if (!window.confirm(`确定删除「${source.title}」？此操作不可撤销。`)) return;
+              try {
+                await deletePersonalModelSource(source.id);
+                toast.success("已删除");
+                if (selectedSourceId === source.id) {
+                  setSelectedSourceId(null);
+                  setChunks([]);
+                }
+                await refreshSources();
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "删除失败");
+              }
+            }}
             onPatch={(source, request) => void patchSource(source, request)}
             onSelect={(source) => void selectSource(source)}
             selectedId={selectedSourceId}
@@ -845,6 +874,7 @@ function SourcesTable(props: {
   loading: boolean;
   selectedId: string | null;
   onSelect: (source: AdminPersonalModelSourceDocument) => void;
+  onDelete: (source: AdminPersonalModelSourceDocument) => void;
   onPatch: (
     source: AdminPersonalModelSourceDocument,
     request: {
@@ -868,6 +898,7 @@ function SourcesTable(props: {
           <TableHead>Status</TableHead>
           <TableHead>Usage</TableHead>
           <TableHead>Ingested</TableHead>
+          <TableHead className="w-[60px]"></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -917,6 +948,17 @@ function SourcesTable(props: {
               />
             </TableCell>
             <TableCell>{formatDateTime(source.ingestedAt)}</TableCell>
+            <TableCell>
+              <Button
+                onClick={() => props.onDelete(source)}
+                size="sm"
+                type="button"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+              >
+                删除
+              </Button>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

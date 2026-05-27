@@ -462,6 +462,10 @@ export function updatePersonalModelSource(input: {
   );
 }
 
+export async function deletePersonalModelSource(id: string): Promise<void> {
+  await deleteEmpty(`/api/admin/personal-model/sources/${id}`);
+}
+
 export function createPersonalModelEvidence(input: {
   claimId: string;
   request: AdminPersonalModelEvidenceCreateRequest;

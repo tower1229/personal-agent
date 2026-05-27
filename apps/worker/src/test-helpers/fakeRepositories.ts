@@ -481,6 +481,11 @@ export function createFakeRepositories(): AgentRepositories & {
       }
       return source;
     },
+    async deletePersonalModelSourceDocument(input) {
+      state.personalModelSourceDocuments = state.personalModelSourceDocuments.filter(
+        (doc) => !(doc.id === input.id && doc.ownerTgUserId === input.ownerTgUserId)
+      );
+    },
     async getPersonalModelSourceDocument(input) {
       return (
         state.personalModelSourceDocuments.find(

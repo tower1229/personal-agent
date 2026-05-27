@@ -403,6 +403,20 @@ export function registerAdminPersonalModelRoutes(
     return c.json(toAdminPersonalModelSourceDocument(source));
   });
 
+  app.delete("/api/admin/personal-model/sources/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    await repositories(c.env).deletePersonalModelSourceDocument({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+
+    return c.json({ ok: true });
+  });
+
   app.get("/api/admin/personal-model/claims/:id/evidence", async (c) => {
     const authenticatedOwnerId = await adminOwnerId(c);
     if (!authenticatedOwnerId) {

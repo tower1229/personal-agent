@@ -30,6 +30,7 @@ export function createD1PersonalModelRepositories(
   | "createPersonalModelSourceDocument"
   | "updatePersonalModelSourceDocument"
   | "getPersonalModelSourceDocument"
+  | "deletePersonalModelSourceDocument"
   | "listPersonalModelSourceDocuments"
   | "createPersonalModelSourceChunk"
   | "getPersonalModelSourceChunk"
@@ -320,6 +321,16 @@ export function createD1PersonalModelRepositories(
         .first<PersonalModelSourceDocumentRow>();
 
       return row ? toPersonalModelSourceDocument(row) : null;
+    },
+
+    async deletePersonalModelSourceDocument(input) {
+      await db
+        .prepare(
+          `DELETE FROM source_documents
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .run();
     },
 
     async listPersonalModelSourceDocuments(input) {
