@@ -74,6 +74,15 @@ const emptySourceForm: SourceFormState = {
   sourceCreatedAt: ""
 };
 
+const manualSourceTypes = [
+  "manual_note",
+  "writing",
+  "blog",
+  "weekly",
+  "qq_export",
+  "weibo_export"
+] as const;
+
 export function PersonalModelPage() {
   const claims = useAsyncData(() => loadPersonalModelClaims(), []);
   const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
@@ -664,7 +673,7 @@ export function PersonalModelPage() {
                       </Field>
                       <Field label="Source Type">
                         <EnumSelect
-                          items={personalModelSourceTypes}
+                          items={manualSourceTypes}
                           onChange={(value) =>
                             setSourceForm((current) => ({
                               ...current,

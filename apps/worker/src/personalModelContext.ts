@@ -103,6 +103,41 @@ export async function assemblePersonalModelContext(input: {
     });
   }
 
+  const anyGaps = await input.repositories.listPersonalModelUnderstandingGaps({
+    ownerTgUserId: input.ownerTgUserId,
+    limit: 1,
+    offset: 0
+  });
+
+  if (anyGaps.length === 0) {
+    const defaultGaps = [
+      {
+        scenario: "self_knowledge" as const,
+        description: "初始化个人信息：需要发起关于基本性格特征与认知框架（如MBTI、个人核心价值观）的集中采访。"
+      },
+      {
+        scenario: "health" as const,
+        description: "初始化健康档案：需要发起关于日常作息、运动与饮食习惯的健康状况采访。"
+      },
+      {
+        scenario: "relationship" as const,
+        description: "初始化人际档案：需要发起关于家庭背景、核心人际关系和社交喜好的采访。"
+      }
+    ];
+
+    for (const gap of defaultGaps) {
+      await input.repositories.createPersonalModelUnderstandingGap({
+        id: crypto.randomUUID(),
+        ownerTgUserId: input.ownerTgUserId,
+        scenario: gap.scenario,
+        gapDescription: gap.description,
+        status: "open",
+        createdAt: input.now,
+        updatedAt: input.now
+      });
+    }
+  }
+
   const openGaps = await input.repositories.listPersonalModelUnderstandingGaps({
     ownerTgUserId: input.ownerTgUserId,
     limit: 50,

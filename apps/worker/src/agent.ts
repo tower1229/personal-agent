@@ -12,7 +12,12 @@ import {
 } from "./llm.js";
 import { type AgentRepositories } from "./repositories.js";
 import { assemblePersonalModelContext } from "./personalModelContext.js";
-import { type PersonalModelScenario } from "@personal-agent/shared";
+import { type PersonalModelScenario, type PersonalModelSourceType } from "@personal-agent/shared";
+import {
+  normalizeSourceContent,
+  chunkSourceContent,
+  tokenCountForChunk
+} from "./personalModelSources.js";
 
 export interface AgentRuntime {
   repositories: AgentRepositories;
@@ -339,6 +344,76 @@ export async function executeAgentTool(input: {
         input: { content },
         output: content ? { recorded: true } : { recorded: false }
       };
+    } else if (input.toolName === "save_interview_source") {
+      const sourceType = stringArg(input.args, "sourceType");
+      const title = stringArg(input.args, "title");
+      const content = stringArg(input.args, "content");
+      const metadata = (input.args.metadata as Record<string, unknown> | undefined) || {};
+      const resolveGapId = input.args.resolveGapId ? String(input.args.resolveGapId) : null;
+
+      let source = null;
+      let chunksCount = 0;
+      if (sourceType && title && content) {
+        const now = input.runtime.now();
+        const generateId = () => input.runtime.generateId();
+        
+        // 1. Create source document
+        source = await input.runtime.repositories.createPersonalModelSourceDocument({
+          id: generateId(),
+          ownerTgUserId: input.ownerTgUserId,
+          sourceType: sourceType as PersonalModelSourceType,
+          title,
+          uri: null,
+          content,
+          normalizedContent: normalizeSourceContent(content),
+          status: "active",
+          usagePolicy: "default_available",
+          sensitivity: "medium",
+          sourceCreatedAt: null,
+          sourceUpdatedAt: null,
+          ingestedAt: now,
+          metadataJson: JSON.stringify(metadata)
+        });
+
+        // 2. Generate and save chunks
+        const chunkDrafts = chunkSourceContent({ content, sourceType });
+        chunksCount = chunkDrafts.length;
+        for (const [index, chunk] of chunkDrafts.entries()) {
+          await input.runtime.repositories.createPersonalModelSourceChunk({
+            id: generateId(),
+            documentId: source.id,
+            ownerTgUserId: input.ownerTgUserId,
+            chunkIndex: index,
+            content: chunk.content,
+            normalizedContent: normalizeSourceContent(chunk.content),
+            tokenCount: tokenCountForChunk(chunk.content),
+            metadataJson: JSON.stringify(chunk.metadata),
+            createdAt: now
+          });
+        }
+
+        // 3. Automatically resolve Gap if resolveGapId is provided
+        if (resolveGapId) {
+          await input.runtime.repositories.updatePersonalModelUnderstandingGapStatus({
+            ownerTgUserId: input.ownerTgUserId,
+            gapId: resolveGapId,
+            status: "resolved",
+            updatedAt: now
+          });
+        }
+      }
+
+      result = {
+        responseText: source
+          ? `已成功将采访成果保存为资料，生成 ${chunksCount} 个分块${resolveGapId ? "，且已关闭对应认知缺口" : ""}。`
+          : "保存资料失败，缺少必要参数。",
+        toolName: "save_interview_source",
+        riskLevel: "write_low",
+        input: { sourceType, title, content, metadata, resolveGapId },
+        output: source
+          ? { saved: true, sourceId: source.id, chunkCount: chunksCount, resolveGapId }
+          : { saved: false }
+      };
     } else {
       throw new Error(`Unknown tool: ${input.toolName}`);
     }
@@ -501,6 +576,40 @@ const toolDefinitions: Record<BuiltInToolName, LlmToolDefinition> = {
         required: ["content"]
       }
     }
+  },
+  save_interview_source: {
+    type: "function",
+    function: {
+      name: "save_interview_source",
+      description: "Save structured interview results or dynamic conversation findings as a source document and automatically resolve the corresponding gap.",
+      parameters: {
+        type: "object",
+        properties: {
+          sourceType: {
+            type: "string",
+            enum: ["personality_framework", "health_log", "relationship_note"],
+            description: "The category of the source to save."
+          },
+          title: {
+            type: "string",
+            description: "A short descriptive title for this record, e.g., 'Personality Framework MBTI Interview'."
+          },
+          content: {
+            type: "string",
+            description: "The structured content or summarized text to save. Use markdown headers or sections for clarity."
+          },
+          metadata: {
+            type: "object",
+            description: "Optional metadata matching the sourceType schema (e.g. frameworkType/agreementLevel for personality_framework)."
+          },
+          resolveGapId: {
+            type: "string",
+            description: "Optional Gap ID to automatically resolve once this source is successfully saved."
+          }
+        },
+        required: ["sourceType", "title", "content"]
+      }
+    }
   }
 };
 
@@ -600,6 +709,8 @@ export async function executeLlmAgent(
     "需要联网信息时先使用 web_search；需要读取具体网页时使用 fetch_url。",
     "使用搜索或网页内容回答时，必须包含来源 URL。",
     "删除记忆只能通过 delete_memory_request 创建确认，不能直接删除。",
+    "如果用户正在回答你发起的初始化采访或盲区追问，请保持专注，直到收集到完整信息，不要轻易跳出采访场景并结束采访。",
+    "当你完成一项采访，或者获得关于用户性格（personality_framework）、健康（health_log）、人际关系（relationship_note）的完整描述时，必须调用 save_interview_source 将其存为原始资料。如果有关联的 Gap ID，必须在 resolveGapId 中传入以关闭对应的 Gap。",
     contextAssembly.contextString,
     input.systemInstructions ?? ""
   ]

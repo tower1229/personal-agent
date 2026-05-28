@@ -106,15 +106,12 @@ export type PersonalModelEventType =
   (typeof personalModelEventTypes)[number];
 
 export const personalModelSourceTypes = [
-  "conversation",
   "manual_note",
   "writing",
   "blog",
   "weekly",
   "qq_export",
   "weibo_export",
-  "github_personal",
-  "github_work",
   "health_log",
   "relationship_note",
   "personality_framework"
@@ -276,6 +273,7 @@ export const builtInToolNames = [
   "web_search",
   "fetch_url",
   "record_understanding_gap",
-  "record_metacognition_log"
+  "record_metacognition_log",
+  "save_interview_source"
 ] as const;
 export type BuiltInToolName = (typeof builtInToolNames)[number];
