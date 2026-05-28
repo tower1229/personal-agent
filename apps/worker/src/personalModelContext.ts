@@ -10,7 +10,7 @@ const scenarioKeywords: Record<PersonalModelScenario, string[]> = {
   writing: ["写作", "写", "文章", "博客", "文字", "修改", "润色"],
   health: ["睡觉", "休息", "累", "失眠", "健康", "疲劳", "作息", "精力"],
   relationship: ["朋友", "关系", "吵架", "父母", "恋人", "对象", "沟通", "别人"],
-  self_knowledge: ["我是谁", "性格", "测试", "mbti", "探索", "潜意识", "星盘", "自己"],
+  self_knowledge: ["我是谁", "性格", "测试", "mbti", "探索", "潜意识", "星盘", "自己", "价值观"],
   emotional_support: ["难受", "伤心", "烦躁", "焦虑", "抑郁", "情绪", "哭", "压力"],
   work_decision: ["工作", "离职", "辞职", "职业", "面试", "老板", "公司", "业务"],
   technical_writing: ["技术文章", "教程", "代码注释", "文档", "readme"],
@@ -21,17 +21,18 @@ const scenarioKeywords: Record<PersonalModelScenario, string[]> = {
 
 export function classifyScenario(inputText: string): PersonalModelScenario {
   let bestScenario: PersonalModelScenario = "global";
-  let maxMatches = 0;
+  let maxScore = 0;
 
   for (const [scenario, keywords] of Object.entries(scenarioKeywords)) {
-    let matches = 0;
+    let score = 0;
     for (const keyword of keywords) {
       if (inputText.toLowerCase().includes(keyword.toLowerCase())) {
-        matches++;
+        // Score is the length of the matched keyword to favor longer, more specific keywords
+        score += keyword.length;
       }
     }
-    if (matches > maxMatches) {
-      maxMatches = matches;
+    if (score > maxScore) {
+      maxScore = score;
       bestScenario = scenario as PersonalModelScenario;
     }
   }
