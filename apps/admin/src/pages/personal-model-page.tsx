@@ -196,6 +196,58 @@ export function PersonalModelPage() {
     }
     setSaving(true);
     
+    const metadata: Record<string, any> = { source: "admin" };
+    
+    if (sourceForm.sourceType === "blog" || sourceForm.sourceType === "writing") {
+      metadata.isOriginal = true;
+      metadata.title = sourceForm.title.trim();
+      
+      // Parse YAML frontmatter from content
+      const fmMatch = sourceForm.content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      if (fmMatch) {
+        const fm = fmMatch[1];
+        
+        // Extract tags
+        const tagsMatch = fm.match(/^tags:\s*(.+)$/m);
+        if (tagsMatch) {
+          const tagsStr = tagsMatch[1].trim();
+          if (tagsStr.startsWith("[") && tagsStr.endsWith("]")) {
+            metadata.tags = tagsStr
+              .slice(1, -1)
+              .split(",")
+              .map((t) => t.trim().replace(/^['"]|['"]$/g, ""))
+              .filter(Boolean);
+          } else {
+            metadata.tags = [tagsStr.replace(/^['"]|['"]$/g, "")].filter(Boolean);
+          }
+        } else {
+          // Check multiline tags:
+          // tags:
+          //   - tag1
+          //   - tag2
+          const tagsSectionMatch = fm.match(/^tags:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/m);
+          if (tagsSectionMatch) {
+            const lines = tagsSectionMatch[1].split("\n");
+            metadata.tags = lines
+              .map((line) => line.replace(/^\s*-\s*/, "").trim().replace(/^['"]|['"]$/g, ""))
+              .filter(Boolean);
+          }
+        }
+
+        // Extract date/publishDate
+        const dateMatch = fm.match(/^date:\s*(.+)$/m);
+        if (dateMatch) {
+          metadata.publishDate = dateMatch[1].trim().replace(/^['"]|['"]$/g, "");
+        }
+      }
+    } else if (sourceForm.sourceType === "qq_export") {
+      metadata.platform = "qq";
+      metadata.isHistoricalExpression = true;
+    } else if (sourceForm.sourceType === "weibo_export") {
+      metadata.platform = "weibo";
+      metadata.isHistoricalExpression = true;
+    }
+    
     try {
       const detail = await createPersonalModelSource({
         title: sourceForm.title.trim(),
@@ -205,7 +257,7 @@ export function PersonalModelPage() {
         usagePolicy: "default_available",
         sensitivity: "medium",
         sourceCreatedAt: sourceForm.sourceCreatedAt ? parseLocalYMD(sourceForm.sourceCreatedAt) : null,
-        metadata: { source: "admin" }
+        metadata
       });
       toast.success(`已导入资料，生成 ${detail.chunks.length} 个 chunk`);
       setSourceForm(emptySourceForm);
