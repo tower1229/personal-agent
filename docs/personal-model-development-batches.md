@@ -629,95 +629,46 @@
 
 ## Current Progress
 
-当前已完成 Batch 0、Batch 1 和 Batch 2。系统已经具备可治理、可追溯的结构化个人理解模型基础：
+当前已完成 Batch 0 至 Batch 7。系统已经具备可治理、可追溯的结构化个人理解模型基础，且具备自主反思生成 proposed claims 和评估金句集：
 
-- 用户能通过 Telegram 保存结构化个人理解。
-- Admin 能创建、查看、编辑、废弃 claim，并查看事件历史。
-- agent 能在 LLM fallback 中隐性使用有效 claim。
-- 测试证明 `do_not_use`、未来生效、非 active 的 claim 不会进入上下文。
-- Admin 能手动导入原始资料 source，并自动生成 chunks。
-- claim 可以关联 source chunk、run、manual confirmation、admin edit 等 evidence。
-- claim 详情能显示 evidence 链路和引用片段。
-- source 原文受保护，Admin PATCH 只能修改治理字段，不能改写原始内容。
+- **Batch 0 & 1 & 2**：用户能通过 Telegram 保存结构化个人理解；Admin 能进行 Claims 与 Sources 的 CRUD 及治理字段编辑；claim 支持关联 D1/run/manual/admin edit 证据链路。
+- **Batch 3**：实现了 `assemblePersonalModelContext`，支持 scenario-based 场景分类匹配路由，将个人理解 claims/chunks 在 LLM fallback 前自动装配并限额注入。
+- **Batch 4**：引入了元认知（Metacognition logs）和理解缺口（Understanding Gaps）机制，允许 agent 自主记录不确定之处并在 context 中保留缺口，引导主动向用户提问。
+- **Batch 5**：实现了 First Real Source Ingestion，支持 Markdown 标题/段落分割、社交 JSON 动态及人格框架的结构化切片与 Admin 强校验。
+- **Batch 6**：建立了 Evaluation Harness，在 [personalModelEval.test.ts](file:///c:/Workspace/tower1229/personal-agent/apps/worker/src/personalModelEval.test.ts) 中定义了 21 条涵盖 7 大场景分桶的 Golden Queries 进行场景路由、检索及 `do_not_use` 等安全隔离策略的单元测试。
+- **Batch 7**：实现了 Automatic Claim Proposal，当 agent 检测到特定触发词或修正反馈时，在 post-response 环节生成 `"proposed"` / `"low"` 置信度的 claim 并写入 event 与元认知日志，前端增加 Approve/Reject 快捷按钮，并支持过滤历史去重。
 
 当前尚未完成：
 
-- Context assembler 的完整场景路由和 retrieval trace。
-- source chunk 尚未进入 runtime context selection。
-- `do_not_use` source 的运行时过滤需要在 Batch 3 context assembler 中强制实现并覆盖测试。
-- 自动网页抓取、GitHub/博客/QQ 空间等真实资料源批量接入尚未开始。
-- 向量检索和 hybrid retrieval 尚未开始。
+- **Batch 8**：尚未实现基于 Cloudflare Vectorize + Workers AI 的向量检索及 Hybrid 检索升级。
+- **Batch 9**：尚未实现更大范围的自动化 Connector 接入。
+- **Batch 10**：尚未实现 LLM-as-judge 的质量反馈闭环。
 
 ## Next Development Task
 
-下一步进入 Batch 3：Context Assembler And Scenario Routing。
+下一步进入 **Batch 8: Retrieval Upgrade**。
 
-目标是把当前散落在 `executeLlmAgent` 里的 claim 注入逻辑收束成独立 context assembler，让 personal model 能稳定、可测试、可追踪地影响对话，同时把 source governance 真正纳入运行时过滤。
+### Batch 8 Recommended Scope
 
-### Batch 3 Recommended Scope
+1. **配置环境与 Wrangler 绑定**：
+   - 在 `wrangler.toml` 中配置 `[ai]` 绑定和 `[[vectorize]]` 索引（如 `personal-agent-index`，1024维度）。
+   - 在 `types.ts` 中定义 `WorkerEnv` 的 AI 和 VECTORIZE 类型。
 
-本批建议围绕“选择什么上下文、为什么选择、为什么排除”建立一个完整闭环：
+2. **实现 Hybrid Retrieval 模块**：
+   - 新增 `apps/worker/src/personalModelRetrieval.ts`。
+   - 使用 Workers AI 官方推荐的中文高水准 Embedding 模型 `@cf/baai/bge-large-zh-v1.5`（1024维）。
+   - 提取输入文本的 Embedding，在 Vectorize 中进行 top-k 近似搜索。
+   - 提取 D1 keyword 匹配（使用现有 `searchPersonalModelSourceChunks`）。
+   - 实现 **Reciprocal Rank Fusion (RRF)** 算法合并两路召回结果，提升语义与精准关键词的综合排序质量。
 
-1. 新增 context assembler 模块
-   - 从 `executeLlmAgent` 中抽出 personal model context selection。
-   - 输出 selected claims、selected chunks、excluded items 和 reason。
-   - 保持 token/条数上限。
+3. **集成至 Context Assembler**：
+   - 重构 `personalModelContext.ts` 中的 chunk 检索逻辑，将 keyword retrieval 升级为 hybrid retrieval。
+   - 在 Trace 信息中记录向量相似度得分、RRF 得分以及检索路标。
 
-2. 实现场景分类与路由
-   - writing
-   - health
-   - relationship
-   - self_knowledge
-   - emotional_support
-   - work_decision
-   - technical_writing
-   - technical_collaboration
-   - global fallback
+4. **更新 Admin UI 与 API**：
+   - 增加 API 端点 `GET /api/admin/personal-model/test-retrieval?query=...` 导出检索路径。
+   - 在 Admin 前端中新增 "Retrieval Diagnostics" 选项卡，支持可视化调试搜索命中和过滤详情。
 
-3. 实现 claim 选择策略
-   - active only
-   - 排除 `do_not_use`
-   - 时间有效过滤
-   - 高置信优先
-   - 场景匹配优先
-   - global claim 少量兜底
-   - sensitivity/usage policy 留出显式决策点
-
-4. 实现 source chunk 选择策略
-   - 先用 D1 keyword search 或 normalized content contains 的最小方案。
-   - 只选择 active source/chunk。
-   - 强制排除 `do_not_use` source。
-   - 按 source type、usage policy、sensitivity 过滤。
-   - 只在需要证据或文本上下文时注入少量 chunk。
-
-5. 增加 trace 记录
-   - 记录 selected claims/chunks。
-   - 记录 excluded item reason，例如 `do_not_use`、`expired`、`scenario_mismatch`、`source_hidden`。
-   - 可先写入 tool call metadata 或 personal model event，后续 Admin 展示再扩展。
-
-6. 测试与验证
-   - 写作问题优先选择 writing/global claim。
-   - 关系问题优先选择 relationship/emotional_support claim。
-   - 过期 current_state claim 不注入。
-   - `do_not_use` claim/source 不注入。
-   - hidden/deleted source 不注入。
-   - context assembler 单元测试覆盖场景、状态、策略和上限。
-   - `npm.cmd run typecheck`
-   - `npm.cmd test`
-   - `npm.cmd run build`
-
-### Batch 3 Completion Marker
-
-Batch 3 完成时，应能证明：
-
-```text
-同一句用户输入会先被归入合适场景；
-context assembler 会选择有限且相关的 claims/chunks；
-所有 do_not_use、过期、隐藏或策略不匹配的内容都会被排除；
-排除和选择原因可追踪；
-LLM fallback 使用 assembler 输出，而不是直接手写拼接 personal model claims。
-```
-
-### Suggested First Step For Batch 3
-
-先新增 `apps/worker/src/personalModelContext.ts`，把现有 LLM fallback 中的 claim selection 迁移进去，并用纯单元测试锁住当前行为；随后再加场景路由、source chunk selection 和 trace。
+5. **回归测试与评估**：
+   - 新增 `personalModelRetrieval.test.ts` 覆盖 Mock 状态下的 Hybrid 召回。
+   - 升级 Evaluation Golden Queries 覆盖向量检索的精准性和安全过滤边界。

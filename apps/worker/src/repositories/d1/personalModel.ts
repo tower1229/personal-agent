@@ -363,8 +363,9 @@ export function createD1PersonalModelRepositories(
         .prepare(
           `INSERT INTO source_chunks (
             id, document_id, owner_tg_user_id, chunk_index, content,
-            normalized_content, token_count, metadata_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            normalized_content, token_count, metadata_json, created_at,
+            vector_id, indexed_at, index_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           RETURNING *`
         )
         .bind(
@@ -376,7 +377,10 @@ export function createD1PersonalModelRepositories(
           input.normalizedContent,
           input.tokenCount,
           input.metadataJson,
-          input.createdAt
+          input.createdAt,
+          input.vectorId ?? null,
+          input.indexedAt ?? null,
+          input.indexStatus ?? "pending"
         )
         .first<PersonalModelSourceChunkRow>();
 

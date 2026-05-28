@@ -138,6 +138,9 @@ export interface PersonalModelSourceChunkRecord {
   tokenCount: number | null;
   metadataJson: string;
   createdAt: number;
+  vectorId: string | null;
+  indexedAt: number | null;
+  indexStatus: "pending" | "indexed" | "failed";
 }
 
 export interface PersonalModelEvidenceRecord {

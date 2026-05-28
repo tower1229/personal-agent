@@ -164,6 +164,9 @@ export interface PersonalModelSourceChunkRow {
   token_count: number | null;
   metadata_json: string;
   created_at: number;
+  vector_id: string | null;
+  indexed_at: number | null;
+  index_status: "pending" | "indexed" | "failed";
 }
 
 export interface PersonalModelEvidenceRow {
@@ -456,7 +459,10 @@ export function toPersonalModelSourceChunk(
     normalizedContent: row.normalized_content,
     tokenCount: row.token_count,
     metadataJson: row.metadata_json,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    vectorId: row.vector_id,
+    indexedAt: row.indexed_at,
+    indexStatus: row.index_status
   };
 }
 

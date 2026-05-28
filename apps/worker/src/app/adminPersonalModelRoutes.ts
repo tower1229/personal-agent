@@ -382,7 +382,10 @@ export function registerAdminPersonalModelRoutes(
           normalizedContent: normalizeSourceContent(chunk.content),
           tokenCount: tokenCountForChunk(chunk.content),
           metadataJson: JSON.stringify(chunk.metadata),
-          createdAt: now
+          createdAt: now,
+          vectorId: null,
+          indexedAt: null,
+          indexStatus: "pending"
         })
       );
     }
