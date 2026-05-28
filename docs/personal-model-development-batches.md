@@ -407,6 +407,19 @@
 
 ## Batch 7: Automatic Claim Proposal
 
+状态：已完成。
+
+完成时间：2026-05-28。
+
+完成证据：
+- 实现了 `reflectAndProposeClaims` 反思推荐逻辑并进行了选择性触发优化（根据关键词和非 global 场景分类匹配）。
+- 支持提议生成为 `"proposed"` 状态的低置信度（`"low"`）claim，自动插入 `personal_model_claims`、`personal_model_events`（类型为 `"proposed"`）与元认知日志。
+- 实现 Telegram 回复中追加提议小助手提示 bulb 消息。
+- 支持在提取新提议时载入包括 `deleted`/`deprecated` 在内的历史 claims 进行提示去重，防止重复提取被拒绝过的提议。
+- 在 Admin API PATCH 请求中对 proposed claim 的确认（Active）和拒绝（Deleted/Deprecated）进行事件审计，分别记录 `"confirmed"` / `"deprecated"` / `"corrected"` 事件与特定反射内容。
+- 在 Admin Web 前端 ClaimsTable 组件中新增了直观的 "Approve" 和 "Reject" 快捷按钮，并支持 "proposed" 状态筛选。
+- 新增单元测试文件 `apps/worker/src/personalModelReflection.test.ts` 进行全面保障，Vitest 所有 65 条测试全量通过。
+
 目标：让 agent 能主动提议保存理解，但仍保留治理和可纠正性。
 
 范围：
