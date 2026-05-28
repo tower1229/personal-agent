@@ -351,6 +351,11 @@ export async function executeAgentTool(input: {
       const metadata = (input.args.metadata as Record<string, unknown> | undefined) || {};
       const resolveGapId = input.args.resolveGapId ? String(input.args.resolveGapId) : null;
 
+      const allowedAgentTypes = ["personality_framework", "health_log", "relationship_note"];
+      if (sourceType && !allowedAgentTypes.includes(sourceType)) {
+        throw new Error(`Agent is only allowed to save source types: ${allowedAgentTypes.join(", ")}`);
+      }
+
       let source = null;
       let chunksCount = 0;
       if (sourceType && title && content) {
