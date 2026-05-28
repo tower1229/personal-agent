@@ -884,7 +884,10 @@ describe("worker system and bot commands", () => {
 
     await postWebhook(app, ownerUpdate("我和朋友吵架了", 1));
 
-    const systemText = llmClient.calls.at(-1)?.[0]?.content ?? "";
+    const agentCall = llmClient.calls.find((call) =>
+      call[0]?.content?.includes("你是一个个人 Telegram agent")
+    );
+    const systemText = agentCall?.[0]?.content ?? "";
     expect(systemText).toContain("写作默认保留表达气质");
     expect(systemText).toContain("关系问题中优先判断边界");
     expect(systemText).not.toContain("这条不应该进入上下文");

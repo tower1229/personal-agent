@@ -18,6 +18,7 @@ import {
   chunkSourceContent,
   tokenCountForChunk
 } from "./personalModelSources.js";
+import { reflectAndProposeClaims } from "./personalModelReflection.js";
 
 export interface AgentRuntime {
   repositories: AgentRepositories;
@@ -741,8 +742,74 @@ export async function executeLlmAgent(
     });
 
     if (completion.toolCalls.length === 0) {
+      let responseText = completion.content || "我暂时没有生成有效回复。";
+
+      // Trigger heuristics for post-response reflection
+      const triggerKeywords = ["记", "喜欢", "习惯", "偏好", "希望", "不要", "错", "改", "不是", "不符合", "以前", "以后", "博客", "文章", "性格", "焦虑", "失眠", "作息", "经常", "总是", "关系", "吵架", "沟通", "价值观", "潜意识", "mbti", "性格"];
+      const matchesKeyword = triggerKeywords.some(kw => input.inputText.includes(kw));
+      const matchesScenario = contextAssembly.trace.scenario !== "global";
+
+      if (matchesKeyword || matchesScenario) {
+        const existingClaims = await input.runtime.repositories.listPersonalModelClaims({
+          ownerTgUserId: input.ownerTgUserId,
+          limit: 100
+        });
+        const proposals = await reflectAndProposeClaims({
+          llmClient: input.runtime.llmClient,
+          inputText: input.inputText,
+          responseText,
+          existingClaims
+        });
+
+        if (proposals.length > 0) {
+          const now = input.runtime.now();
+          for (const prop of proposals) {
+            const claimId = crypto.randomUUID();
+            await input.runtime.repositories.createPersonalModelClaim({
+              id: claimId,
+              ownerTgUserId: input.ownerTgUserId,
+              claim: prop.claim,
+              layer: prop.layer,
+              scenario: prop.scenario,
+              confidence: "low",
+              status: "proposed",
+              usagePolicy: "default_available",
+              sensitivity: "low",
+              validFrom: null,
+              validUntil: null,
+              lastConfirmedAt: null,
+              metadataJson: JSON.stringify({ reason: prop.reason, runId: input.runId }),
+              createdAt: now,
+              updatedAt: now
+            });
+
+            await input.runtime.repositories.createPersonalModelEvent({
+              id: crypto.randomUUID(),
+              claimId,
+              ownerTgUserId: input.ownerTgUserId,
+              eventType: "proposed",
+              payloadJson: JSON.stringify({ runId: input.runId, reason: prop.reason }),
+              createdAt: now
+            });
+
+            await input.runtime.repositories.createPersonalModelMetacognitionLog({
+              id: crypto.randomUUID(),
+              ownerTgUserId: input.ownerTgUserId,
+              relatedClaimId: claimId,
+              relatedGapId: null,
+              reflectionType: "observation",
+              content: `提出理解建议："${prop.claim}"。原因：${prop.reason}`,
+              createdAt: now
+            });
+          }
+
+          // Append lightweight tip to the Telegram response
+          responseText += `\n\n💡 我可以把关于“${proposals[0].claim}”的理解作为低置信观察保存，你可以在管理后台确认或拒绝它。`;
+        }
+      }
+
       return {
-        responseText: completion.content || "我暂时没有生成有效回复。",
+        responseText,
         toolName: "llm_agent",
         riskLevel: "external_send",
         input: { text: input.inputText },

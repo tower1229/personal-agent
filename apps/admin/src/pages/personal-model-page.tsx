@@ -909,6 +909,34 @@ function ClaimsTable(props: {
                   }
                   value={claim.status}
                 />
+                {claim.status === "proposed" && (
+                  <div className="flex gap-1 mt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 border-emerald-200"
+                      onClick={() =>
+                        props.onPatch(claim, {
+                          status: "active"
+                        })
+                      }
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 border-rose-200"
+                      onClick={() =>
+                        props.onPatch(claim, {
+                          status: "deleted"
+                        })
+                      }
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                )}
               </div>
             </TableCell>
             <TableCell>

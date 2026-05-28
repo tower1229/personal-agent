@@ -356,6 +356,15 @@
 
 ## Batch 6: Personal Model Evaluation Harness
 
+状态：已完成。
+
+完成时间：2026-05-28。
+
+完成证据：
+- 新增评估测试 `apps/worker/src/personalModelEval.test.ts`，定义了 21 条 Golden Queries，覆盖 Writing、Health、Relationship、Self-Knowledge、Emotional Support、Historical Data / safety、No Answer / out of scope 共 7 个场景分桶。
+- 在 `assemblePersonalModelContext` 逻辑中测试并验证了场景路由、claim 检索与匹配、`do_not_use` 等安全限制规则。
+- 整个工作区编译及 Vitest 所有 60 条测试均成功通过。
+
 目标：在扩大 RAG 前建立评估，优先防住三类信任风险：情绪误判、旧资料误用、建议不适配。
 
 范围：

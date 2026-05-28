@@ -65,6 +65,7 @@ export type PersonalModelConfidence =
   (typeof personalModelConfidences)[number];
 
 export const personalModelStatuses = [
+  "proposed",
   "active",
   "under_revision",
   "deprecated",

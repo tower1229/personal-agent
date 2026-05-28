@@ -169,6 +169,14 @@ export function registerAdminPersonalModelRoutes(
 
     const now = (options.now ?? Date.now)();
     const repo = repositories(c.env);
+    const originalClaim = await repo.getPersonalModelClaim({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!originalClaim) {
+      return c.json({ error: "Personal model claim not found" }, 404);
+    }
+
     const claim = await repo.updatePersonalModelClaim({
       ownerTgUserId: authenticatedOwnerId,
       id: c.req.param("id"),
@@ -185,35 +193,80 @@ export function registerAdminPersonalModelRoutes(
       return c.json({ error: "Personal model claim not found" }, 404);
     }
 
-    await repo.createPersonalModelEvent({
-      id: (options.generateId ?? defaultGenerateId)(),
-      claimId: claim.id,
-      ownerTgUserId: authenticatedOwnerId,
-      eventType: "updated",
-      payloadJson: JSON.stringify({ source: "admin", patch: body.data }),
-      createdAt: now
-    });
+    let customEventLogged = false;
+    if (originalClaim.status === "proposed") {
+      if (body.data.status === "active") {
+        await repo.createPersonalModelEvent({
+          id: (options.generateId ?? defaultGenerateId)(),
+          claimId: claim.id,
+          ownerTgUserId: authenticatedOwnerId,
+          eventType: "confirmed",
+          payloadJson: JSON.stringify({ source: "admin", action: "approved" }),
+          createdAt: now
+        });
+        await repo.createPersonalModelMetacognitionLog({
+          id: (options.generateId ?? defaultGenerateId)(),
+          ownerTgUserId: authenticatedOwnerId,
+          reflectionType: "observation",
+          content: "管理员确认了该提议：将状态设为 active。",
+          relatedClaimId: claim.id,
+          relatedGapId: null,
+          createdAt: now
+        });
+        customEventLogged = true;
+      } else if (body.data.status === "deprecated" || body.data.status === "deleted") {
+        await repo.createPersonalModelEvent({
+          id: (options.generateId ?? defaultGenerateId)(),
+          claimId: claim.id,
+          ownerTgUserId: authenticatedOwnerId,
+          eventType: "deprecated",
+          payloadJson: JSON.stringify({ source: "admin", action: "rejected", status: body.data.status }),
+          createdAt: now
+        });
+        await repo.createPersonalModelMetacognitionLog({
+          id: (options.generateId ?? defaultGenerateId)(),
+          ownerTgUserId: authenticatedOwnerId,
+          reflectionType: "correction",
+          content: `管理员拒绝了该提议：将状态设为 ${body.data.status}。`,
+          relatedClaimId: claim.id,
+          relatedGapId: null,
+          createdAt: now
+        });
+        customEventLogged = true;
+      }
+    }
 
-    if (body.data.status === "deprecated" || body.data.status === "archived") {
-      await repo.createPersonalModelMetacognitionLog({
+    if (!customEventLogged) {
+      await repo.createPersonalModelEvent({
         id: (options.generateId ?? defaultGenerateId)(),
+        claimId: claim.id,
         ownerTgUserId: authenticatedOwnerId,
-        reflectionType: "conflict_resolution",
-        content: `Admin marked claim as ${body.data.status}.`,
-        relatedClaimId: claim.id,
-        relatedGapId: null,
+        eventType: "updated",
+        payloadJson: JSON.stringify({ source: "admin", patch: body.data }),
         createdAt: now
       });
-    } else if (body.data.confidence === "low" || body.data.confidence === "medium") {
-      await repo.createPersonalModelMetacognitionLog({
-        id: (options.generateId ?? defaultGenerateId)(),
-        ownerTgUserId: authenticatedOwnerId,
-        reflectionType: "correction",
-        content: `Admin adjusted confidence to ${body.data.confidence}.`,
-        relatedClaimId: claim.id,
-        relatedGapId: null,
-        createdAt: now
-      });
+
+      if (body.data.status === "deprecated" || body.data.status === "archived") {
+        await repo.createPersonalModelMetacognitionLog({
+          id: (options.generateId ?? defaultGenerateId)(),
+          ownerTgUserId: authenticatedOwnerId,
+          reflectionType: "conflict_resolution",
+          content: `Admin marked claim as ${body.data.status}.`,
+          relatedClaimId: claim.id,
+          relatedGapId: null,
+          createdAt: now
+        });
+      } else if (body.data.confidence === "low" || body.data.confidence === "medium") {
+        await repo.createPersonalModelMetacognitionLog({
+          id: (options.generateId ?? defaultGenerateId)(),
+          ownerTgUserId: authenticatedOwnerId,
+          reflectionType: "correction",
+          content: `Admin adjusted confidence to ${body.data.confidence}.`,
+          relatedClaimId: claim.id,
+          relatedGapId: null,
+          createdAt: now
+        });
+      }
     }
 
     return c.json(toAdminPersonalModelClaim(claim));
