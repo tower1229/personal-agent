@@ -213,6 +213,22 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
       }
     },
     {
+      inputText: "给我看看前沿技术那篇 weekly",
+      expectedScenario: "global",
+      description: "Verify that weekly external links are excluded",
+      testLogic: async (repositories, result) => {
+        expect(result.trace.selectedChunkIds).not.toContain("chunk-weekly-external");
+      }
+    },
+    {
+      inputText: "查一下我们公司仓库的代码结构",
+      expectedScenario: "global",
+      description: "Verify that work namespace github repos are excluded",
+      testLogic: async (repositories, result) => {
+        expect(result.trace.selectedChunkIds).not.toContain("chunk-github-work");
+      }
+    },
+    {
       inputText: "我想看我以前发过的历史社交动态微博混合开发",
       expectedScenario: "writing",
       description: "Verify prefix [Historical Social Expression] for historical social export",
@@ -325,6 +341,42 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
       documentId: "doc-hybrid-donotuse",
       content: "这是一篇被禁用的混合应用文档, 查一下关于混合应用的那篇do_not_use资料",
       normalizedContent: "这是一篇被禁用的混合应用文档, 查一下关于混合应用的那篇do_not_use资料"
+    });
+
+    // Setup 4b: Mock Frontend Weekly External Link
+    await repositories.createPersonalModelSourceDocument({
+      ...baseDoc,
+      id: "doc-weekly-external",
+      sourceType: "blog",
+      title: "Weekly issue 1",
+      content: "External tech article reference",
+      usagePolicy: "do_not_use",
+      metadataJson: JSON.stringify({ weekly_segment_type: "external_link" })
+    });
+    await repositories.createPersonalModelSourceChunk({
+      ...baseChunk,
+      id: "chunk-weekly-external",
+      documentId: "doc-weekly-external",
+      content: "External tech article reference, 给我看看前沿技术那篇 weekly",
+      normalizedContent: "external tech article reference, 给我看看前沿技术那篇 weekly"
+    });
+
+    // Setup 4c: Mock GitHub Work Namespace
+    await repositories.createPersonalModelSourceDocument({
+      ...baseDoc,
+      id: "doc-github-work",
+      sourceType: "github",
+      title: "Work Repo README",
+      content: "Proprietary company code structure",
+      usagePolicy: "do_not_use",
+      metadataJson: JSON.stringify({ namespace: "work" })
+    });
+    await repositories.createPersonalModelSourceChunk({
+      ...baseChunk,
+      id: "chunk-github-work",
+      documentId: "doc-github-work",
+      content: "Proprietary company code structure, 查一下我们公司仓库的代码结构",
+      normalizedContent: "proprietary company code structure, 查一下我们公司仓库的代码结构"
     });
 
     // Setup 5: Mock Historical Social Expression Document

@@ -656,17 +656,17 @@
 - **Batch 6**：建立了 Evaluation Harness，定义了 21 条涵盖 7 大场景分桶的 Golden Queries 进行场景路由、检索及 `do_not_use` 等安全隔离策略的单元测试。
 - **Batch 7**：实现了 Automatic Claim Proposal，当 agent 检测到特定触发词或修正反馈时，在 post-response 环节生成 `"proposed"` / `"low"` 置信度的 claim 并写入 event 与元认知日志，前端增加 Approve/Reject 快捷按钮，并支持过滤历史去重。
 - **Batch 8**：实现了 Retrieval Upgrade，将 chunk 检索从纯 D1 keyword search 升级为 Hybrid Retrieval（D1 keyword + Cloudflare Vectorize semantic + RRF 合并），新增 Admin Retrieval Diagnostics 面板和 14 条专项单元测试。
+- **Batch 9**：实现了 Source Connectors And Larger Ingestion，构建了 Vector Indexing Pipeline 自动异步索引通道，并补充了针对 refined-x, frontend-weekly, github (含 README, docs, issues, commits) 及旧社交平台导出的本地脚本导入工具集。
 
 当前尚未完成：
 
-- **Batch 9**：尚未实现更大范围的自动化 Connector 接入。
 - **Batch 10**：尚未实现 LLM-as-judge 的质量反馈闭环。
 
 ## Next Development Task
 
-下一步进入 **Batch 9: Source Connectors And Larger Ingestion**。
+下一步进入 **Batch 10: Advanced Quality Loop**。
 
-### Batch 9 Recommended Scope
+### Batch 10 Recommended Scope
 
 1. **refined-x 批量导入**：
    - 支持批量导入 refined-x 文章 Markdown。
