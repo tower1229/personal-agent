@@ -454,6 +454,24 @@
 
 ## Batch 8: Retrieval Upgrade
 
+状态：已完成。
+
+完成时间：2026-05-28。
+
+完成证据：
+- 在 `wrangler.toml` 配置了 `[ai]` 绑定和 `[[vectorize]]` 索引（`personal-model-chunks`，1024维，cosine）。
+- 在 `types.ts` 扩展了 `WorkerEnv` 的 `AI` 和 `VECTORIZE` 类型绑定。
+- 在 `repositories.ts` 的 `PersonalModelSourceChunkRecord` 新增了 `vectorId`、`indexedAt`、`indexStatus` 字段；新增了 `getPersonalModelSourceChunksByIds` 批量查询方法。
+- 新增 `personalModelRetrieval.ts` 实现 Hybrid Retrieval（D1 keyword + Vectorize semantic + RRF 合并，k=60），支持 graceful fallback。
+- 重构 `personalModelContext.ts`，将 chunk 检索从纯 keyword 升级为 hybrid retrieval，在 context 输出中追加向量相似度分数标注。
+- 新增 Admin API `GET /api/admin/personal-model/test-retrieval` 诊断端点。
+- Admin 前端新增 "Retrieval Diagnostics" 面板，支持输入查询关键词查看 RRF 排序、keyword/vector 命中和 trace 详情。
+- 新增 `personalModelRetrieval.test.ts`，14 条测试覆盖 keyword-only fallback、RRF 公式验证、do_not_use 排除、mock AI/Vectorize hybrid merge、错误容错等场景。
+- 最终验证通过：
+  - `npm.cmd run typecheck`
+  - `npm.cmd test`：12 个测试文件，79 条测试
+  - `npm.cmd run build`
+
 目标：把 source chunk 检索从 D1 keyword search 升级到可扩展检索，但保持治理规则不变。
 
 范围：
@@ -629,46 +647,43 @@
 
 ## Current Progress
 
-当前已完成 Batch 0 至 Batch 7。系统已经具备可治理、可追溯的结构化个人理解模型基础，且具备自主反思生成 proposed claims 和评估金句集：
+当前已完成 Batch 0 至 Batch 8。系统已经具备可治理、可追溯的结构化个人理解模型基础，具备自主反思生成 proposed claims、评估金句集、以及 Hybrid 混合检索能力：
 
 - **Batch 0 & 1 & 2**：用户能通过 Telegram 保存结构化个人理解；Admin 能进行 Claims 与 Sources 的 CRUD 及治理字段编辑；claim 支持关联 D1/run/manual/admin edit 证据链路。
 - **Batch 3**：实现了 `assemblePersonalModelContext`，支持 scenario-based 场景分类匹配路由，将个人理解 claims/chunks 在 LLM fallback 前自动装配并限额注入。
 - **Batch 4**：引入了元认知（Metacognition logs）和理解缺口（Understanding Gaps）机制，允许 agent 自主记录不确定之处并在 context 中保留缺口，引导主动向用户提问。
 - **Batch 5**：实现了 First Real Source Ingestion，支持 Markdown 标题/段落分割、社交 JSON 动态及人格框架的结构化切片与 Admin 强校验。
-- **Batch 6**：建立了 Evaluation Harness，在 [personalModelEval.test.ts](file:///c:/Workspace/tower1229/personal-agent/apps/worker/src/personalModelEval.test.ts) 中定义了 21 条涵盖 7 大场景分桶的 Golden Queries 进行场景路由、检索及 `do_not_use` 等安全隔离策略的单元测试。
+- **Batch 6**：建立了 Evaluation Harness，定义了 21 条涵盖 7 大场景分桶的 Golden Queries 进行场景路由、检索及 `do_not_use` 等安全隔离策略的单元测试。
 - **Batch 7**：实现了 Automatic Claim Proposal，当 agent 检测到特定触发词或修正反馈时，在 post-response 环节生成 `"proposed"` / `"low"` 置信度的 claim 并写入 event 与元认知日志，前端增加 Approve/Reject 快捷按钮，并支持过滤历史去重。
+- **Batch 8**：实现了 Retrieval Upgrade，将 chunk 检索从纯 D1 keyword search 升级为 Hybrid Retrieval（D1 keyword + Cloudflare Vectorize semantic + RRF 合并），新增 Admin Retrieval Diagnostics 面板和 14 条专项单元测试。
 
 当前尚未完成：
 
-- **Batch 8**：尚未实现基于 Cloudflare Vectorize + Workers AI 的向量检索及 Hybrid 检索升级。
 - **Batch 9**：尚未实现更大范围的自动化 Connector 接入。
 - **Batch 10**：尚未实现 LLM-as-judge 的质量反馈闭环。
 
 ## Next Development Task
 
-下一步进入 **Batch 8: Retrieval Upgrade**。
+下一步进入 **Batch 9: Source Connectors And Larger Ingestion**。
 
-### Batch 8 Recommended Scope
+### Batch 9 Recommended Scope
 
-1. **配置环境与 Wrangler 绑定**：
-   - 在 `wrangler.toml` 中配置 `[ai]` 绑定和 `[[vectorize]]` 索引（如 `personal-agent-index`，1024维度）。
-   - 在 `types.ts` 中定义 `WorkerEnv` 的 AI 和 VECTORIZE 类型。
+1. **refined-x 批量导入**：
+   - 支持批量导入 refined-x 文章 Markdown。
+   - 自动提取标题、标签、发布时间等 metadata。
 
-2. **实现 Hybrid Retrieval 模块**：
-   - 新增 `apps/worker/src/personalModelRetrieval.ts`。
-   - 使用 Workers AI 官方推荐的中文高水准 Embedding 模型 `@cf/baai/bge-large-zh-v1.5`（1024维）。
-   - 提取输入文本的 Embedding，在 Vectorize 中进行 top-k 近似搜索。
-   - 提取 D1 keyword 匹配（使用现有 `searchPersonalModelSourceChunks`）。
-   - 实现 **Reciprocal Rank Fusion (RRF)** 算法合并两路召回结果，提升语义与精准关键词的综合排序质量。
+2. **frontend-weekly 批量导入**：
+   - 明确区分用户原创观点、外部链接收录、用户点评。
+   - 对应 metadata 标注。
 
-3. **集成至 Context Assembler**：
-   - 重构 `personalModelContext.ts` 中的 chunk 检索逻辑，将 keyword retrieval 升级为 hybrid retrieval。
-   - 在 Trace 信息中记录向量相似度得分、RRF 得分以及检索路标。
+3. **GitHub 个人项目导入**：
+   - 支持导入 README、docs、issues/PR 描述、commit messages。
+   - 公司项目资料单独 namespace/source_type，默认只用于工作场景。
 
-4. **更新 Admin UI 与 API**：
-   - 增加 API 端点 `GET /api/admin/personal-model/test-retrieval?query=...` 导出检索路径。
-   - 在 Admin 前端中新增 "Retrieval Diagnostics" 选项卡，支持可视化调试搜索命中和过滤详情。
+4. **QQ 空间/微博导入工具**：
+   - 先支持用户手动导出的稳定格式。
+   - 强制标记时间、平台、历史表达。
 
-5. **回归测试与评估**：
-   - 新增 `personalModelRetrieval.test.ts` 覆盖 Mock 状态下的 Hybrid 召回。
-   - 升级 Evaluation Golden Queries 覆盖向量检索的精准性和安全过滤边界。
+5. **向量索引管道**：
+   - 在 source 创建时自动将 chunk 嵌入并写入 Vectorize 索引。
+   - 更新 `indexStatus` 跟踪索引状态。

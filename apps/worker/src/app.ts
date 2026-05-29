@@ -171,7 +171,8 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       now: options.now ?? Date.now,
       generateId: options.generateId ?? defaultGenerateId,
       generateApprovalCode:
-        options.generateApprovalCode ?? defaultGenerateApprovalCode
+        options.generateApprovalCode ?? defaultGenerateApprovalCode,
+      env
     };
   }
 
@@ -250,7 +251,8 @@ export async function runScheduled(
       now: options.now ?? Date.now,
       generateId: options.generateId ?? defaultGenerateId,
       generateApprovalCode:
-        options.generateApprovalCode ?? defaultGenerateApprovalCode
+        options.generateApprovalCode ?? defaultGenerateApprovalCode,
+      env
     };
   const [schedules, longTasks] = await Promise.all([
     pollDueSchedules({

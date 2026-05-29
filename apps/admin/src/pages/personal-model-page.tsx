@@ -38,7 +38,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { createPersonalModelClaim, createPersonalModelEvidence, createPersonalModelSource, deletePersonalModelSource, loadPersonalModelClaimDetail, loadPersonalModelClaims, loadPersonalModelSourceDetail, loadPersonalModelSources, updatePersonalModelClaim, updatePersonalModelSource } from "@/lib/api";
+import { createPersonalModelClaim, createPersonalModelEvidence, createPersonalModelSource, deletePersonalModelSource, loadPersonalModelClaimDetail, loadPersonalModelClaims, loadPersonalModelSourceDetail, loadPersonalModelSources, updatePersonalModelClaim, updatePersonalModelSource, loadRetrievalDiagnostics } from "@/lib/api";
 import { formatDateTime, parseLocalYMD, truncateText } from "@/lib/format";
 import { EmptyState, Field, filterText, useAsyncData } from "./resource-common";
 
@@ -106,6 +106,27 @@ export function PersonalModelPage() {
   const [evidenceQuote, setEvidenceQuote] = useState("");
   const [evidenceRunId, setEvidenceRunId] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const [retrievalQuery, setRetrievalQuery] = useState("");
+  const [retrievalResult, setRetrievalResult] = useState<{ chunks: any[]; trace: any } | null>(null);
+  const [isSearchingRetrieval, setIsSearchingRetrieval] = useState(false);
+
+  async function handleRetrievalSearch() {
+    if (!retrievalQuery.trim()) {
+      toast.error("检索关键词不能为空");
+      return;
+    }
+    setIsSearchingRetrieval(true);
+    try {
+      const res = await loadRetrievalDiagnostics(retrievalQuery.trim());
+      setRetrievalResult(res);
+      toast.success("检索完成");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "检索失败");
+    } finally {
+      setIsSearchingRetrieval(false);
+    }
+  }
 
   async function refreshClaims() {
     claims.setData(await loadPersonalModelClaims());
@@ -774,6 +795,149 @@ export function PersonalModelPage() {
                     ))}
                   </TableBody>
                 </Table>
+              )}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Retrieval Diagnostics</CardTitle>
+          <CardDescription>
+            测试 Hybrid 检索（D1 关键字 + Cloudflare Vectorize 向量）。支持查看检索相似度打分与 RRF 融合排序详情。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="flex gap-2">
+            <Input
+              placeholder="输入查询语句，如“写作文风有什么偏好”"
+              value={retrievalQuery}
+              onChange={(e) => setRetrievalQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  void handleRetrievalSearch();
+                }
+              }}
+            />
+            <Button disabled={isSearchingRetrieval} onClick={() => void handleRetrievalSearch()}>
+              {isSearchingRetrieval ? "正在检索..." : "检索"}
+            </Button>
+          </div>
+
+          {retrievalResult ? (
+            <div className="grid gap-6">
+              <div className="grid gap-2">
+                <div className="flex items-center gap-4 text-sm text-muted-foreground bg-muted p-3 rounded-md">
+                  <span>
+                    <strong>D1 关键字召回：</strong>
+                    {retrievalResult.trace.keywordHits} 条
+                  </span>
+                  <span className="text-border">|</span>
+                  <span>
+                    <strong>Vectorize 向量召回：</strong>
+                    {retrievalResult.trace.vectorHits} 条
+                  </span>
+                  <span className="text-border">|</span>
+                  <span>
+                    <strong>合并去重总计：</strong>
+                    {retrievalResult.trace.mergedHits} 条
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <h3 className="text-sm font-semibold">检索融合结果 (Top 5 Chunks)</h3>
+                {retrievalResult.chunks.length === 0 ? (
+                  <EmptyState>未召回任何相关 Source Chunks。</EmptyState>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-16 text-center">RRF 排名</TableHead>
+                          <TableHead className="w-48">文档来源</TableHead>
+                          <TableHead className="w-24 text-right">RRF 得分</TableHead>
+                          <TableHead className="w-24 text-right">向量相似度</TableHead>
+                          <TableHead>内容片段 (Content)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {retrievalResult.chunks.map((chunk: any, index) => {
+                          const scoreItem = retrievalResult.trace.scores.find(
+                            (s: any) => s.chunkId === chunk.id
+                          );
+                          return (
+                            <TableRow key={chunk.id}>
+                              <TableCell className="text-center font-bold">{index + 1}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-xs truncate" title={chunk.documentTitle}>
+                                    {chunk.documentTitle}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {chunk.sourceType}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs">
+                                {scoreItem?.rrfScore ? scoreItem.rrfScore.toFixed(4) : "-"}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs">
+                                {scoreItem?.vectorScore !== undefined && scoreItem.vectorScore !== null
+                                  ? scoreItem.vectorScore.toFixed(4)
+                                  : "-"}
+                              </TableCell>
+                              <TableCell className="text-sm break-all max-w-xl">
+                                {chunk.content}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              {retrievalResult.trace.scores.length > 0 && (
+                <div className="grid gap-2">
+                  <h3 className="text-sm font-semibold">排名前十 RRF 融合打分日志 (Search Trace)</h3>
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Chunk ID</TableHead>
+                          <TableHead className="text-right">D1 关键字排名</TableHead>
+                          <TableHead className="text-right">向量检索排名</TableHead>
+                          <TableHead className="text-right">向量原始相似度</TableHead>
+                          <TableHead className="text-right font-semibold">综合 RRF 分数</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {retrievalResult.trace.scores.slice(0, 10).map((score: any) => (
+                          <TableRow key={score.chunkId}>
+                            <TableCell className="font-mono text-xs">{score.chunkId}</TableCell>
+                            <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                              {score.keywordRank ? `#${score.keywordRank}` : "未命中"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                              {score.vectorRank ? `#${score.vectorRank}` : "未命中"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {score.vectorScore !== undefined && score.vectorScore !== null
+                                ? score.vectorScore.toFixed(4)
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs font-semibold text-primary">
+                              {score.rrfScore.toFixed(4)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               )}
             </div>
           ) : null}

@@ -560,3 +560,12 @@ export function updateProfile(
     (input) => userProfileSchema.parse(input)
   );
 }
+
+export function loadRetrievalDiagnostics(
+  query: string
+): Promise<{ chunks: any[]; trace: any }> {
+  return fetchJson(
+    `/api/admin/personal-model/test-retrieval?query=${encodeURIComponent(query)}`,
+    (input) => input as { chunks: any[]; trace: any }
+  );
+}

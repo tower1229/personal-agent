@@ -12,6 +12,8 @@ export interface WorkerEnv {
   LLM_MAX_TOOL_ROUNDS?: string;
   BRAVE_SEARCH_API_KEY?: string;
   FETCH_URL_MAX_BYTES?: string;
+  AI?: Ai;
+  VECTORIZE?: VectorizeIndex;
 }
 
 export interface AdminSessionUser {

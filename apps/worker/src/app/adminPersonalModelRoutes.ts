@@ -40,6 +40,7 @@ import {
   toAdminPersonalModelUnderstandingGap
 } from "./serializers.js";
 import { type WorkerRouteContext } from "./routeContext.js";
+import { retrieveHybridChunks } from "../personalModelRetrieval.js";
 
 export function registerAdminPersonalModelRoutes(
   app: Hono<{ Bindings: WorkerEnv }>,
@@ -654,6 +655,43 @@ export function registerAdminPersonalModelRoutes(
     });
 
     return c.json({ success: true }, 200);
+  });
+
+  app.get("/api/admin/personal-model/test-retrieval", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.text("Unauthorized", 401);
+    }
+
+    const query = c.req.query("query") || "";
+    const repo = repositories(c.env);
+
+    const searchResult = await retrieveHybridChunks({
+      repositories: repo,
+      ownerTgUserId: authenticatedOwnerId,
+      query: query.trim(),
+      limit: 5,
+      env: c.env
+    });
+
+    const items = await Promise.all(
+      searchResult.chunks.map(async (chunk) => {
+        const doc = await repo.getPersonalModelSourceDocument({
+          ownerTgUserId: authenticatedOwnerId,
+          id: chunk.documentId
+        });
+        return {
+          ...toAdminPersonalModelSourceChunk(chunk),
+          documentTitle: doc?.title || "Unknown Document",
+          sourceType: doc?.sourceType || "unknown"
+        };
+      })
+    );
+
+    return c.json({
+      chunks: items,
+      trace: searchResult.trace
+    });
   });
 }
 

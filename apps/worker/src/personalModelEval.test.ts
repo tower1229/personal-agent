@@ -53,6 +53,7 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
     inputText: string;
     expectedScenario: PersonalModelScenario;
     description: string;
+    expectedChunkId?: string;
     testLogic: (repositories: any, contextResult: any) => Promise<void> | void;
   }
 
@@ -142,6 +143,7 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
       inputText: "我想了解我的MBTI测试结果",
       expectedScenario: "self_knowledge",
       description: "Match self_knowledge keywords 'MBTI' and '测试'",
+      expectedChunkId: "chunk-mbti",
       testLogic: async (repositories, result) => {
         expect(result.trace.scenario).toBe("self_knowledge");
         expect(result.trace.selectedChunkIds).toContain("chunk-mbti");
@@ -196,6 +198,7 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
       inputText: "我想搜一下关于混合开发现状的原创文章",
       expectedScenario: "writing",
       description: "Verify retrieval of original writing prefix [Original Writing]",
+      expectedChunkId: "chunk-hybrid-original",
       testLogic: async (repositories, result) => {
         expect(result.trace.selectedChunkIds).toContain("chunk-hybrid-original");
         expect(result.contextString).toContain("[Original Writing]: 混合应用开发非常重要");
@@ -213,6 +216,7 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
       inputText: "我想看我以前发过的历史社交动态微博混合开发",
       expectedScenario: "writing",
       description: "Verify prefix [Historical Social Expression] for historical social export",
+      expectedChunkId: "chunk-hybrid-historical",
       testLogic: async (repositories, result) => {
         expect(result.trace.selectedChunkIds).toContain("chunk-hybrid-historical");
         expect(result.contextString).toContain("[Historical Social Expression]: 历史混合开发微博");
@@ -352,6 +356,10 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
     });
 
     // Run evaluation cases
+    let evaluatedChunks = 0;
+    let recalledInTop5 = 0;
+    let recalledInTop10 = 0;
+
     for (const testCase of goldenQueries) {
       const result = await assemblePersonalModelContext({
         repositories,
@@ -362,10 +370,27 @@ describe("Personal Model Evaluation Harness (Golden Queries)", () => {
 
       try {
         await testCase.testLogic(repositories, result);
+
+        // Compute Recall if applicable
+        if (testCase.expectedChunkId) {
+          evaluatedChunks++;
+          const traceScores = result.trace.retrievalTrace?.scores || [];
+          const index = traceScores.findIndex((s: any) => s.chunkId === testCase.expectedChunkId);
+          const rank = index >= 0 ? index + 1 : -1;
+
+          if (rank > 0 && rank <= 5) recalledInTop5++;
+          if (rank > 0 && rank <= 10) recalledInTop10++;
+        }
       } catch (error) {
         console.error(`Failed Golden Query: "${testCase.inputText}" (${testCase.description})`);
         throw error;
       }
+    }
+
+    if (evaluatedChunks > 0) {
+      console.log(`\n[Golden Queries Eval] Total queries expecting chunks: ${evaluatedChunks}`);
+      console.log(`[Golden Queries Eval] Recall@5: ${((recalledInTop5 / evaluatedChunks) * 100).toFixed(2)}%`);
+      console.log(`[Golden Queries Eval] Recall@10: ${((recalledInTop10 / evaluatedChunks) * 100).toFixed(2)}%\n`);
     }
   });
 });

@@ -11,6 +11,7 @@ import {
   type LlmToolDefinition
 } from "./llm.js";
 import { type AgentRepositories } from "./repositories.js";
+import { type WorkerEnv } from "./types.js";
 import { assemblePersonalModelContext } from "./personalModelContext.js";
 import { type PersonalModelScenario, type PersonalModelSourceType } from "@personal-agent/shared";
 import {
@@ -28,6 +29,7 @@ export interface AgentRuntime {
   now: () => number;
   generateId: () => string;
   generateApprovalCode: () => string;
+  env?: WorkerEnv;
 }
 
 export interface AgentToolResult {
@@ -667,7 +669,8 @@ export async function executeLlmAgent(
     repositories: input.runtime.repositories,
     ownerTgUserId: input.ownerTgUserId,
     inputText: input.inputText,
-    now: input.runtime.now()
+    now: input.runtime.now(),
+    env: input.runtime.env
   });
 
   for (const claimId of contextAssembly.trace.selectedClaimIds) {

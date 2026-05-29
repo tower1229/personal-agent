@@ -36,6 +36,7 @@ export function createD1PersonalModelRepositories(
   | "getPersonalModelSourceChunk"
   | "listPersonalModelSourceChunks"
   | "searchPersonalModelSourceChunks"
+  | "getPersonalModelSourceChunksByIds"
   | "createPersonalModelEvidence"
   | "listPersonalModelEvidence"
   | "createPersonalModelMetacognitionLog"
@@ -418,6 +419,27 @@ export function createD1PersonalModelRepositories(
           "LIMIT ?"
         )
         .bind(input.ownerTgUserId, "%" + input.keyword + "%", input.limit)
+        .all<PersonalModelSourceChunkRow>();
+
+      return (results ?? []).map(toPersonalModelSourceChunk);
+    },
+
+    async getPersonalModelSourceChunksByIds(input) {
+      if (input.ids.length === 0) {
+        return [];
+      }
+      const placeholders = input.ids.map(() => "?").join(", ");
+      const query = `
+        SELECT sc.* FROM source_chunks sc
+        JOIN source_documents sd ON sd.id = sc.document_id
+        WHERE sc.owner_tg_user_id = ? 
+          AND sc.id IN (${placeholders})
+          AND sd.status = 'active'
+          AND sd.usage_policy != 'do_not_use'
+      `;
+      const { results } = await db
+        .prepare(query)
+        .bind(input.ownerTgUserId, ...input.ids)
         .all<PersonalModelSourceChunkRow>();
 
       return (results ?? []).map(toPersonalModelSourceChunk);

@@ -486,6 +486,10 @@ export interface AgentRepositories {
     keyword: string;
     limit: number;
   }): Promise<PersonalModelSourceChunkRecord[]>;
+  getPersonalModelSourceChunksByIds(input: {
+    ownerTgUserId: number;
+    ids: string[];
+  }): Promise<PersonalModelSourceChunkRecord[]>;
   createPersonalModelEvidence(
     record: PersonalModelEvidenceRecord
   ): Promise<PersonalModelEvidenceRecord>;

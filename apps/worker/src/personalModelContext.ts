@@ -5,6 +5,8 @@ import {
   type AgentRepositories
 } from "./repositories.js";
 import { type PersonalModelScenario } from "@personal-agent/shared";
+import { type WorkerEnv } from "./types.js";
+import { retrieveHybridChunks } from "./personalModelRetrieval.js";
 
 const scenarioKeywords: Record<PersonalModelScenario, string[]> = {
   writing: ["写作", "写", "文章", "博客", "文字", "修改", "润色"],
@@ -54,6 +56,7 @@ export interface AssembleContextTrace {
   excludedClaimIds: string[];
   selectedChunkIds: string[];
   selectedGapIds: string[];
+  retrievalTrace?: any;
 }
 
 export async function assemblePersonalModelContext(input: {
@@ -61,6 +64,7 @@ export async function assemblePersonalModelContext(input: {
   ownerTgUserId: number;
   inputText: string;
   now: number;
+  env?: WorkerEnv;
 }): Promise<{ contextString: string | null; trace: AssembleContextTrace }> {
   const scenario = classifyScenario(input.inputText);
   
@@ -93,15 +97,19 @@ export async function assemblePersonalModelContext(input: {
   // Slice to max 8 claims to avoid prompt bloat
   const finalClaims = selectedClaims.slice(0, 8);
 
-  // 2. Fetch source chunks
-  const keyword = extractSearchKeyword(input.inputText);
+  // 2. Fetch source chunks using Hybrid Retrieval
   let chunks: PersonalModelSourceChunkRecord[] = [];
-  if (keyword && keyword.trim().length > 0) {
-    chunks = await input.repositories.searchPersonalModelSourceChunks({
+  let retrievalTrace: any = null;
+  if (input.inputText && input.inputText.trim().length > 0) {
+    const searchResult = await retrieveHybridChunks({
+      repositories: input.repositories,
       ownerTgUserId: input.ownerTgUserId,
-      keyword: keyword.trim().toLowerCase(),
-      limit: 3
+      query: input.inputText.trim(),
+      limit: 3,
+      env: input.env
     });
+    chunks = searchResult.chunks;
+    retrievalTrace = searchResult.trace;
   }
 
   const anyGaps = await input.repositories.listPersonalModelUnderstandingGaps({
@@ -155,7 +163,8 @@ export async function assemblePersonalModelContext(input: {
     selectedClaimIds: finalClaims.map(c => c.id),
     excludedClaimIds,
     selectedChunkIds: chunks.map(c => c.id),
-    selectedGapIds: selectedGaps.map(g => g.id)
+    selectedGapIds: selectedGaps.map(g => g.id),
+    retrievalTrace
   };
 
   if (finalClaims.length === 0 && chunks.length === 0 && selectedGaps.length === 0) {
@@ -185,22 +194,27 @@ export async function assemblePersonalModelContext(input: {
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const doc = documents[i];
-      let prefix = "[Source Chunk]";
+      
+      const traceItem = retrievalTrace?.scores?.find((s: any) => s.chunkId === chunk.id);
+      const scoreStr = traceItem?.vectorScore !== undefined ? ` / Similarity: ${traceItem.vectorScore.toFixed(2)}` : "";
+      let prefix = `[Source Chunk${scoreStr}]`;
 
       if (doc) {
         try {
           const meta = doc.metadataJson ? JSON.parse(doc.metadataJson) : {};
           if (doc.sourceType === "writing" || doc.sourceType === "blog") {
-            prefix = meta.isOriginal ? "[Original Writing]" : "[External Article]";
+            const label = meta.isOriginal ? "Original Writing" : "External Article";
+            prefix = `[${label}${scoreStr}]`;
           } else if (
             doc.sourceType === "qq_export" ||
             doc.sourceType === "weibo_export"
           ) {
-            prefix = meta.isHistoricalExpression
-              ? "[Historical Social Expression]"
-              : "[Social Expression]";
+            const label = meta.isHistoricalExpression
+              ? "Historical Social Expression"
+              : "Social Expression";
+            prefix = `[${label}${scoreStr}]`;
           } else if (doc.sourceType === "personality_framework") {
-            prefix = "[Personality Framework]";
+            prefix = `[Personality Framework${scoreStr}]`;
           }
         } catch {
           // fallback
