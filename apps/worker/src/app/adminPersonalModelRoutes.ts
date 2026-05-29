@@ -391,6 +391,69 @@ export function registerAdminPersonalModelRoutes(
       );
     }
 
+    const aiBinding = c.env.AI;
+    const vectorizeBinding = c.env.VECTORIZE;
+    if (aiBinding && vectorizeBinding) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            const batchSize = 10;
+            for (let i = 0; i < chunks.length; i += batchSize) {
+              const batch = chunks.slice(i, i + batchSize);
+              
+              const vectorsToInsert = [];
+              for (const chk of batch) {
+                try {
+                  const response = await aiBinding.run("@cf/baai/bge-large-zh-v1.5", {
+                    text: [chk.content]
+                  });
+                  // Cloudflare Workers AI text embeddings response shape: { shape: [...], data: [...] }
+                  // For a single input string in the array, data is an array of arrays, e.g. [[0.1, 0.2...]]
+                  const embedding = (response as any).data[0];
+                  if (embedding && Array.isArray(embedding)) {
+                    vectorsToInsert.push({
+                      id: chk.id,
+                      values: embedding
+                    });
+                  }
+                } catch (e) {
+                  console.error(`Failed to embed chunk ${chk.id}:`, e);
+                }
+              }
+              
+              if (vectorsToInsert.length > 0) {
+                await vectorizeBinding.insert(vectorsToInsert);
+              }
+              
+              const indexedAt = Date.now();
+              for (const vector of vectorsToInsert) {
+                await repo.updatePersonalModelSourceChunk({
+                  ownerTgUserId: authenticatedOwnerId,
+                  id: vector.id,
+                  patch: {
+                    vectorId: vector.id,
+                    indexedAt,
+                    indexStatus: "indexed"
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.error("Vector Indexing Pipeline failed:", error);
+            for (const chk of chunks) {
+              try {
+                await repo.updatePersonalModelSourceChunk({
+                  ownerTgUserId: authenticatedOwnerId,
+                  id: chk.id,
+                  patch: { indexStatus: "failed" }
+                });
+              } catch (e) {}
+            }
+          }
+        })()
+      );
+    }
+
     return c.json(
       adminPersonalModelSourceDetailResponseSchema.parse({
         source: toAdminPersonalModelSourceDocument(source),

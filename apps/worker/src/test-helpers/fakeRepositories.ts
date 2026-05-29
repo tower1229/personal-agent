@@ -521,6 +521,23 @@ export function createFakeRepositories(): AgentRepositories & {
         ) ?? null
       );
     },
+    async updatePersonalModelSourceChunk(input) {
+      const chunkIndex = state.personalModelSourceChunks.findIndex(
+        (c) => c.ownerTgUserId === input.ownerTgUserId && c.id === input.id
+      );
+      if (chunkIndex === -1) return null;
+
+      const chunk = state.personalModelSourceChunks[chunkIndex];
+      const updatedChunk = {
+        ...chunk,
+        vectorId: input.patch.vectorId !== undefined ? input.patch.vectorId : chunk.vectorId,
+        indexedAt: input.patch.indexedAt !== undefined ? input.patch.indexedAt : chunk.indexedAt,
+        indexStatus: input.patch.indexStatus !== undefined ? input.patch.indexStatus : chunk.indexStatus,
+      };
+
+      state.personalModelSourceChunks[chunkIndex] = updatedChunk;
+      return updatedChunk;
+    },
     async listPersonalModelSourceChunks(input) {
       return state.personalModelSourceChunks
         .filter(

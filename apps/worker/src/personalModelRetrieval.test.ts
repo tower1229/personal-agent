@@ -7,6 +7,48 @@ import {
 } from "./repositories.js";
 import { type WorkerEnv } from "./types.js";
 
+describe("Personal Model Retrieval and Update", () => {
+  it("should correctly update PersonalModelSourceChunk", async () => {
+    const repositories = createFakeRepositories();
+    const ownerTgUserId = 123;
+    const documentId = "doc1";
+    const chunkId = "chunk1";
+
+    await repositories.createPersonalModelSourceChunk({
+      id: chunkId,
+      ownerTgUserId,
+      documentId,
+      chunkIndex: 0,
+      content: "test",
+      normalizedContent: "test",
+      tokenCount: 1,
+      metadataJson: "{}",
+      createdAt: Date.now(),
+      vectorId: null,
+      indexedAt: null,
+      indexStatus: "pending"
+    });
+
+    const updated = await repositories.updatePersonalModelSourceChunk({
+      ownerTgUserId,
+      id: chunkId,
+      patch: {
+        vectorId: "vec1",
+        indexedAt: 1234567890,
+        indexStatus: "indexed"
+      }
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated?.vectorId).toBe("vec1");
+    expect(updated?.indexedAt).toBe(1234567890);
+    expect(updated?.indexStatus).toBe("indexed");
+
+    const fetched = await repositories.getPersonalModelSourceChunk({ ownerTgUserId, id: chunkId });
+    expect(fetched?.indexStatus).toBe("indexed");
+  });
+});
+
 describe("Hybrid Retrieval (personalModelRetrieval)", () => {
   const ownerTgUserId = 12345;
   const now = Date.now();

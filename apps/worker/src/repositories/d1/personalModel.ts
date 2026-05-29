@@ -33,6 +33,7 @@ export function createD1PersonalModelRepositories(
   | "deletePersonalModelSourceDocument"
   | "listPersonalModelSourceDocuments"
   | "createPersonalModelSourceChunk"
+  | "updatePersonalModelSourceChunk"
   | "getPersonalModelSourceChunk"
   | "listPersonalModelSourceChunks"
   | "searchPersonalModelSourceChunks"
@@ -390,6 +391,39 @@ export function createD1PersonalModelRepositories(
       }
 
       return toPersonalModelSourceChunk(row);
+    },
+
+    async updatePersonalModelSourceChunk(input) {
+      const setClauses: string[] = [];
+      const values: any[] = [];
+
+      if (input.patch.vectorId !== undefined) {
+        setClauses.push("vector_id = ?");
+        values.push(input.patch.vectorId);
+      }
+      if (input.patch.indexedAt !== undefined) {
+        setClauses.push("indexed_at = ?");
+        values.push(input.patch.indexedAt);
+      }
+      if (input.patch.indexStatus !== undefined) {
+        setClauses.push("index_status = ?");
+        values.push(input.patch.indexStatus);
+      }
+
+      if (setClauses.length === 0) {
+        return this.getPersonalModelSourceChunk({ ownerTgUserId: input.ownerTgUserId, id: input.id });
+      }
+
+      const query = `
+        UPDATE source_chunks
+        SET ${setClauses.join(", ")}
+        WHERE id = ? AND owner_tg_user_id = ?
+        RETURNING *
+      `;
+      values.push(input.id, input.ownerTgUserId);
+
+      const row = await db.prepare(query).bind(...values).first<PersonalModelSourceChunkRow>();
+      return row ? toPersonalModelSourceChunk(row) : null;
     },
 
     async listPersonalModelSourceChunks(input) {

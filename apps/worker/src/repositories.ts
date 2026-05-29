@@ -472,6 +472,13 @@ export interface AgentRepositories {
   createPersonalModelSourceChunk(
     input: PersonalModelSourceChunkRecord
   ): Promise<PersonalModelSourceChunkRecord>;
+  updatePersonalModelSourceChunk(input: {
+    ownerTgUserId: number;
+    id: string;
+    patch: Partial<
+      Pick<PersonalModelSourceChunkRecord, "vectorId" | "indexedAt" | "indexStatus">
+    >;
+  }): Promise<PersonalModelSourceChunkRecord | null>;
   getPersonalModelSourceChunk(input: {
     ownerTgUserId: number;
     id: string;
