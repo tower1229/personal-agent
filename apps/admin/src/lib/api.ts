@@ -9,6 +9,8 @@ import {
   adminLongTasksResponseSchema,
   adminMeResponseSchema,
   adminMemoriesResponseSchema,
+  adminEvaluationsResponseSchema,
+  adminFeedbacksResponseSchema,
   adminPersonalModelClaimCreateRequestSchema,
   adminPersonalModelClaimDetailResponseSchema,
   adminPersonalModelClaimSchema,
@@ -53,6 +55,8 @@ import {
   type AdminLongTasksResponse,
   type AdminMeResponse,
   type AdminMemoriesResponse,
+  type AdminEvaluationsResponse,
+  type AdminFeedbacksResponse,
   type AdminPersonalModelClaim,
   type AdminPersonalModelClaimCreateRequest,
   type AdminPersonalModelClaimDetailResponse,
@@ -509,6 +513,18 @@ export function updatePersonalModelUnderstandingGapStatus(input: {
 export function loadApprovals(): Promise<AdminApprovalsResponse> {
   return fetchJson("/api/admin/approvals", (input) =>
     adminApprovalsResponseSchema.parse(input)
+  );
+}
+
+export function loadEvaluations(): Promise<AdminEvaluationsResponse> {
+  return fetchJson("/api/admin/evaluations", (input) =>
+    adminEvaluationsResponseSchema.parse(input)
+  );
+}
+
+export function loadFeedbacks(): Promise<AdminFeedbacksResponse> {
+  return fetchJson("/api/admin/feedbacks", (input) =>
+    adminFeedbacksResponseSchema.parse(input)
   );
 }
 

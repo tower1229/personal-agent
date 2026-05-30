@@ -68,6 +68,7 @@ export interface CommandResult {
   riskLevel: ToolRiskLevel;
   input: unknown;
   output: unknown;
+  contextTraceJson?: string;
 }
 
 function agentResultToCommandResult(result: AgentToolResult): CommandResult {
@@ -1081,6 +1082,88 @@ export async function handleOwnerUpdate(
     return { runId };
   }
 
+  // Handle Feedback Callbacks
+  const cbData = input.update.callback_query?.data;
+  if (cbData && cbData.startsWith("fb_")) {
+      const parts = cbData.split("_");
+      if (parts.length >= 3) {
+        const fbRunId = parts[1];
+        const fbValue = parts.slice(2).join("_");
+
+        const feedbackRun = await input.runtime.repositories.getRun({
+          ownerTgUserId: input.ownerTgUserId,
+          id: fbRunId
+        });
+
+        if (feedbackRun) {
+          if (fbValue === "negative") {
+            // Ask for specific reason
+            await input.runtime.telegramClient.sendMessage({
+              chatId,
+              text: "请告诉我这条回答哪里不合适？",
+              replyMarkup: {
+                inline_keyboard: [
+                  [
+                    { text: "情绪误判", callback_data: `fb_${fbRunId}_emotion_misjudgment` },
+                    { text: "旧资料误用", callback_data: `fb_${fbRunId}_old_data_misuse` }
+                  ],
+                  [
+                    { text: "建议不适", callback_data: `fb_${fbRunId}_advice_mismatch` },
+                    { text: "过度挑战", callback_data: `fb_${fbRunId}_over_challenged` }
+                  ],
+                  [
+                    { text: "过度顺从", callback_data: `fb_${fbRunId}_over_compliant` }
+                  ]
+                ]
+              }
+            });
+            return { runId };
+          }
+
+          // Otherwise it's positive or a specific negative reason
+          await input.runtime.repositories.createRunFeedback({
+            id: input.runtime.generateId(),
+            runId: fbRunId,
+            ownerTgUserId: input.ownerTgUserId,
+            feedbackType: fbValue as any,
+            comment: fbValue,
+            createdAt: now
+          });
+
+          // Feedback closure: write a metacognition log if it's a specific negative reason
+          if (fbValue !== "positive" && feedbackRun.contextTraceJson) {
+            const trace = JSON.parse(feedbackRun.contextTraceJson);
+            if (trace?.selectedClaimIds?.length > 0) {
+               const claimId = trace.selectedClaimIds[0];
+               await input.runtime.repositories.createPersonalModelMetacognitionLog({
+                  id: input.runtime.generateId(),
+                  ownerTgUserId: input.ownerTgUserId,
+                  relatedClaimId: claimId,
+                  relatedGapId: null,
+                  reflectionType: "correction",
+                  content: `用户对最近的回复表示不满（${fbValue}），可能需要修正此记忆。`,
+                  createdAt: now
+               });
+               
+               // Update claim status to under_revision
+               await input.runtime.repositories.updatePersonalModelClaim({
+                 ownerTgUserId: input.ownerTgUserId,
+                 id: claimId,
+                 patch: { status: "under_revision" },
+                 updatedAt: now
+               });
+            }
+          }
+
+          await input.runtime.telegramClient.sendMessage({
+            chatId,
+            text: fbValue === "positive" ? "收到反馈，谢谢肯定！" : "收到反馈，我会反思这次的回答并进入修正流程。"
+          });
+        }
+        return { runId };
+    }
+  }
+
   const run = await input.runtime.repositories.createRun({
     id: runId,
     ownerTgUserId: input.ownerTgUserId,
@@ -1137,14 +1220,28 @@ export async function handleOwnerUpdate(
     }
 
     try {
+      const inlineKeyboard =
+        result.toolName === "llm_agent"
+          ? {
+              inline_keyboard: [
+                [
+                  { text: "👍 准确", callback_data: `fb_${run.id}_positive` },
+                  { text: "👎 有误", callback_data: `fb_${run.id}_negative` }
+                ]
+              ]
+            }
+          : undefined;
+
       await input.runtime.telegramClient.sendMessage({
         chatId,
-        text: result.responseText
+        text: result.responseText,
+        replyMarkup: inlineKeyboard
       });
       await input.runtime.repositories.updateRun(run.id, {
         status: "succeeded",
         responseText: result.responseText,
         error: null,
+        contextTraceJson: result.contextTraceJson,
         updatedAt: input.runtime.now()
       });
     } catch (sendError) {
@@ -1155,6 +1252,7 @@ export async function handleOwnerUpdate(
           sendError instanceof Error
             ? sendError.message
             : "Telegram sendMessage failed",
+        contextTraceJson: result.contextTraceJson,
         updatedAt: input.runtime.now()
       });
     }

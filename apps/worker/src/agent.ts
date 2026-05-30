@@ -38,6 +38,7 @@ export interface AgentToolResult {
   riskLevel: ToolRiskLevel;
   input: unknown;
   output: unknown;
+  contextTraceJson?: string;
 }
 
 export interface LlmAgentInput {
@@ -819,7 +820,8 @@ export async function executeLlmAgent(
         toolName: "llm_agent",
         riskLevel: "external_send",
         input: { text: input.inputText },
-        output: { content: completion.content }
+        output: { content: completion.content },
+        contextTraceJson: JSON.stringify(contextAssembly.trace)
       };
     }
 

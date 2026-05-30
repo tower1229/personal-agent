@@ -32,7 +32,7 @@ export function getTelegramChatId(
 }
 
 export interface TelegramClient {
-  sendMessage(input: { chatId: number; text: string }): Promise<void>;
+  sendMessage(input: { chatId: number; text: string; replyMarkup?: unknown }): Promise<void>;
 }
 
 export function createTelegramClient(input: {
@@ -52,7 +52,8 @@ export function createTelegramClient(input: {
           },
           body: JSON.stringify({
             chat_id: message.chatId,
-            text: message.text
+            text: message.text,
+            ...(message.replyMarkup ? { reply_markup: message.replyMarkup } : {})
           })
         }
       );

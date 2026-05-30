@@ -21,7 +21,11 @@ import {
   type SkillRunRow,
   type SkillVersionRow,
   type TodoRow,
-  type ToolCallRow
+  type ToolCallRow,
+  type RunFeedbackRow,
+  type RunEvaluationRow,
+  toRunFeedback,
+  toRunEvaluation
 } from "./mappers.js";
 import { type AgentRepositories, type RunnableSkillRecord } from "../../repositories.js";
 
@@ -35,6 +39,10 @@ export function createD1RunRepositories(
   | "getRun"
   | "recordToolCall"
   | "listToolCallsForRun"
+  | "createRunFeedback"
+  | "listRunFeedbacks"
+  | "createRunEvaluation"
+  | "listRunEvaluations"
 > {
   return {
     async createRun(input) {
@@ -42,8 +50,8 @@ export function createD1RunRepositories(
         .prepare(
           `INSERT INTO runs (
             id, owner_tg_user_id, chat_id, update_id, message_text,
-            status, response_text, error, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, 'running', NULL, NULL, ?, ?)
+            status, response_text, error, context_trace_json, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 'running', NULL, NULL, NULL, ?, ?)
           RETURNING *`
         )
         .bind(
@@ -65,19 +73,34 @@ export function createD1RunRepositories(
     },
 
     async updateRun(id, patch) {
+      const updates: string[] = [];
+      const bindings: any[] = [];
+      
+      if (patch.status !== undefined) {
+        updates.push("status = ?");
+        bindings.push(patch.status);
+      }
+      if (patch.responseText !== undefined) {
+        updates.push("response_text = ?");
+        bindings.push(patch.responseText);
+      }
+      if (patch.error !== undefined) {
+        updates.push("error = ?");
+        bindings.push(patch.error);
+      }
+      if (patch.contextTraceJson !== undefined) {
+        updates.push("context_trace_json = ?");
+        bindings.push(patch.contextTraceJson);
+      }
+      
+      updates.push("updated_at = ?");
+      bindings.push(patch.updatedAt);
+      
+      bindings.push(id);
+
       await db
-        .prepare(
-          `UPDATE runs
-          SET status = ?, response_text = ?, error = ?, updated_at = ?
-          WHERE id = ?`
-        )
-        .bind(
-          patch.status,
-          patch.responseText ?? null,
-          patch.error ?? null,
-          patch.updatedAt,
-          id
-        )
+        .prepare(`UPDATE runs SET ${updates.join(", ")} WHERE id = ?`)
+        .bind(...bindings)
         .run();
     },
 
@@ -141,6 +164,78 @@ export function createD1RunRepositories(
         .all<ToolCallRow>();
 
       return (results ?? []).map(toToolCall);
+    },
+
+    async createRunFeedback(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO run_feedbacks (
+            id, run_id, owner_tg_user_id, feedback_type, comment, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.runId,
+          input.ownerTgUserId,
+          input.feedbackType,
+          input.comment,
+          input.createdAt
+        )
+        .first<RunFeedbackRow>();
+      if (!row) throw new Error("Failed to create run feedback");
+      return toRunFeedback(row);
+    },
+
+    async listRunFeedbacks(input) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM run_feedbacks
+          WHERE owner_tg_user_id = ?
+          ORDER BY created_at DESC
+          LIMIT ? OFFSET ?`
+        )
+        .bind(input.ownerTgUserId, input.limit, input.offset)
+        .all<RunFeedbackRow>();
+      return (results ?? []).map(toRunFeedback);
+    },
+
+    async createRunEvaluation(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO run_evaluations (
+            id, run_id, owner_tg_user_id, groundedness_score, old_data_misuse_score,
+            advice_fit_score, emotional_calibration_score, reasoning, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.runId,
+          input.ownerTgUserId,
+          input.groundednessScore,
+          input.oldDataMisuseScore,
+          input.adviceFitScore,
+          input.emotionalCalibrationScore,
+          input.reasoning,
+          input.createdAt
+        )
+        .first<RunEvaluationRow>();
+      if (!row) throw new Error("Failed to create run evaluation");
+      return toRunEvaluation(row);
+    },
+
+    async listRunEvaluations(input) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM run_evaluations
+          WHERE owner_tg_user_id = ?
+          ORDER BY created_at DESC
+          LIMIT ? OFFSET ?`
+        )
+        .bind(input.ownerTgUserId, input.limit, input.offset)
+        .all<RunEvaluationRow>();
+      return (results ?? []).map(toRunEvaluation);
     },
 
   };

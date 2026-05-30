@@ -33,7 +33,9 @@ import {
   type SkillVersionRecord,
   type TodoRecord,
   type ToolCallRecord,
-  type UserProfileRecord
+  type UserProfileRecord,
+  type RunFeedbackRecord,
+  type RunEvaluationRecord
 } from "../repositories.js";
 import { type TelegramClient } from "../telegram.js";
 import { type WorkerEnv } from "../types.js";
@@ -115,6 +117,8 @@ export function createFakeRepositories(): AgentRepositories & {
   schedules: ScheduleRecord[];
   scheduleExecutions: ScheduleExecutionRecord[];
   userProfiles: UserProfileRecord[];
+  runFeedbacks: RunFeedbackRecord[];
+  runEvaluations: RunEvaluationRecord[];
 } {
   const state = {
     runs: [] as RunRecord[],
@@ -139,6 +143,8 @@ export function createFakeRepositories(): AgentRepositories & {
     schedules: [] as ScheduleRecord[],
     scheduleExecutions: [] as ScheduleExecutionRecord[],
     userProfiles: [] as UserProfileRecord[],
+    runFeedbacks: [] as RunFeedbackRecord[],
+    runEvaluations: [] as RunEvaluationRecord[],
     nextTodoId: 1,
     nextMemoryId: 1
   };
@@ -210,12 +216,19 @@ export function createFakeRepositories(): AgentRepositories & {
     get scheduleExecutions() {
       return state.scheduleExecutions;
     },
+    get runFeedbacks() {
+      return state.runFeedbacks;
+    },
+    get runEvaluations() {
+      return state.runEvaluations;
+    },
     async createRun(input) {
       const run: RunRecord = {
         ...input,
         status: "running",
         responseText: null,
-        error: null
+        error: null,
+        contextTraceJson: null
       };
       state.runs.push(run);
       return run;
@@ -225,9 +238,12 @@ export function createFakeRepositories(): AgentRepositories & {
       if (!run) {
         return;
       }
-      run.status = patch.status;
-      run.responseText = patch.responseText ?? null;
-      run.error = patch.error ?? null;
+      run.status = patch.status ?? run.status;
+      run.responseText = patch.responseText !== undefined ? patch.responseText : run.responseText;
+      run.error = patch.error !== undefined ? patch.error : run.error;
+      if (patch.contextTraceJson !== undefined) {
+        run.contextTraceJson = patch.contextTraceJson;
+      }
       run.updatedAt = patch.updatedAt;
     },
     async listRuns(ownerTgUserId, limit) {
@@ -256,6 +272,26 @@ export function createFakeRepositories(): AgentRepositories & {
         )
         .slice()
         .sort((left, right) => left.createdAt - right.createdAt);
+    },
+    async createRunFeedback(input) {
+      state.runFeedbacks.push(input);
+      return input;
+    },
+    async listRunFeedbacks(input) {
+      return state.runFeedbacks
+        .filter((fb) => fb.ownerTgUserId === input.ownerTgUserId)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(input.offset, input.offset + input.limit);
+    },
+    async createRunEvaluation(input) {
+      state.runEvaluations.push(input);
+      return input;
+    },
+    async listRunEvaluations(input) {
+      return state.runEvaluations
+        .filter((ev) => ev.ownerTgUserId === input.ownerTgUserId)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(input.offset, input.offset + input.limit);
     },
     async createTodo(input) {
       const todo: TodoRecord = {

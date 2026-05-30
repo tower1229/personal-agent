@@ -31,7 +31,8 @@ import {
   todoStatuses,
   toolCallStatuses,
   toolRiskLevels,
-  understandingGapStatuses
+  understandingGapStatuses,
+  runFeedbackTypes
 } from "./constants.js";
 
 export const toolRiskLevelSchema = z.enum(toolRiskLevels);
@@ -982,3 +983,35 @@ export const userProfileUpdateRequestSchema = z.object({
   gender: z.string().nullable().optional()
 });
 export type UserProfileUpdateRequest = z.infer<typeof userProfileUpdateRequestSchema>;
+
+export const runFeedbackTypeSchema = z.enum(runFeedbackTypes);
+export const runFeedbackDtoSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  feedbackType: runFeedbackTypeSchema,
+  comment: z.string().nullable(),
+  createdAt: z.number().int().min(0)
+});
+export type RunFeedbackDto = z.infer<typeof runFeedbackDtoSchema>;
+
+export const runEvaluationDtoSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  groundednessScore: z.number().int().min(1).max(5),
+  oldDataMisuseScore: z.number().int().min(1).max(5),
+  adviceFitScore: z.number().int().min(1).max(5),
+  emotionalCalibrationScore: z.number().int().min(1).max(5),
+  reasoning: z.string(),
+  createdAt: z.number().int().min(0)
+});
+export type RunEvaluationDto = z.infer<typeof runEvaluationDtoSchema>;
+
+export const adminFeedbacksResponseSchema = z.object({
+  items: z.array(runFeedbackDtoSchema)
+});
+export type AdminFeedbacksResponse = z.infer<typeof adminFeedbacksResponseSchema>;
+
+export const adminEvaluationsResponseSchema = z.object({
+  items: z.array(runEvaluationDtoSchema)
+});
+export type AdminEvaluationsResponse = z.infer<typeof adminEvaluationsResponseSchema>;

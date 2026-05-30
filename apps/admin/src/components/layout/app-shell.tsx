@@ -16,6 +16,7 @@ import {
   EyeIcon,
   UserCircleIcon,
   WrenchIcon,
+  BarChartIcon,
   type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,8 @@ const primaryNav: NavItem[] = [
   { label: "Skills", to: "/admin/skills", icon: BotIcon },
   { label: "Long Tasks", to: "/admin/long-tasks", icon: ListChecksIcon },
   { label: "Schedules", to: "/admin/schedules", icon: CalendarClockIcon },
-  { label: "Approvals", to: "/admin/approvals", icon: ClipboardCheckIcon }
+  { label: "Approvals", to: "/admin/approvals", icon: ClipboardCheckIcon },
+  { label: "Evaluations", to: "/admin/evaluations", icon: BarChartIcon }
 ];
 
 const secondaryNav: NavItem[] = [

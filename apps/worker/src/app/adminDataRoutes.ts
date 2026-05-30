@@ -27,7 +27,9 @@ import {
   adminRunsResponseSchema,
   adminTodosResponseSchema,
   skillManifestSchema,
-  telegramWebhookResponseSchema
+  telegramWebhookResponseSchema,
+  adminFeedbacksResponseSchema,
+  adminEvaluationsResponseSchema
 } from "@personal-agent/shared";
 import {
   buildExpiredSessionCookie,
@@ -216,4 +218,41 @@ export function registerAdminDataRoutes(
     );
   });
 
+  app.get("/api/admin/feedbacks", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listRunFeedbacks({
+      ownerTgUserId: authenticatedOwnerId,
+      limit: limitParam(c.req.query("limit")),
+      offset: 0 // Simplification for now
+    });
+
+    return c.json(
+      adminFeedbacksResponseSchema.parse({
+        items: items
+      })
+    );
+  });
+
+  app.get("/api/admin/evaluations", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const items = await repositories(c.env).listRunEvaluations({
+      ownerTgUserId: authenticatedOwnerId,
+      limit: limitParam(c.req.query("limit")),
+      offset: 0
+    });
+
+    return c.json(
+      adminEvaluationsResponseSchema.parse({
+        items: items
+      })
+    );
+  });
 }

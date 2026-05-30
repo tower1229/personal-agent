@@ -42,6 +42,7 @@ import { executeSkill, handleOwnerUpdate, type BotRuntime } from "../bot.js";
 import { executeLlmAgent } from "../agent.js";
 import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
 import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
+import { evaluateRun } from "../agentEvaluator.js";
 import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
 import { type AgentRepositories } from "../repositories.js";
 import { type WorkerEnv } from "../types.js";
@@ -109,11 +110,34 @@ export function registerTelegramRoutes(
       );
     }
 
+    const botRuntime = runtime(c.env);
     const result = await handleOwnerUpdate({
       update,
       ownerTgUserId: userId,
-      runtime: runtime(c.env)
+      runtime: botRuntime
     });
+
+    // Auto-evaluate the Run in the background
+    const backgroundTask = (async () => {
+      try {
+        const run = await botRuntime.repositories.getRun({
+          ownerTgUserId: userId,
+          id: result.runId
+        });
+        if (run) {
+          await evaluateRun(run, botRuntime);
+        }
+      } catch (error) {
+        console.error("evaluateRun background task failed", error);
+      }
+    })();
+
+    try {
+      c.executionCtx.waitUntil(backgroundTask);
+    } catch {
+      // In testing environments where executionCtx is not available, we still want to catch errors
+      backgroundTask.catch(() => {});
+    }
 
     return c.json(
       telegramWebhookResponseSchema.parse({

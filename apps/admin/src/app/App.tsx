@@ -46,6 +46,11 @@ const ApprovalsPage = lazy(() =>
     default: module.ApprovalsPage
   }))
 );
+const EvaluationsPage = lazy(() =>
+  import("@/pages/evaluations-page").then((module) => ({
+    default: module.EvaluationsPage
+  }))
+);
 const GapsPage = lazy(() =>
   import("@/pages/gaps-page").then((module) => ({
     default: module.GapsPage
@@ -126,6 +131,7 @@ export function App() {
             <Route element={<GapsPage />} path="/admin/personal-model/gaps" />
             <Route element={<MetacognitionPage />} path="/admin/personal-model/metacognition" />
             <Route element={<ApprovalsPage />} path="/admin/approvals" />
+            <Route element={<EvaluationsPage />} path="/admin/evaluations" />
             <Route element={<ProfilePage />} path="/admin/profile" />
             <Route element={<SettingsPage />} path="/admin/settings" />
             <Route

@@ -26,7 +26,8 @@ import {
   type SkillRunStatus,
   type TodoStatus,
   type ToolCallStatus,
-  type ToolRiskLevel
+  type ToolRiskLevel,
+  type RunFeedbackType
 } from "@personal-agent/shared";
 import {
   type AgentRepositories,
@@ -51,7 +52,9 @@ import {
   type ScheduleExecutionRecord,
   type ScheduleRecord,
   type TodoRecord,
-  type ToolCallRecord
+  type ToolCallRecord,
+  type RunFeedbackRecord,
+  type RunEvaluationRecord
 } from "../../repositories.js";
 
 export interface RunRow {
@@ -63,8 +66,30 @@ export interface RunRow {
   status: RunStatus;
   response_text: string | null;
   error: string | null;
+  context_trace_json: string | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface RunFeedbackRow {
+  id: string;
+  run_id: string;
+  owner_tg_user_id: number;
+  feedback_type: RunFeedbackType;
+  comment: string | null;
+  created_at: number;
+}
+
+export interface RunEvaluationRow {
+  id: string;
+  run_id: string;
+  owner_tg_user_id: number;
+  groundedness_score: number;
+  old_data_misuse_score: number;
+  advice_fit_score: number;
+  emotional_calibration_score: number;
+  reasoning: string;
+  created_at: number;
 }
 
 export interface ToolCallRow {
@@ -335,6 +360,7 @@ export function toRun(row: RunRow): RunRecord {
     status: row.status,
     responseText: row.response_text,
     error: row.error,
+    contextTraceJson: row.context_trace_json,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -606,6 +632,31 @@ export function toScheduleExecution(
     error: row.error,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+export function toRunFeedback(row: RunFeedbackRow): RunFeedbackRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    feedbackType: row.feedback_type,
+    comment: row.comment,
+    createdAt: row.created_at
+  };
+}
+
+export function toRunEvaluation(row: RunEvaluationRow): RunEvaluationRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    groundednessScore: row.groundedness_score,
+    oldDataMisuseScore: row.old_data_misuse_score,
+    adviceFitScore: row.advice_fit_score,
+    emotionalCalibrationScore: row.emotional_calibration_score,
+    reasoning: row.reasoning,
+    createdAt: row.created_at
   };
 }
 

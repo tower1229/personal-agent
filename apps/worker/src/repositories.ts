@@ -25,7 +25,8 @@ import {
   type ToolCallStatus,
   type ToolRiskLevel,
   type MetacognitionReflectionType,
-  type UnderstandingGapStatus
+  type UnderstandingGapStatus,
+  type RunFeedbackType
 } from "@personal-agent/shared";
 
 export interface RunRecord {
@@ -37,8 +38,30 @@ export interface RunRecord {
   status: RunStatus;
   responseText: string | null;
   error: string | null;
+  contextTraceJson: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface RunFeedbackRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  feedbackType: RunFeedbackType;
+  comment: string | null;
+  createdAt: number;
+}
+
+export interface RunEvaluationRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  groundednessScore: number;
+  oldDataMisuseScore: number;
+  adviceFitScore: number;
+  emotionalCalibrationScore: number;
+  reasoning: string;
+  createdAt: number;
 }
 
 export interface ToolCallRecord {
@@ -315,13 +338,14 @@ export interface UserProfileRecord {
 }
 
 export interface AgentRepositories {
-  createRun(input: Omit<RunRecord, "status" | "responseText" | "error">): Promise<RunRecord>;
+  createRun(input: Omit<RunRecord, "status" | "responseText" | "error" | "contextTraceJson">): Promise<RunRecord>;
   updateRun(
     id: string,
     patch: {
-      status: RunStatus;
+      status?: RunStatus;
       responseText?: string | null;
       error?: string | null;
+      contextTraceJson?: string | null;
       updatedAt: number;
     }
   ): Promise<void>;
@@ -689,4 +713,18 @@ export interface AgentRepositories {
   }): Promise<ScheduleExecutionRecord | null>;
   getUserProfile(id: string): Promise<UserProfileRecord | null>;
   upsertUserProfile(input: UserProfileRecord): Promise<UserProfileRecord>;
+
+  createRunFeedback(input: RunFeedbackRecord): Promise<RunFeedbackRecord>;
+  listRunFeedbacks(input: {
+    ownerTgUserId: number;
+    limit: number;
+    offset: number;
+  }): Promise<RunFeedbackRecord[]>;
+
+  createRunEvaluation(input: RunEvaluationRecord): Promise<RunEvaluationRecord>;
+  listRunEvaluations(input: {
+    ownerTgUserId: number;
+    limit: number;
+    offset: number;
+  }): Promise<RunEvaluationRecord[]>;
 }

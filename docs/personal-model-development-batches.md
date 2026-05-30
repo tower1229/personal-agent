@@ -546,6 +546,20 @@
 
 ## Batch 10: Advanced Quality Loop
 
+状态：已完成。
+
+完成时间：2026-05-29。
+
+完成证据：
+- 增加了 `RunFeedbackRecord` 和 `RunEvaluationRecord` 表，分别用于记录用户反馈与大模型评价。
+- 更新 `RunRecord` 加入 `contextTraceJson`。
+- 实现 `evaluateRun` (LLM-as-judge) 并通过 `c.executionCtx.waitUntil` 异步自动评估 run。
+- 在 Telegram 中更新了消息回复增加 Inline Keyboard 支持进行用户反馈。
+- 增加了 `callback_query` 支持来响应正向和负向反馈，并记录相应类型到 `RunFeedbackRecord`。
+- 如果用户给出负面反馈，会自动查阅 `contextTraceJson` 并将引用写入一条 MetaCognition Log，用于启动后续纠正。
+- 实现了 `GET /api/admin/evaluations` 与 `GET /api/admin/feedbacks` 用于在 Admin 展示评估与反馈。
+- 实现了完整的测试，`npm run typecheck` 与 `npm run test` 均成功。
+
 目标：把个人模型从“能用”提升到“长期可靠”。
 
 范围：
@@ -668,22 +682,13 @@
 
 ### Batch 10 Recommended Scope
 
-1. **refined-x 批量导入**：
-   - 支持批量导入 refined-x 文章 Markdown。
-   - 自动提取标题、标签、发布时间等 metadata。
-
-2. **frontend-weekly 批量导入**：
-   - 明确区分用户原创观点、外部链接收录、用户点评。
-   - 对应 metadata 标注。
-
-3. **GitHub 个人项目导入**：
-   - 支持导入 README、docs、issues/PR 描述、commit messages。
-   - 公司项目资料单独 namespace/source_type，默认只用于工作场景。
-
-4. **QQ 空间/微博导入工具**：
-   - 先支持用户手动导出的稳定格式。
-   - 强制标记时间、平台、历史表达。
-
-5. **向量索引管道**：
-   - 在 source 创建时自动将 chunk 嵌入并写入 Vectorize 索引。
-   - 更新 `indexStatus` 跟踪索引状态。
+1. **LLM-as-judge 辅助评估**：
+   - 增加评估指标：groundedness, old-data misuse, advice fit, emotional calibration。
+2. **Admin 评估结果页面**：
+   - 在后台增加页面查看评估结果和统计。
+3. **支持用户对话反馈**：
+   - 允许用户标记回答，反馈类型包括：情绪误判、旧资料误用、建议不适配、过度挑战、过度顺从。
+4. **反馈闭环**：
+   - feedback 自动触发并进入 metacognition log 和 claim revision，相关 claim 进入 `under_revision`。
+5. **定期 Personal Model Review**：
+   - 定期评估并在后台或主动询问时提供。

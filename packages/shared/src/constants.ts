@@ -142,8 +142,18 @@ export type PersonalModelEvidenceType =
 export const metacognitionReflectionTypes = ['correction', 'observation', 'conflict_resolution'] as const;
 export type MetacognitionReflectionType = (typeof metacognitionReflectionTypes)[number];
 
-export const understandingGapStatuses = ['open', 'resolved', 'ignored'] as const;
+export const understandingGapStatuses = ["open", "resolved", "ignored"] as const;
 export type UnderstandingGapStatus = (typeof understandingGapStatuses)[number];
+
+export const runFeedbackTypes = [
+  "emotion_misjudgment",
+  "old_data_misuse",
+  "advice_mismatch",
+  "over_challenged",
+  "over_compliant",
+  "positive"
+] as const;
+export type RunFeedbackType = (typeof runFeedbackTypes)[number];
 
 export const personalModelEvidenceWeights = [
   "weak",
