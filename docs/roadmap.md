@@ -4,7 +4,6 @@
 
 - Improve Admin visual polish after real-world use.
 - Add richer run search and filtering.
-- Add automatic long-task planning and step trace.
 - Add deployment smoke automation for workers.dev.
 
 ## Agent Capability
@@ -13,6 +12,7 @@
 - Search result citation improvements.
 - More robust fetch extraction and summarization.
 - Optional progress messages for long-running Telegram interactions.
+- Improve long-task planning quality and Admin step trace after production use.
 
 ## Knowledge And RAG
 
