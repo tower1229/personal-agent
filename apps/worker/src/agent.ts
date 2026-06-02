@@ -51,6 +51,13 @@ export interface LlmAgentInput {
   maxToolRounds: number;
 }
 
+export class AgentExecutionError extends Error {
+  constructor(message: string, readonly contextTraceJson: string) {
+    super(message);
+    this.name = "AgentExecutionError";
+  }
+}
+
 function normalizeMemoryContent(content: string): string {
   return content.trim().toLocaleLowerCase();
 }
@@ -653,6 +660,91 @@ function availableToolDefinitions(allowedTools?: Set<string>): LlmToolDefinition
     .map((name) => toolDefinitions[name]);
 }
 
+type ExecutionPlanStatus = "not_requested" | "generated" | "invalid";
+
+interface AgentExecutionPlanStep {
+  step: number;
+  action: "tool" | "answer" | "ask_user";
+  tool?: string;
+  reason: string;
+}
+
+interface AgentExecutionPlan {
+  status: ExecutionPlanStatus;
+  steps: AgentExecutionPlanStep[];
+  error?: string;
+}
+
+function shouldRequestExecutionPlan(input: {
+  inputText: string;
+  allowedToolNames: string[];
+}): boolean {
+  if (input.allowedToolNames.length === 0) {
+    return false;
+  }
+
+  const text = input.inputText.toLowerCase();
+  const toolHints: Array<[string, RegExp]> = [
+    ["create_todo", /新增待办|添加待办|创建待办|记个待办|todo/u],
+    ["list_todos", /列出待办|查看待办|待办列表|未完成待办/u],
+    ["complete_todo", /完成待办|标记.*待办/u],
+    ["save_memory", /记住|保存记忆|记下来/u],
+    ["search_memory", /搜索记忆|查.*记忆|回忆/u],
+    ["delete_memory_request", /删除记忆/u],
+    ["web_search", /搜索网页|联网|查一下|查找|搜索/u],
+    ["fetch_url", /读取网页|抓取网页|https?:\/\//u],
+    ["record_understanding_gap", /不了解|不知道|需要.*了解/u],
+    ["record_metacognition_log", /纠正|修正理解|反思/u],
+    ["save_interview_source", /采访|访谈|保存.*资料/u]
+  ];
+
+  return toolHints.some(
+    ([toolName, pattern]) => input.allowedToolNames.includes(toolName) && pattern.test(text)
+  );
+}
+
+function normalizeExecutionPlan(
+  raw: unknown,
+  allowedToolNames: Set<string>
+): AgentExecutionPlanStep[] {
+  if (!Array.isArray(raw)) {
+    throw new Error("Planner returned non-array JSON");
+  }
+
+  return raw.reduce<AgentExecutionPlanStep[]>((items, item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return items;
+    }
+    const record = item as Record<string, unknown>;
+    const tool = typeof record.tool === "string" ? record.tool : undefined;
+    const action =
+      record.action === "answer" || record.action === "ask_user" || record.action === "tool"
+        ? record.action
+        : tool
+          ? "tool"
+          : "answer";
+
+    if (action === "tool" && (!tool || !allowedToolNames.has(tool))) {
+      return items;
+    }
+
+    const step =
+      typeof record.step === "number" && Number.isFinite(record.step)
+        ? Math.max(1, Math.trunc(record.step))
+        : index + 1;
+    items.push({
+      step,
+      action,
+      ...(tool ? { tool } : {}),
+      reason:
+        typeof record.reason === "string" && record.reason.trim()
+          ? record.reason.trim()
+          : "planned execution"
+    });
+    return items;
+  }, []);
+}
+
 
 
 async function recordLlmCall(input: {
@@ -685,14 +777,15 @@ async function generateAgentExecutionPlan(input: {
   llmClient: LlmClient;
   inputText: string;
   allowedTools: string[];
-}): Promise<{ step: number; tool: string; reason: string }[]> {
+}): Promise<AgentExecutionPlan> {
   const completion = await input.llmClient.createChatCompletion({
     messages: [
       {
         role: "system",
         content: `你是智能助手的执行规划者(Planner)。请根据用户的请求，在实际执行工具前制定一个单层的轻量化执行计划。
 可用工具：${input.allowedTools.join(", ")}
-要求返回严格的 JSON 数组，格式为 [{"step": 1, "tool": "toolName", "reason": "why"}...]
+要求返回严格的 JSON 数组，格式为 [{"step": 1, "action": "tool|answer|ask_user", "tool": "toolName", "reason": "why"}...]
+只有 action 为 tool 时才填写 tool，且 tool 必须来自可用工具。
 如果没有需要调用的工具，可以直接返回空数组。不要包含任何 markdown 标记或其他文本。`
       },
       {
@@ -703,11 +796,21 @@ async function generateAgentExecutionPlan(input: {
   });
 
   try {
-    const text = /\[[\s\S]*\]/u.exec(completion.content)?.[0] ?? "[]";
+    const text = /\[[\s\S]*\]/u.exec(completion.content)?.[0];
+    if (!text) {
+      throw new Error("Planner returned no JSON array");
+    }
     const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+    return {
+      status: "generated",
+      steps: normalizeExecutionPlan(parsed, new Set(input.allowedTools))
+    };
+  } catch (error) {
+    return {
+      status: "invalid",
+      steps: [],
+      error: error instanceof Error ? error.message : "Planner returned invalid JSON"
+    };
   }
 }
 
@@ -764,19 +867,125 @@ export async function executeLlmAgent(
   }
 
   const tools = availableToolDefinitions(input.allowedTools);
-  const plan = await generateAgentExecutionPlan({
-    llmClient: input.runtime.llmClient,
+  const allowedToolNames = tools.map((tool) => tool.function.name);
+  const shouldPlan = shouldRequestExecutionPlan({
     inputText: input.inputText,
-    allowedTools: tools.map(t => t.function.name)
+    allowedToolNames
   });
-  
-  if (plan.length > 0) {
-    contextAssembly.trace.executionPlan = plan;
+  const plan = shouldPlan
+    ? await generateAgentExecutionPlan({
+        llmClient: input.runtime.llmClient,
+        inputText: input.inputText,
+        allowedTools: allowedToolNames
+      })
+    : { status: "not_requested", steps: [] } satisfies AgentExecutionPlan;
+
+  contextAssembly.trace.executionPlanStatus = plan.status;
+  if (plan.error) {
+    contextAssembly.trace.executionPlanError = plan.error;
+  }
+  if (plan.status !== "not_requested") {
+    contextAssembly.trace.executionPlan = plan.steps;
+  }
+  const plannedToolSteps = plan.status === "generated"
+    ? plan.steps.filter((step) => step.action === "tool" && step.tool)
+    : [];
+  const plannedToolNames = new Set(
+    plannedToolSteps.flatMap((step) => (step.tool ? [step.tool] : []))
+  );
+  const activeTools =
+    plan.status === "generated"
+      ? tools.filter((tool) => plannedToolNames.has(tool.function.name))
+      : tools;
+  const executionAllowedTools =
+    plan.status === "generated"
+      ? new Set(activeTools.map((tool) => tool.function.name))
+      : input.allowedTools;
+
+  let nextPlannedToolIndex = 0;
+  function recordActualToolCall(round: number, toolName: string): boolean {
+    contextAssembly.trace.actualToolCalls ??= [];
+    if (plan.status !== "generated") {
+      contextAssembly.trace.actualToolCalls.push({
+        round,
+        toolName,
+        plannedStep: null,
+        status: "deviation"
+      });
+      contextAssembly.trace.planDeviations ??= [];
+      contextAssembly.trace.planDeviations.push({
+        round,
+        toolName,
+        expectedTool: null,
+        reason: plan.status === "invalid" ? "planner_invalid" : "planner_not_requested"
+      });
+      return true;
+    }
+
+    const expected = plannedToolSteps[nextPlannedToolIndex];
+    if (expected?.tool === toolName) {
+      nextPlannedToolIndex += 1;
+      contextAssembly.trace.actualToolCalls.push({
+        round,
+        toolName,
+        plannedStep: expected.step,
+        status: "planned"
+      });
+      return true;
+    }
+
+    contextAssembly.trace.actualToolCalls.push({
+      round,
+      toolName,
+      plannedStep: null,
+      status: "deviation"
+    });
+    contextAssembly.trace.planDeviations ??= [];
+    contextAssembly.trace.planDeviations.push({
+      round,
+      toolName,
+      expectedTool: expected?.tool ?? null,
+      reason: expected ? "tool_out_of_order_or_unplanned" : "tool_call_after_plan_exhausted"
+    });
+    return false;
+  }
+
+  function recordMaxRoundToolCall(round: number, toolName: string) {
+    contextAssembly.trace.actualToolCalls ??= [];
+    const expected = plan.status === "generated"
+      ? plannedToolSteps[nextPlannedToolIndex]
+      : undefined;
+    contextAssembly.trace.actualToolCalls.push({
+      round,
+      toolName,
+      plannedStep: expected?.tool === toolName ? expected.step : null,
+      status: "blocked_max_rounds"
+    });
+    contextAssembly.trace.planDeviations ??= [];
+    contextAssembly.trace.planDeviations.push({
+      round,
+      toolName,
+      expectedTool: expected?.tool ?? null,
+      reason: "max_tool_rounds_exceeded"
+    });
+  }
+
+  function executionError(message: string): AgentExecutionError {
+    return new AgentExecutionError(message, JSON.stringify(contextAssembly.trace));
   }
 
   let planInstruction = "";
-  if (plan.length > 0) {
-    planInstruction = `你的执行计划已定：\n${plan.map(p => `步骤 ${p.step}: 调用工具 ${p.tool} (${p.reason})`).join("\n")}\n请参考此计划调用工具并动态填充参数。如果发现计划有误或任务已完成，可自行调整。`;
+  if (plan.status === "generated" && plan.steps.length > 0) {
+    planInstruction = [
+      "你的执行计划已定，请按计划中的工具范围执行；如果需要偏离，先用文字解释原因。",
+      ...plan.steps.map((step) =>
+        step.action === "tool"
+          ? `步骤 ${step.step}: 调用工具 ${step.tool} (${step.reason})`
+          : `步骤 ${step.step}: ${step.action} (${step.reason})`
+      )
+    ].join("\n");
+  } else if (plan.status === "generated") {
+    planInstruction = "Planner 判断当前请求不需要调用工具，请直接回答或询问澄清问题。";
   }
 
   const systemInstructions = [
@@ -806,7 +1015,7 @@ export async function executeLlmAgent(
   for (let round = 0; round <= input.maxToolRounds; round += 1) {
     const completion = await input.runtime.llmClient.createChatCompletion({
       messages,
-      tools
+      tools: activeTools
     });
     await recordLlmCall({
       runtime: input.runtime,
@@ -894,7 +1103,10 @@ export async function executeLlmAgent(
     }
 
     if (round >= input.maxToolRounds) {
-      throw new Error("LLM tool round limit exceeded");
+      for (const toolCall of completion.toolCalls) {
+        recordMaxRoundToolCall(round, toolCall.function.name);
+      }
+      throw executionError("LLM tool round limit exceeded");
     }
 
     messages.push({
@@ -904,14 +1116,24 @@ export async function executeLlmAgent(
     });
 
     for (const toolCall of completion.toolCalls) {
-      const toolResult = await executeAgentTool({
-        runId: input.runId,
-        ownerTgUserId: input.ownerTgUserId,
-        toolName: toolCall.function.name,
-        args: safeJson(toolCall.function.arguments),
-        runtime: input.runtime,
-        allowedTools: input.allowedTools
-      });
+      const toolCallAllowedByPlan = recordActualToolCall(round, toolCall.function.name);
+      let toolResult: AgentToolResult;
+      try {
+        toolResult = await executeAgentTool({
+          runId: input.runId,
+          ownerTgUserId: input.ownerTgUserId,
+          toolName: toolCall.function.name,
+          args: safeJson(toolCall.function.arguments),
+          runtime: input.runtime,
+          allowedTools:
+            plan.status === "generated" && !toolCallAllowedByPlan
+              ? new Set()
+              : executionAllowedTools
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Tool failed";
+        throw executionError(message);
+      }
       messages.push({
         role: "tool",
         tool_call_id: toolCall.id,
@@ -920,5 +1142,5 @@ export async function executeLlmAgent(
     }
   }
 
-  throw new Error("LLM tool round limit exceeded");
+  throw executionError("LLM tool round limit exceeded");
 }

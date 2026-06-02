@@ -15,6 +15,7 @@ import {
   createFakeUrlFetcher,
   createTestApp,
   env,
+  ownerCallback,
   ownerCookie,
   ownerUpdate,
   postWebhook
@@ -192,6 +193,59 @@ describe("skill routing and execution", () => {
     });
     expect(telegramClient.messages[1]?.text).toContain("已创建长任务");
     expect(repositories.longTasks).toHaveLength(1);
+  });
+
+  it("asks for confirmation before running low-confidence semantic skill matches", async () => {
+    const { app, repositories, telegramClient } = createTestApp({
+      semanticConfidence: 0.62
+    });
+    const skill = await repositories.createSkill({
+      ownerTgUserId: 1229,
+      files: skillPackageFiles({
+        name: "planner",
+        description: "规划任务和后续行动"
+      }),
+      enabled: true,
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: skill.id,
+      versionId: "planner-v1",
+      createdAt: 1001
+    });
+
+    await postWebhook(app, ownerUpdate("规划 今天怎么做", 1));
+
+    const pendingRunId = repositories.runs[0]?.id;
+    expect(repositories.skillRuns).toHaveLength(0);
+    expect(repositories.skillRouteDecisions[0]).toMatchObject({
+      triggerType: "semantic",
+      matchedSkillName: "planner",
+      confidence: 0.62
+    });
+    expect(telegramClient.messages[0]?.text).toBe(
+      "我猜你可能是想执行技能「planner」，是否确认？"
+    );
+    expect((telegramClient.messages[0] as any).replyMarkup).toEqual({
+      inline_keyboard: [
+        [
+          { text: "确认执行", callback_data: `sc_${pendingRunId}` },
+          { text: "取消", callback_data: `sx_${pendingRunId}` }
+        ]
+      ]
+    });
+
+    await postWebhook(app, ownerCallback(`sc_${pendingRunId}`));
+
+    expect(repositories.skillRuns).toHaveLength(1);
+    expect(repositories.skillRuns[0]).toMatchObject({
+      skillId: skill.id,
+      skillVersionId: "planner-v1",
+      status: "succeeded"
+    });
+    expect(telegramClient.messages[1]?.text).toBe("确认执行 planner，处理中...");
+    expect(telegramClient.messages[2]?.text).toBe("LLM 回复：规划 今天怎么做");
   });
 
   it("blocks tools outside skill allowlists and keeps destructive approval required", async () => {

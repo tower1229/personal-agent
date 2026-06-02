@@ -113,13 +113,14 @@
 
 - **全局 Intent 管理**：在 D1 中新建 `skill_intents` 表，在 Admin UI 维护 skill 对应的特征意图示例，作为语义路由 few-shot 提示。
 - **低置信度确认**：定义置信度阈值（如 `<0.5` fallback，`0.5~0.75` confirm，`>0.75` execute）。低置信路由通过 Telegram Inline Keyboard 发起“确认/取消”询问，并在 callback 中继续执行。
-- **轻量 Planner**：普通 LLM fallback 也能生成可追踪的工具计划（如单层 JSON 数组 plan），并在 trace 中记录，随后按序自动执行，减少黑盒的多轮 function calling。
+- **轻量 Planner**：普通 LLM fallback 对工具型请求生成可追踪的结构化 plan，并用 plan 约束可调用工具、记录实际工具调用和偏离；复杂多步任务继续交给 long task workflow，高风险动作进入确认/审批。
 
 ### 验收口径
 
 - `/skill <name>` 之外的自然语言也能通过语义路由命中合适 skill。
 - route decision 记录包含候选项、置信度、选择原因。
 - 低置信输入不会误触发高影响操作。
+- 工具型普通 fallback 的 run trace 能看到 execution plan、actual tool calls 和 plan deviation。
 
 ## T5. 搜索引用质量
 

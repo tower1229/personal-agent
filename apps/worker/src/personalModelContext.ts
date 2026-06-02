@@ -57,7 +57,26 @@ export interface AssembleContextTrace {
   selectedChunkIds: string[];
   selectedGapIds: string[];
   retrievalTrace?: any;
-  executionPlan?: { step: number; tool: string; reason: string }[];
+  executionPlanStatus?: "not_requested" | "generated" | "invalid";
+  executionPlanError?: string;
+  executionPlan?: {
+    step: number;
+    action: "tool" | "answer" | "ask_user";
+    tool?: string;
+    reason: string;
+  }[];
+  actualToolCalls?: {
+    round: number;
+    toolName: string;
+    plannedStep: number | null;
+    status: "planned" | "deviation" | "blocked_max_rounds";
+  }[];
+  planDeviations?: {
+    round: number;
+    toolName: string;
+    expectedTool: string | null;
+    reason: string;
+  }[];
 }
 
 export async function assemblePersonalModelContext(input: {

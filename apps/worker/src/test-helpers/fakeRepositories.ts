@@ -1300,7 +1300,13 @@ export function createFakeTelegramClient(options: { fail?: boolean } = {}):
 }
 
 export function createFakeLlmClient(
-  options: { fail?: boolean; alwaysTool?: boolean; plannerContent?: string } = {}
+  options: {
+    fail?: boolean;
+    alwaysTool?: boolean;
+    plannerContent?: string;
+    executionPlanContent?: string;
+    semanticConfidence?: number;
+  } = {}
 ):
   LlmClient & { calls: LlmMessage[][] } {
   const calls: LlmMessage[][] = [];
@@ -1322,13 +1328,14 @@ export function createFakeLlmClient(
         const matched = (payload.skills ?? []).find((skill) =>
           `${payload.input ?? ""} ${skill.name} ${skill.description}`.includes("规划")
         );
+        const confidence = matched ? options.semanticConfidence ?? 0.88 : 0.2;
         return {
           content: JSON.stringify({
             matchedSkillName: matched?.name ?? null,
-            confidence: matched ? 0.88 : 0.2,
+            confidence,
             reason: matched ? "fake semantic match" : "fake no match",
             candidates: matched
-              ? [{ name: matched.name, confidence: 0.88, reason: "fake semantic match" }]
+              ? [{ name: matched.name, confidence, reason: "fake semantic match" }]
               : []
           }),
           toolCalls: []
@@ -1346,6 +1353,58 @@ export function createFakeLlmClient(
             score: isLongTask ? 0.8 : 0.2,
             reason: isLongTask ? "fake complex request" : "fake simple request"
           }),
+          toolCalls: []
+        };
+      }
+      if (systemText.includes("执行规划者")) {
+        if (options.executionPlanContent !== undefined) {
+          return {
+            content: options.executionPlanContent,
+            toolCalls: []
+          };
+        }
+        const text = latest?.content ?? "";
+        if (text.includes("搜索网页")) {
+          return {
+            content: JSON.stringify([
+              {
+                step: 1,
+                action: "tool",
+                tool: "web_search",
+                reason: "需要搜索公开网页"
+              }
+            ]),
+            toolCalls: []
+          };
+        }
+        if (text.includes("读取网页")) {
+          return {
+            content: JSON.stringify([
+              {
+                step: 1,
+                action: "tool",
+                tool: "fetch_url",
+                reason: "需要读取指定网页"
+              }
+            ]),
+            toolCalls: []
+          };
+        }
+        if (text.includes("新增待办")) {
+          return {
+            content: JSON.stringify([
+              {
+                step: 1,
+                action: "tool",
+                tool: "create_todo",
+                reason: "需要写入待办"
+              }
+            ]),
+            toolCalls: []
+          };
+        }
+        return {
+          content: "[]",
           toolCalls: []
         };
       }
@@ -1552,6 +1611,8 @@ export function createTestApp(
     plannerContent?: string;
     searchFails?: boolean;
     fetchFails?: boolean;
+    executionPlanContent?: string;
+    semanticConfidence?: number;
   } = {}
 ) {
   const repositories = createFakeRepositories();
@@ -1561,7 +1622,9 @@ export function createTestApp(
   const llmClient = createFakeLlmClient({
     fail: options.llmFails,
     alwaysTool: options.llmAlwaysTool,
-    plannerContent: options.plannerContent
+    plannerContent: options.plannerContent,
+    executionPlanContent: options.executionPlanContent,
+    semanticConfidence: options.semanticConfidence
   });
   const searchClient = createFakeSearchClient({ fail: options.searchFails });
   const urlFetcher = createFakeUrlFetcher({ fail: options.fetchFails });

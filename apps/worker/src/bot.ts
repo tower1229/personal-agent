@@ -77,6 +77,14 @@ function agentResultToCommandResult(result: AgentToolResult): CommandResult {
   return result;
 }
 
+function contextTraceJsonFromError(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  const trace = (error as { contextTraceJson?: unknown }).contextTraceJson;
+  return typeof trace === "string" ? trace : undefined;
+}
+
 export interface SkillMatch {
   runnable: RunnableSkillRecord;
   inputText: string;
@@ -1221,6 +1229,7 @@ export async function handleOwnerUpdate(
             status: "succeeded",
             responseText: skillResult.responseText,
             error: null,
+            contextTraceJson: skillResult.contextTraceJson,
             updatedAt: input.runtime.now()
           });
         } catch (e) {
@@ -1233,6 +1242,7 @@ export async function handleOwnerUpdate(
             status: "failed",
             responseText: null,
             error: errorMsg,
+            contextTraceJson: contextTraceJsonFromError(e),
             updatedAt: input.runtime.now()
           });
         }
@@ -1542,6 +1552,7 @@ export async function handleOwnerUpdate(
       status: "failed",
       responseText: null,
       error,
+      contextTraceJson: contextTraceJsonFromError(commandError),
       updatedAt: input.runtime.now()
     });
     await input.runtime.telegramClient

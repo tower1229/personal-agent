@@ -172,6 +172,122 @@ describe("worker system and bot commands", () => {
     expect(telegramClient.messages[1]?.text).toContain("工具结果已处理");
   });
 
+  it("records the lightweight execution plan and planned fallback tool calls", async () => {
+    const { app, repositories, searchClient } = createTestApp();
+
+    await postWebhook(app, ownerUpdate("搜索网页 Cloudflare Workers", 1));
+
+    const trace = JSON.parse(repositories.runs[0]?.contextTraceJson ?? "{}");
+    expect(searchClient.queries).toEqual(["Cloudflare Workers"]);
+    expect(trace.executionPlanStatus).toBe("generated");
+    expect(trace.executionPlan).toEqual([
+      {
+        step: 1,
+        action: "tool",
+        tool: "web_search",
+        reason: "需要搜索公开网页"
+      }
+    ]);
+    expect(trace.actualToolCalls).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        plannedStep: 1,
+        status: "planned"
+      }
+    ]);
+    expect(trace.planDeviations).toBeUndefined();
+  });
+
+  it("blocks fallback tool calls that deviate from a generated execution plan", async () => {
+    const { app, repositories, searchClient } = createTestApp({
+      executionPlanContent: JSON.stringify([
+        {
+          step: 1,
+          action: "tool",
+          tool: "fetch_url",
+          reason: "fake wrong plan"
+        }
+      ])
+    });
+
+    await postWebhook(app, ownerUpdate("搜索网页 Cloudflare Workers", 1));
+
+    const trace = JSON.parse(repositories.runs[0]?.contextTraceJson ?? "{}");
+    expect(searchClient.queries).toEqual([]);
+    expect(repositories.toolCalls.map((call) => call.toolName)).toEqual([
+      "llm_chat_completion",
+      "skill_tool_blocked",
+      "llm_chat_completion"
+    ]);
+    expect(trace.actualToolCalls).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        plannedStep: null,
+        status: "deviation"
+      }
+    ]);
+    expect(trace.planDeviations).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        expectedTool: "fetch_url",
+        reason: "tool_out_of_order_or_unplanned"
+      }
+    ]);
+  });
+
+  it("keeps execution plan trace when a planned fallback tool fails", async () => {
+    const { app, repositories } = createTestApp({ searchFails: true });
+
+    await postWebhook(app, ownerUpdate("搜索网页 Cloudflare Workers", 1));
+
+    const trace = JSON.parse(repositories.runs[0]?.contextTraceJson ?? "{}");
+    expect(repositories.runs[0]).toMatchObject({
+      status: "failed",
+      error: "search failed"
+    });
+    expect(trace.executionPlanStatus).toBe("generated");
+    expect(trace.actualToolCalls).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        plannedStep: 1,
+        status: "planned"
+      }
+    ]);
+  });
+
+  it("records invalid planner output in fallback run trace", async () => {
+    const { app, repositories, searchClient } = createTestApp({
+      executionPlanContent: "not json"
+    });
+
+    await postWebhook(app, ownerUpdate("搜索网页 Cloudflare Workers", 1));
+
+    const trace = JSON.parse(repositories.runs[0]?.contextTraceJson ?? "{}");
+    expect(searchClient.queries).toEqual(["Cloudflare Workers"]);
+    expect(trace.executionPlanStatus).toBe("invalid");
+    expect(trace.executionPlanError).toBe("Planner returned no JSON array");
+    expect(trace.actualToolCalls).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        plannedStep: null,
+        status: "deviation"
+      }
+    ]);
+    expect(trace.planDeviations).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        expectedTool: null,
+        reason: "planner_invalid"
+      }
+    ]);
+  });
+
   it("fails clearly when LLM tool rounds exceed the configured limit", async () => {
     const { app, repositories, telegramClient } = createTestApp();
     const response = await app.request(
@@ -198,6 +314,24 @@ describe("worker system and bot commands", () => {
     expect(telegramClient.messages[0]?.text).toBe(
       "执行失败：LLM tool round limit exceeded"
     );
+    const trace = JSON.parse(repositories.runs[0]?.contextTraceJson ?? "{}");
+    expect(trace.executionPlanStatus).toBe("generated");
+    expect(trace.actualToolCalls).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        plannedStep: 1,
+        status: "blocked_max_rounds"
+      }
+    ]);
+    expect(trace.planDeviations).toEqual([
+      {
+        round: 0,
+        toolName: "web_search",
+        expectedTool: "web_search",
+        reason: "max_tool_rounds_exceeded"
+      }
+    ]);
   });
 
   it("serves agent diagnostics and test endpoints", async () => {
