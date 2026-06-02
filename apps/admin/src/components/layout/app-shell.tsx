@@ -17,6 +17,7 @@ import {
   UserCircleIcon,
   WrenchIcon,
   BarChartIcon,
+  CheckSquareIcon,
   type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ const primaryNav: NavItem[] = [
   { label: "Overview", to: "/admin", icon: GaugeIcon },
   { label: "Runs", to: "/admin/runs", icon: ActivityIcon },
   { label: "Skills", to: "/admin/skills", icon: BotIcon },
+  { label: "Todos", to: "/admin/todos", icon: CheckSquareIcon },
   { label: "Long Tasks", to: "/admin/long-tasks", icon: ListChecksIcon },
   { label: "Schedules", to: "/admin/schedules", icon: CalendarClockIcon },
   { label: "Approvals", to: "/admin/approvals", icon: ClipboardCheckIcon },
@@ -58,7 +60,7 @@ const primaryNav: NavItem[] = [
 
 const secondaryNav: NavItem[] = [
   { label: "Profile", to: "/admin/profile", icon: UserCircleIcon },
-  { label: "Data", to: "/admin/data/todos", icon: DatabaseIcon },
+  { label: "Memories", to: "/admin/data/memories", icon: DatabaseIcon },
   { label: "Personal Model", to: "/admin/personal-model", icon: BrainIcon },
   { label: "Gaps", to: "/admin/personal-model/gaps", icon: HelpCircleIcon },
   { label: "Metacognition", to: "/admin/personal-model/metacognition", icon: EyeIcon },
@@ -68,7 +70,7 @@ const secondaryNav: NavItem[] = [
 function SidebarLink(props: { item: NavItem }) {
   const location = useLocation();
   const activePrefix =
-    props.item.to === "/admin/data/todos" ? "/admin/data" : props.item.to;
+    props.item.to === "/admin/data/memories" ? "/admin/data" : props.item.to;
   const isActive =
     props.item.to === "/admin"
       ? location.pathname === props.item.to

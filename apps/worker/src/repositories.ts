@@ -396,6 +396,18 @@ export interface AgentRepositories {
     id: number;
     completedAt: number;
   }): Promise<TodoRecord | null>;
+  updateTodo(input: {
+    ownerTgUserId: number;
+    id: number;
+    title: string;
+    status: TodoStatus;
+    dueAt: number | null;
+    now: number;
+  }): Promise<TodoRecord | null>;
+  deleteTodo(input: {
+    ownerTgUserId: number;
+    id: number;
+  }): Promise<boolean>;
   createMemory(input: {
     ownerTgUserId: number;
     content: string;

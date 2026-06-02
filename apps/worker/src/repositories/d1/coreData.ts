@@ -35,6 +35,8 @@ export function createD1CoreDataRepositories(
   | "markTodoReminded"
   | "listTodos"
   | "completeTodo"
+  | "updateTodo"
+  | "deleteTodo"
   | "createMemory"
   | "searchMemories"
   | "getActiveMemory"
@@ -134,6 +136,63 @@ export function createD1CoreDataRepositories(
         .first<TodoRow>();
 
       return row ? toTodo(row) : null;
+    },
+
+    async updateTodo(input) {
+      const existing = await db
+        .prepare(`SELECT * FROM todos WHERE owner_tg_user_id = ? AND id = ?`)
+        .bind(input.ownerTgUserId, input.id)
+        .first<TodoRow>();
+
+      if (!existing) {
+        return null;
+      }
+
+      let completedAt = existing.completed_at;
+      if (input.status === "completed" && existing.status !== "completed") {
+        completedAt = input.now;
+      } else if (input.status === "open" && existing.status === "completed") {
+        completedAt = null;
+      }
+
+      let remindedAt = existing.reminded_at;
+      if (
+        input.dueAt !== existing.due_at ||
+        (input.status === "open" &&
+          existing.status === "completed" &&
+          input.dueAt &&
+          input.dueAt > input.now)
+      ) {
+        remindedAt = null;
+      }
+
+      const row = await db
+        .prepare(
+          `UPDATE todos
+          SET title = ?, status = ?, completed_at = ?, due_at = ?, reminded_at = ?
+          WHERE owner_tg_user_id = ? AND id = ?
+          RETURNING *`
+        )
+        .bind(
+          input.title,
+          input.status,
+          completedAt,
+          input.dueAt,
+          remindedAt,
+          input.ownerTgUserId,
+          input.id
+        )
+        .first<TodoRow>();
+
+      return row ? toTodo(row) : null;
+    },
+
+    async deleteTodo(input) {
+      const result = await db
+        .prepare(`DELETE FROM todos WHERE owner_tg_user_id = ? AND id = ?`)
+        .bind(input.ownerTgUserId, input.id)
+        .run();
+      return (result.meta.changes ?? 0) > 0;
     },
 
     async createMemory(input) {

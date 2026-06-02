@@ -36,6 +36,11 @@ const DataPage = lazy(() =>
     default: module.DataPage
   }))
 );
+const TodosPage = lazy(() =>
+  import("@/pages/todos-page").then((module) => ({
+    default: module.TodosPage
+  }))
+);
 const PersonalModelPage = lazy(() =>
   import("@/pages/personal-model-page").then((module) => ({
     default: module.PersonalModelPage
@@ -122,7 +127,8 @@ export function App() {
             <Route element={<SchedulesPage />} path="/admin/schedules" />
             <Route element={<SchedulesPage />} path="/admin/schedules/new" />
             <Route element={<SchedulesPage />} path="/admin/schedules/:id" />
-            <Route element={<DataPage />} path="/admin/data/todos" />
+            <Route element={<Navigate replace to="/admin/todos" />} path="/admin/data/todos" />
+            <Route element={<TodosPage />} path="/admin/todos" />
             <Route element={<DataPage />} path="/admin/data/memories" />
             <Route
               element={<PersonalModelPage />}

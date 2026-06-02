@@ -556,6 +556,21 @@ export const adminTodosResponseSchema = z.object({
 
 export type AdminTodosResponse = z.infer<typeof adminTodosResponseSchema>;
 
+export const adminTodoCreateRequestSchema = z.object({
+  title: z.string().min(1),
+  dueAt: z.number().int().min(0).nullable().optional()
+});
+
+export type AdminTodoCreateRequest = z.infer<typeof adminTodoCreateRequestSchema>;
+
+export const adminTodoUpdateRequestSchema = z.object({
+  title: z.string().min(1),
+  status: z.enum(todoStatuses),
+  dueAt: z.number().int().min(0).nullable().optional()
+});
+
+export type AdminTodoUpdateRequest = z.infer<typeof adminTodoUpdateRequestSchema>;
+
 export const adminMemorySchema = z.object({
   id: z.number().int().min(1),
   content: z.string().min(1),

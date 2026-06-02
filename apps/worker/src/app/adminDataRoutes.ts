@@ -25,6 +25,9 @@ import {
   adminScheduleUpsertRequestSchema,
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
+  adminTodoSchema,
+  adminTodoCreateRequestSchema,
+  adminTodoUpdateRequestSchema,
   adminTodosResponseSchema,
   telegramWebhookResponseSchema,
   adminFeedbacksResponseSchema,
@@ -179,6 +182,88 @@ export function registerAdminDataRoutes(
         items: items.map(toAdminTodo)
       })
     );
+  });
+
+  app.post("/api/admin/todos", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminTodoCreateRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid request body" }, 400);
+    }
+
+    const now = (options.now ?? Date.now)();
+    const todo = await repositories(c.env).createTodo({
+      ownerTgUserId: authenticatedOwnerId,
+      title: body.data.title,
+      createdAt: now,
+      dueAt: body.data.dueAt ?? undefined
+    });
+
+    return c.json(adminTodoSchema.parse(toAdminTodo(todo)), 201);
+  });
+
+  app.put("/api/admin/todos/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = parseInt(c.req.param("id"), 10);
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid todo id" }, 400);
+    }
+
+    const body = adminTodoUpdateRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid request body" }, 400);
+    }
+
+    const now = (options.now ?? Date.now)();
+    const todo = await repositories(c.env).updateTodo({
+      ownerTgUserId: authenticatedOwnerId,
+      id,
+      title: body.data.title,
+      status: body.data.status,
+      dueAt: body.data.dueAt ?? null,
+      now
+    });
+
+    if (!todo) {
+      return c.json({ error: "Todo not found" }, 404);
+    }
+
+    return c.json(adminTodoSchema.parse(toAdminTodo(todo)));
+  });
+
+  app.delete("/api/admin/todos/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = parseInt(c.req.param("id"), 10);
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid todo id" }, 400);
+    }
+
+    const success = await repositories(c.env).deleteTodo({
+      ownerTgUserId: authenticatedOwnerId,
+      id
+    });
+
+    if (!success) {
+      return c.json({ error: "Todo not found or delete failed" }, 404);
+    }
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
   });
 
   app.get("/api/admin/memories", async (c) => {

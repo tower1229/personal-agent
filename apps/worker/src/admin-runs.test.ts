@@ -172,4 +172,82 @@ describe("admin data and run traces", () => {
     expect(telegramClient.messages[0]?.text).toBe("当前没有未完成待办。");
   });
 
+  it("allows todo CRUD operations", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+
+    const create = await app.request(
+      "/api/admin/todos",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          title: "Buy milk",
+          dueAt: 2000000000000
+        })
+      },
+      env
+    );
+
+    expect(create.status).toBe(201);
+    const createdTodo = await create.json() as any;
+    expect(createdTodo.title).toBe("Buy milk");
+    expect(createdTodo.dueAt).toBe(2000000000000);
+    expect(repositories.todos).toHaveLength(1);
+    expect(repositories.todos[0]?.title).toBe("Buy milk");
+
+    const list = await app.request(
+      "/api/admin/todos",
+      {
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(list.status).toBe(200);
+    const listResult = await list.json() as any;
+    expect(listResult.items).toHaveLength(1);
+    expect(listResult.items[0].id).toBe(createdTodo.id);
+
+    const update = await app.request(
+      `/api/admin/todos/${createdTodo.id}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie
+        },
+        body: JSON.stringify({
+          title: "Buy whole milk",
+          status: "completed",
+          dueAt: 3000000000000
+        })
+      },
+      env
+    );
+    expect(update.status).toBe(200);
+    const updatedTodo = await update.json() as any;
+    expect(updatedTodo.title).toBe("Buy whole milk");
+    expect(updatedTodo.status).toBe("completed");
+    expect(updatedTodo.dueAt).toBe(3000000000000);
+    expect(updatedTodo.completedAt).not.toBeNull();
+
+    const del = await app.request(
+      `/api/admin/todos/${createdTodo.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Cookie: cookie
+        }
+      },
+      env
+    );
+    expect(del.status).toBe(200);
+    expect(repositories.todos).toHaveLength(0);
+  });
+
 });

@@ -41,9 +41,14 @@ import {
   adminSkillTestRunResponseSchema,
   adminSkillsResponseSchema,
   adminSkillUpsertRequestSchema,
+  adminTodoSchema,
+  adminTodoCreateRequestSchema,
+  adminTodoUpdateRequestSchema,
   adminTodosResponseSchema,
   userProfileSchema,
   type UserProfile,
+  type TodoStatus,
+  type AdminTodo,
   type UserProfileUpdateRequest,
   type AdminAgentConfigResponse,
   type AdminAgentTestLlmResponse,
@@ -375,6 +380,36 @@ export function loadTodos(): Promise<AdminTodosResponse> {
   return fetchJson("/api/admin/todos", (input) =>
     adminTodosResponseSchema.parse(input)
   );
+}
+
+export function createTodo(
+  title: string,
+  dueAt: number | null
+): Promise<AdminTodo> {
+  return sendJson(
+    "/api/admin/todos",
+    "POST",
+    adminTodoCreateRequestSchema.parse({ title, dueAt }),
+    (body) => adminTodoSchema.parse(body)
+  );
+}
+
+export function updateTodo(
+  id: number,
+  title: string,
+  status: TodoStatus,
+  dueAt: number | null
+): Promise<AdminTodo> {
+  return sendJson(
+    `/api/admin/todos/${id}`,
+    "PUT",
+    adminTodoUpdateRequestSchema.parse({ title, status, dueAt }),
+    (body) => adminTodoSchema.parse(body)
+  );
+}
+
+export async function deleteTodo(id: number): Promise<void> {
+  await deleteEmpty(`/api/admin/todos/${id}`);
 }
 
 export function loadMemories(): Promise<AdminMemoriesResponse> {

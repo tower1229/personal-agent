@@ -357,6 +357,53 @@ export function createFakeRepositories(): AgentRepositories & {
       todo.completedAt = input.completedAt;
       return todo;
     },
+    async updateTodo(input) {
+      const todo = state.todos.find(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id
+      );
+      if (!todo) {
+        return null;
+      }
+      let completedAt = todo.completedAt;
+      if (input.status === "completed" && todo.status !== "completed") {
+        completedAt = input.now;
+      } else if (input.status === "open" && todo.status === "completed") {
+        completedAt = null;
+      }
+
+      let remindedAt = todo.remindedAt;
+      if (
+        input.dueAt !== todo.dueAt ||
+        (input.status === "open" &&
+          todo.status === "completed" &&
+          input.dueAt &&
+          input.dueAt > input.now)
+      ) {
+        remindedAt = null;
+      }
+
+      todo.title = input.title;
+      todo.status = input.status;
+      todo.completedAt = completedAt;
+      todo.dueAt = input.dueAt;
+      todo.remindedAt = remindedAt;
+
+      return todo;
+    },
+    async deleteTodo(input) {
+      const idx = state.todos.findIndex(
+        (item) =>
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id === input.id
+      );
+      if (idx === -1) {
+        return false;
+      }
+      state.todos.splice(idx, 1);
+      return true;
+    },
     async createMemory(input) {
       const memory: MemoryRecord = {
         id: state.nextMemoryId,
