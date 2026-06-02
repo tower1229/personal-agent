@@ -57,6 +57,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { CodeBlock, EmptyState, Field, emptyScheduleForm, emptySkillForm, filterText, formFromSkill, parseJsonText, skillStatus, useAsyncData, weekDays, type ScheduleFormState, type SkillFormState } from "./resource-common";
+import { ClockIcon } from "lucide-react";
 
 export function SchedulesPage() {
   const params = useParams();
@@ -230,13 +231,17 @@ export function SchedulesPage() {
                     </Select>
                   </Field>
                   <Field label="Time of day">
-                    <Input
-                      onChange={(event) =>
-                        setForm({ ...form, timeOfDay: event.target.value })
-                      }
-                      type="time"
-                      value={form.timeOfDay}
-                    />
+                    <div className="relative">
+                      <Input
+                        onChange={(event) =>
+                          setForm({ ...form, timeOfDay: event.target.value })
+                        }
+                        type="time"
+                        value={form.timeOfDay}
+                        className="pr-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-3 [&::-webkit-calendar-picker-indicator]:top-1/2 [&::-webkit-calendar-picker-indicator]:-translate-y-1/2 [&::-webkit-calendar-picker-indicator]:w-5 [&::-webkit-calendar-picker-indicator]:h-5 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:z-10"
+                      />
+                      <ClockIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-0" />
+                    </div>
                   </Field>
                 </div>
                 {form.cadence === "weekly" ? (
