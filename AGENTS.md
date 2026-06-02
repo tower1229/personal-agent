@@ -2,6 +2,12 @@
 
 This file contains development conventions and rules for AI agents working on this project. Agents MUST review these rules before making code modifications to avoid recurring issues.
 
+## 0. Product Implementation Principle
+
+When designing or implementing product capabilities, do not weaken the target solution, split the work into a reduced "first version", or trade away correctness and user goals for implementation cost unless the user explicitly asks for phased delivery or cost reduction.
+
+Default to a complete solution that satisfies the user's stated goal. If scope, cost, or risk is high, explain the trade-off and recommend an implementation order, but do not silently redefine the requirement into a smaller version.
+
 ## 1. Zod Schema Definitions for OpenAI Tools
 When creating or modifying Zod schemas (`inputSchema`) for OpenAI tools, adhere to the following rules regarding number validation:
 
