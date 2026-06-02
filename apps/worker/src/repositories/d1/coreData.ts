@@ -31,6 +31,8 @@ export function createD1CoreDataRepositories(
   AgentRepositories,
   | "createTodo"
   | "listOpenTodos"
+  | "pollDueTodos"
+  | "markTodoReminded"
   | "listTodos"
   | "completeTodo"
   | "createMemory"
@@ -51,11 +53,11 @@ export function createD1CoreDataRepositories(
       const row = await db
         .prepare(
           `INSERT INTO todos (
-            owner_tg_user_id, title, status, created_at, completed_at
-          ) VALUES (?, ?, 'open', ?, NULL)
+            owner_tg_user_id, title, status, created_at, completed_at, due_at, reminded_at
+          ) VALUES (?, ?, 'open', ?, NULL, ?, NULL)
           RETURNING *`
         )
-        .bind(input.ownerTgUserId, input.title, input.createdAt)
+        .bind(input.ownerTgUserId, input.title, input.createdAt, input.dueAt ?? null)
         .first<TodoRow>();
 
       if (!row) {
@@ -77,6 +79,33 @@ export function createD1CoreDataRepositories(
         .all<TodoRow>();
 
       return (results ?? []).map(toTodo);
+    },
+
+    async pollDueTodos(now, advanceThreshold) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM todos
+          WHERE status = 'open'
+            AND reminded_at IS NULL
+            AND due_at IS NOT NULL
+            AND due_at <= ?
+          ORDER BY due_at ASC`
+        )
+        .bind(now + advanceThreshold)
+        .all<TodoRow>();
+
+      return (results ?? []).map(toTodo);
+    },
+
+    async markTodoReminded(id, remindedAt) {
+      await db
+        .prepare(
+          `UPDATE todos
+          SET reminded_at = ?
+          WHERE id = ?`
+        )
+        .bind(remindedAt, id)
+        .run();
     },
 
     async listTodos(ownerTgUserId, limit) {

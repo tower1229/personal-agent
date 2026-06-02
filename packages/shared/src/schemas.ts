@@ -543,7 +543,9 @@ export const adminTodoSchema = z.object({
   title: z.string().min(1),
   status: z.enum(todoStatuses),
   createdAt: z.number().int().min(0),
-  completedAt: z.number().int().min(0).nullable()
+  completedAt: z.number().int().min(0).nullable(),
+  dueAt: z.number().int().min(0).nullable(),
+  remindedAt: z.number().int().min(0).nullable()
 });
 
 export type AdminTodo = z.infer<typeof adminTodoSchema>;

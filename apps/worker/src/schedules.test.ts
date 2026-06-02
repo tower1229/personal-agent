@@ -221,12 +221,14 @@ describe("schedules", () => {
     expect(first).toEqual({
       checked: 1,
       started: 1,
-      longTasks: { checked: 0, resumed: 0 }
+      longTasks: { checked: 0, resumed: 0 },
+      dueTodosChecked: 0
     });
     expect(second).toEqual({
       checked: 0,
       started: 0,
-      longTasks: { checked: 0, resumed: 0 }
+      longTasks: { checked: 0, resumed: 0 },
+      dueTodosChecked: 0
     });
     expect(repositories.scheduleExecutions).toHaveLength(1);
     expect(repositories.runs).toHaveLength(1);

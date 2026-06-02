@@ -116,6 +116,8 @@ export interface TodoRow {
   status: TodoStatus;
   created_at: number;
   completed_at: number | null;
+  due_at: number | null;
+  reminded_at: number | null;
 }
 
 export interface MemoryRow {
@@ -410,7 +412,9 @@ export function toTodo(row: TodoRow): TodoRecord {
     title: row.title,
     status: row.status,
     createdAt: row.created_at,
-    completedAt: row.completed_at
+    completedAt: row.completed_at,
+    dueAt: row.due_at,
+    remindedAt: row.reminded_at
   };
 }
 

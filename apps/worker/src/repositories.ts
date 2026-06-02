@@ -86,6 +86,8 @@ export interface TodoRecord {
   status: TodoStatus;
   createdAt: number;
   completedAt: number | null;
+  dueAt: number | null;
+  remindedAt: number | null;
 }
 
 export interface MemoryRecord {
@@ -383,8 +385,11 @@ export interface AgentRepositories {
     ownerTgUserId: number;
     title: string;
     createdAt: number;
+    dueAt?: number;
   }): Promise<TodoRecord>;
   listOpenTodos(ownerTgUserId: number, limit: number): Promise<TodoRecord[]>;
+  pollDueTodos(now: number, advanceThreshold: number): Promise<TodoRecord[]>;
+  markTodoReminded(id: number, remindedAt: number): Promise<void>;
   listTodos(ownerTgUserId: number, limit: number): Promise<TodoRecord[]>;
   completeTodo(input: {
     ownerTgUserId: number;

@@ -941,7 +941,9 @@ describe("worker system and bot commands", () => {
           title: "从 Admin 查看",
           status: "open",
           createdAt: 1001,
-          completedAt: null
+          completedAt: null,
+          dueAt: null,
+          remindedAt: null
         }
       ]
     });

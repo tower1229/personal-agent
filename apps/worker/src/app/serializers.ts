@@ -53,7 +53,9 @@ export function toAdminTodo(todo: TodoRecord) {
     title: todo.title,
     status: todo.status,
     createdAt: todo.createdAt,
-    completedAt: todo.completedAt
+    completedAt: todo.completedAt,
+    dueAt: todo.dueAt,
+    remindedAt: todo.remindedAt
   };
 }
 

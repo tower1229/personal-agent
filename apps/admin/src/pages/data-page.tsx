@@ -163,6 +163,8 @@ function TodosTable(props: { items: AdminTodo[]; loading: boolean }) {
           <TableHead>ID</TableHead>
           <TableHead>Title</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Due At</TableHead>
+          <TableHead>Reminded At</TableHead>
           <TableHead>Created</TableHead>
         </TableRow>
       </TableHeader>
@@ -174,6 +176,8 @@ function TodosTable(props: { items: AdminTodo[]; loading: boolean }) {
             <TableCell>
               <StatusBadge status={todo.status} />
             </TableCell>
+            <TableCell>{todo.dueAt ? formatDateTime(todo.dueAt) : "-"}</TableCell>
+            <TableCell>{todo.remindedAt ? formatDateTime(todo.remindedAt) : "-"}</TableCell>
             <TableCell>{formatDateTime(todo.createdAt)}</TableCell>
           </TableRow>
         ))}

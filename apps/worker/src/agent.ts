@@ -158,19 +158,38 @@ export async function executeAgentTool(input: {
       };
     } else if (input.toolName === "create_todo") {
       const title = stringArg(input.args, "title");
+      const dueTimeIso = stringArg(input.args, "dueTimeIso");
+      
+      let dueAt: number | undefined;
+      if (dueTimeIso) {
+        const parsed = Date.parse(dueTimeIso);
+        if (Number.isFinite(parsed)) {
+          dueAt = parsed;
+        } else {
+          throw new Error("Invalid dueTimeIso format. Please use ISO 8601 string.");
+        }
+      }
+
       const todo = title
         ? await input.runtime.repositories.createTodo({
             ownerTgUserId: input.ownerTgUserId,
             title,
-            createdAt: input.runtime.now()
+            createdAt: input.runtime.now(),
+            dueAt
           })
         : null;
+
+      let responseText = todo ? `已创建待办 #${todo.id}：${todo.title}` : "待办内容不能为空。";
+      if (todo && dueAt) {
+        responseText += ` (到期时间: ${new Date(dueAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })})`;
+      }
+
       result = {
-        responseText: todo ? `已创建待办 #${todo.id}：${todo.title}` : "待办内容不能为空。",
+        responseText,
         toolName: "create_todo",
         riskLevel: "write_low",
-        input: { title },
-        output: todo ? { id: todo.id, title: todo.title } : { created: false }
+        input: { title, dueTimeIso },
+        output: todo ? { id: todo.id, title: todo.title, dueAt: todo.dueAt } : { created: false }
       };
     } else if (input.toolName === "list_todos") {
       const todos = await input.runtime.repositories.listOpenTodos(
@@ -181,7 +200,7 @@ export async function executeAgentTool(input: {
         responseText:
           todos.length === 0
             ? "当前没有未完成待办。"
-            : ["未完成待办：", ...todos.map((todo) => `#${todo.id} ${todo.title}`)].join("\n"),
+            : ["未完成待办：", ...todos.map((todo) => `#${todo.id} ${todo.title}${todo.dueAt ? ` (到期时间: ${new Date(todo.dueAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })})` : ""}`)].join("\n"),
         toolName: "list_todos",
         riskLevel: "read",
         input: { status: "open" },
@@ -475,7 +494,10 @@ const toolDefinitions: Record<BuiltInToolName, LlmToolDefinition> = {
       description: "Create a todo item.",
       parameters: {
         type: "object",
-        properties: { title: { type: "string" } },
+        properties: { 
+          title: { type: "string" },
+          dueTimeIso: { type: "string", description: "ISO 8601 format string representing the due time (e.g. 2026-06-03T15:00:00+08:00). Must include timezone offset. Can be omitted if no due time is specified." }
+        },
         required: ["title"]
       }
     }

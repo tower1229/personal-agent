@@ -66,6 +66,7 @@ import {
   normalizeScheduleRequest,
   pollDueSchedules
 } from "./schedules.js";
+import { checkDueTodos } from "./todos-cron.js";
 import {
   type AgentRepositories,
   type ApprovalRequestRecord,
@@ -253,7 +254,7 @@ export async function runScheduled(
         options.generateApprovalCode ?? defaultGenerateApprovalCode,
       env
     };
-  const [schedules, longTasks] = await Promise.all([
+  const [schedules, longTasks, todosCron] = await Promise.all([
     pollDueSchedules({
       now: scheduledTime,
       runtime
@@ -261,11 +262,16 @@ export async function runScheduled(
     resumeDueLongTasks({
       now: scheduledTime,
       runtime
+    }),
+    checkDueTodos({
+      now: scheduledTime,
+      runtime
     })
   ]);
 
   return {
     ...schedules,
-    longTasks
+    longTasks,
+    ...todosCron
   };
 }

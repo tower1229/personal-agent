@@ -304,7 +304,9 @@ export function createFakeRepositories(): AgentRepositories & {
         title: input.title,
         status: "open",
         createdAt: input.createdAt,
-        completedAt: null
+        completedAt: null,
+        dueAt: input.dueAt ?? null,
+        remindedAt: null
       };
       state.nextTodoId += 1;
       state.todos.push(todo);
@@ -316,6 +318,23 @@ export function createFakeRepositories(): AgentRepositories & {
           (todo) => todo.ownerTgUserId === ownerTgUserId && todo.status === "open"
         )
         .slice(0, limit);
+    },
+    async pollDueTodos(now, advanceThreshold) {
+      return state.todos
+        .filter(
+          (todo) =>
+            todo.status === "open" &&
+            todo.remindedAt === null &&
+            todo.dueAt !== null &&
+            todo.dueAt <= now + advanceThreshold
+        )
+        .sort((left, right) => (left.dueAt as number) - (right.dueAt as number));
+    },
+    async markTodoReminded(id, remindedAt) {
+      const todo = state.todos.find((t) => t.id === id);
+      if (todo) {
+        todo.remindedAt = remindedAt;
+      }
     },
     async listTodos(ownerTgUserId, limit) {
       return state.todos
