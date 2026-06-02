@@ -933,6 +933,8 @@ export function createFakeRepositories(): AgentRepositories & {
         input.outputText === undefined ? task.outputText : input.outputText;
       task.error = input.error === undefined ? task.error : input.error;
       task.replanCount = input.replanCount ?? task.replanCount;
+      task.telegramChatId = input.telegramChatId === undefined ? task.telegramChatId : input.telegramChatId;
+      task.telegramMessageId = input.telegramMessageId === undefined ? task.telegramMessageId : input.telegramMessageId;
       task.updatedAt = input.updatedAt;
     },
     async getLongTask(input) {
@@ -1210,7 +1212,12 @@ export function createFakeTelegramClient(options: { fail?: boolean } = {}):
         throw new Error("send failed");
       }
       messages.push(input);
-    }
+      return { messageId: messages.length };
+    },
+    async editMessageText(input) {
+      messages.push(input as any);
+    },
+    async answerCallbackQuery() {}
   };
 }
 
@@ -1506,7 +1513,7 @@ export function createTestApp(
 }
 
 export async function postWebhook(app: ReturnType<typeof createWorkerApp>, body: unknown) {
-  return app.request(
+  const res = await app.request(
     "/telegram/webhook",
     {
       method: "POST",
@@ -1518,6 +1525,10 @@ export async function postWebhook(app: ReturnType<typeof createWorkerApp>, body:
     },
     env
   );
+  if (!res.ok) {
+    throw new Error(`postWebhook failed: ${res.status} ${await res.text()}`);
+  }
+  return res;
 }
 
 export async function ownerCookie() {
@@ -1531,4 +1542,16 @@ export async function ownerCookie() {
   });
 
   return buildSessionCookie({ value: session });
+}
+
+export function ownerCallback(data: string, messageId: number = 1, fromId: number = 1229) {
+  return {
+    update_id: 1,
+    callback_query: {
+      id: "cb_1",
+      from: { id: fromId, is_bot: false, first_name: "Test" },
+      message: { message_id: messageId, chat: { id: fromId, type: "private" }, date: 1000 },
+      data
+    }
+  };
 }

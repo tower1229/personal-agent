@@ -33,8 +33,8 @@ export function createD1LongTaskRepositories(
           `INSERT INTO long_tasks (
             id, run_id, owner_tg_user_id, title, original_input, status,
             complexity_score, planner_reason, current_step_id, output_text,
-            error, replan_count, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            error, replan_count, telegram_chat_id, telegram_message_id, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           RETURNING *`
         )
         .bind(
@@ -50,6 +50,8 @@ export function createD1LongTaskRepositories(
           input.outputText,
           input.error,
           input.replanCount,
+          input.telegramChatId,
+          input.telegramMessageId,
           input.createdAt,
           input.updatedAt
         )
@@ -73,6 +75,8 @@ export function createD1LongTaskRepositories(
             output_text = CASE WHEN ? THEN ? ELSE output_text END,
             error = CASE WHEN ? THEN ? ELSE error END,
             replan_count = COALESCE(?, replan_count),
+            telegram_chat_id = CASE WHEN ? THEN ? ELSE telegram_chat_id END,
+            telegram_message_id = CASE WHEN ? THEN ? ELSE telegram_message_id END,
             updated_at = ?
           WHERE id = ?`
         )
@@ -87,6 +91,10 @@ export function createD1LongTaskRepositories(
           input.error === undefined ? 0 : 1,
           input.error ?? null,
           input.replanCount ?? null,
+          input.telegramChatId === undefined ? 0 : 1,
+          input.telegramChatId ?? null,
+          input.telegramMessageId === undefined ? 0 : 1,
+          input.telegramMessageId ?? null,
           input.updatedAt,
           input.id
         )

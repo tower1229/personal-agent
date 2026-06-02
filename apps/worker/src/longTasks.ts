@@ -386,6 +386,8 @@ export async function startLongTask(input: {
     outputText: null,
     error: null,
     replanCount: 0,
+    telegramChatId: null,
+    telegramMessageId: null,
     createdAt: now,
     updatedAt: now
   });
@@ -500,26 +502,50 @@ function stepPrompt(task: LongTaskRecord, step: LongTaskStepRecord): string {
     .join("\n");
 }
 
-async function notifyLongTaskCompleted(input: {
+export async function syncLongTaskMessage(input: {
   runtime: LongTaskRuntime;
   task: LongTaskRecord;
-  outputText: string;
-}) {
-  const run = await input.runtime.repositories.getRun({
-    ownerTgUserId: input.task.ownerTgUserId,
-    id: input.task.runId
-  });
-  const chatId = run?.chatId ?? input.task.ownerTgUserId;
+}): Promise<void> {
+  if (!input.task.telegramChatId || !input.task.telegramMessageId) {
+    return;
+  }
+  
+  const steps = await input.runtime.repositories.listLongTaskSteps(input.task.id);
+  const text = input.task.status === "succeeded" && input.task.outputText
+    ? formatCompletedLongTask(input.task, input.task.outputText)
+    : formatLongTaskStatus({ task: input.task, steps });
+    
+  let inline_keyboard: Array<Array<{ text: string; callback_data: string }>> = [];
+  
+  if (input.task.status === "running" || input.task.status === "planning" || input.task.status === "paused") {
+    inline_keyboard.push([
+      { text: "取消", callback_data: `long_task_action_cancel_${input.task.id}` }
+    ]);
+  } else if (input.task.status === "waiting_for_user") {
+    inline_keyboard.push([
+      { text: "✅ 确认", callback_data: `long_task_action_confirm_${input.task.id}` },
+      { text: "⏭️ 跳过", callback_data: `long_task_action_skip_${input.task.id}` },
+      { text: "❌ 取消", callback_data: `long_task_action_cancel_${input.task.id}` }
+    ]);
+  } else if (input.task.status === "failed") {
+    inline_keyboard.push([
+      { text: "🔄 重试", callback_data: `long_task_action_retry_${input.task.id}` },
+      { text: "❌ 取消", callback_data: `long_task_action_cancel_${input.task.id}` }
+    ]);
+  }
+
   try {
-    await input.runtime.telegramClient.sendMessage({
-      chatId,
-      text: formatCompletedLongTask(input.task, input.outputText)
+    await input.runtime.telegramClient.editMessageText({
+      chatId: input.task.telegramChatId,
+      messageId: input.task.telegramMessageId,
+      text,
+      replyMarkup: inline_keyboard.length > 0 ? { inline_keyboard } : undefined
     });
     await recordLongTaskEvent({
       runtime: input.runtime,
       task: input.task,
       eventType: "notified",
-      payload: { chatId }
+      payload: { chatId: input.task.telegramChatId }
     });
   } catch (error) {
     await recordLongTaskEvent({
@@ -527,7 +553,7 @@ async function notifyLongTaskCompleted(input: {
       task: input.task,
       eventType: "notification_failed",
       payload: {
-        error: error instanceof Error ? error.message : "Telegram notification failed"
+        error: error instanceof Error ? error.message : "Telegram sync failed"
       }
     });
   }
@@ -561,6 +587,7 @@ async function finalizeLongTaskIfDone(input: {
       error: failed.error,
       updatedAt: updatedTask.updatedAt
     });
+    await syncLongTaskMessage({ runtime: input.runtime, task: updatedTask });
     return updatedTask;
   }
 
@@ -598,10 +625,9 @@ async function finalizeLongTaskIfDone(input: {
     payload: { stepCount: steps.length }
   });
   if (input.notifyOnCompletion) {
-    await notifyLongTaskCompleted({
+    await syncLongTaskMessage({
       runtime: input.runtime,
-      task: updatedTask,
-      outputText
+      task: updatedTask
     });
   }
   return updatedTask;
@@ -650,6 +676,14 @@ export async function executeLongTaskForRecord(input: {
       eventType: "step_started",
       payload: { title: step.title, position: step.position }
     });
+    
+    const runningTaskForSync = await input.runtime.repositories.getLongTask({
+      ownerTgUserId: task.ownerTgUserId,
+      id: task.id
+    });
+    if (runningTaskForSync) {
+      await syncLongTaskMessage({ runtime: input.runtime, task: runningTaskForSync });
+    }
 
     if (step.toolPolicy === "destructive") {
       await input.runtime.repositories.updateLongTaskStep({
@@ -674,6 +708,13 @@ export async function executeLongTaskForRecord(input: {
         eventType: "waiting_for_user",
         payload: { reason: "destructive step" }
       });
+      const updatedTaskForSync = await input.runtime.repositories.getLongTask({
+        ownerTgUserId: task.ownerTgUserId,
+        id: task.id
+      });
+      if (updatedTaskForSync) {
+        await syncLongTaskMessage({ runtime: input.runtime, task: updatedTaskForSync });
+      }
       return;
     }
 

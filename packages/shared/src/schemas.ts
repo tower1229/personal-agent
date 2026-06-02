@@ -363,6 +363,9 @@ export const adminLongTaskSchema = z.object({
   currentStepId: z.string().min(1).nullable(),
   outputText: z.string().nullable(),
   error: z.string().nullable(),
+  replanCount: z.number().int().min(0).optional(),
+  telegramChatId: z.number().int().nullable().optional(),
+  telegramMessageId: z.number().int().nullable().optional(),
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0)
 });
@@ -884,7 +887,13 @@ export const telegramWebhookUpdateSchema = z.object({
     .object({
       id: z.string(),
       from: telegramUserSchema,
-      data: z.string().optional()
+      data: z.string().optional(),
+      message: z.object({
+        message_id: z.number().int(),
+        chat: z.object({
+          id: z.number().int()
+        })
+      }).optional()
     })
     .optional()
 });

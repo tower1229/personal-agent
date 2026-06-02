@@ -11,9 +11,14 @@ export const weekDays = [
   { value: 7, label: "周日" }
 ];
 
+export interface ExtraFileItem {
+  path: string;
+  content: string;
+}
+
 export interface SkillFormState {
   skillMarkdown: string;
-  filesJson: string;
+  extraFiles: ExtraFileItem[];
   enabled: boolean;
 }
 
@@ -38,7 +43,7 @@ export const emptySkillForm: SkillFormState = {
     "---",
     "用简洁中文整理用户输入，并在需要时调用允许的内置工具。"
   ].join("\n"),
-  filesJson: "{\n}",
+  extraFiles: [],
   enabled: true
 };
 
@@ -113,27 +118,24 @@ export function skillStatus(skill: AdminSkillListItem | AdminSkillDetail) {
 
 export function formFromSkill(skill: AdminSkillDetail): SkillFormState {
   const { "SKILL.md": skillMarkdown = "", ...restFiles } = skill.files;
+  const extraFiles = Object.entries(restFiles).map(([path, content]) => ({
+    path,
+    content
+  }));
   return {
     skillMarkdown,
-    filesJson: JSON.stringify(restFiles, null, 2),
+    extraFiles,
     enabled: skill.enabled
   };
 }
 
 export function skillRequestFromForm(form: SkillFormState): AdminSkillUpsertRequest {
-  const parsedFiles = JSON.parse(form.filesJson || "{}") as unknown;
-  if (
-    typeof parsedFiles !== "object" ||
-    parsedFiles === null ||
-    Array.isArray(parsedFiles)
-  ) {
-    throw new Error("File map JSON must be an object");
-  }
-
   const files: Record<string, string> = {};
-  for (const [path, content] of Object.entries(parsedFiles)) {
-    files[path] =
-      typeof content === "string" ? content : JSON.stringify(content, null, 2);
+  for (const item of form.extraFiles) {
+    const trimmedPath = item.path.trim().replace(/\\/g, "/");
+    if (trimmedPath) {
+      files[trimmedPath] = item.content;
+    }
   }
 
   return {

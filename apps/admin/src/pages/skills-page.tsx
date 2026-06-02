@@ -54,6 +54,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { CodeBlock, EmptyState, Field, emptyScheduleForm, emptySkillForm, filterText, formFromSkill, parseJsonText, skillRequestFromForm, skillStatus, useAsyncData, weekDays, type ScheduleFormState, type SkillFormState } from "./resource-common";
+import { Plus, Trash2 } from "lucide-react";
 
 export function SkillsPage() {
   const params = useParams();
@@ -105,6 +106,36 @@ export function SkillsPage() {
   }, [query, skills.data, status]);
   const selectedSkill = detail.data?.skill ?? null;
   const isDeletedSkill = selectedSkill?.deleted === true;
+
+  function updateFilePath(index: number, path: string) {
+    const newFiles = [...form.extraFiles];
+    if (newFiles[index]) {
+      newFiles[index] = { ...newFiles[index]!, path };
+      setForm({ ...form, extraFiles: newFiles });
+    }
+  }
+
+  function updateFileContent(index: number, content: string) {
+    const newFiles = [...form.extraFiles];
+    if (newFiles[index]) {
+      newFiles[index] = { ...newFiles[index]!, content };
+      setForm({ ...form, extraFiles: newFiles });
+    }
+  }
+
+  function removeFile(index: number) {
+    setForm({
+      ...form,
+      extraFiles: form.extraFiles.filter((_, i) => i !== index)
+    });
+  }
+
+  function addFile() {
+    setForm({
+      ...form,
+      extraFiles: [...form.extraFiles, { path: "", content: "" }]
+    });
+  }
 
   async function save() {
     setInlineError(null);
@@ -295,19 +326,70 @@ export function SkillsPage() {
                     value={form.skillMarkdown}
                   />
                 </Field>
-                <Field
-                  description='JSON object for extra text files, for example {"references/style.md":"..."}'
-                  label="Optional file map JSON"
-                >
-                  <Textarea
-                    disabled={isDeletedSkill}
-                    onChange={(event) =>
-                      setForm({ ...form, filesJson: event.target.value })
-                    }
-                    rows={8}
-                    value={form.filesJson}
-                  />
-                </Field>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium">Extra Files</span>
+                      <span className="text-xs text-muted-foreground">
+                        额外的文本文件，例如 references/style.md 或 scripts/helper.js
+                      </span>
+                    </div>
+                    {!isDeletedSkill && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addFile}
+                        className="gap-1 text-xs"
+                      >
+                        <Plus className="h-3 w-3" /> Add File
+                      </Button>
+                    )}
+                  </div>
+
+                  {form.extraFiles.length === 0 ? (
+                    <EmptyState>
+                      {!isDeletedSkill ? "暂无额外文件。点击右上角 \"Add File\" 添加新文件。" : "无额外文件。"}
+                    </EmptyState>
+                  ) : (
+                    <div className="grid gap-3">
+                      {form.extraFiles.map((item, index) => (
+                        <Card key={index} className="border-muted bg-card/50">
+                          <CardHeader className="flex flex-row items-center gap-3 space-y-0 p-3 pb-2">
+                            <Input
+                              className="h-8 text-xs font-mono"
+                              placeholder="文件路径，如 references/rules.md"
+                              disabled={isDeletedSkill}
+                              value={item.path}
+                              onChange={(e) => updateFilePath(index, e.target.value)}
+                            />
+                            {!isDeletedSkill && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => removeFile(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </CardHeader>
+                          <CardContent className="p-3 pt-0">
+                            <Textarea
+                              className="font-mono text-xs leading-relaxed"
+                              placeholder="输入文件内容..."
+                              rows={6}
+                              disabled={isDeletedSkill}
+                              value={item.content}
+                              onChange={(e) => updateFileContent(index, e.target.value)}
+                            />
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {selectedSkill ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>

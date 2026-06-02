@@ -338,6 +338,8 @@ export interface LongTaskRow {
   output_text: string | null;
   error: string | null;
   replan_count: number;
+  telegram_chat_id: number | null;
+  telegram_message_id: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -733,6 +735,8 @@ export function toLongTask(row: LongTaskRow): LongTaskRecord {
     outputText: row.output_text,
     error: row.error,
     replanCount: row.replan_count,
+    telegramChatId: row.telegram_chat_id,
+    telegramMessageId: row.telegram_message_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

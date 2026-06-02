@@ -314,6 +314,8 @@ export interface LongTaskRecord {
   outputText: string | null;
   error: string | null;
   replanCount: number;
+  telegramChatId: number | null;
+  telegramMessageId: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -644,6 +646,8 @@ export interface AgentRepositories {
     outputText?: string | null;
     error?: string | null;
     replanCount?: number;
+    telegramChatId?: number | null;
+    telegramMessageId?: number | null;
     updatedAt: number;
   }): Promise<void>;
   getLongTask(input: {

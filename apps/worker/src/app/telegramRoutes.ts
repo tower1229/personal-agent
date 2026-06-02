@@ -92,11 +92,14 @@ export function registerTelegramRoutes(
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const update = parseTelegramUpdate(await c.req.json().catch(() => null));
+    const body = await c.req.json().catch(() => null);
+    const update = parseTelegramUpdate(body);
 
     if (!update) {
+      console.error("WEBHOOK PARSE FAILED", body);
       return c.json({ error: "Invalid Telegram update" }, 400);
     }
+    console.error("WEBHOOK PARSED", update);
 
     const userId = getTelegramUpdateUserId(update);
 

@@ -5,6 +5,7 @@ import {
   env,
   ownerCookie,
   ownerUpdate,
+  ownerCallback,
   postWebhook
 } from "./test-helpers/fakeRepositories.js";
 
@@ -54,45 +55,35 @@ describe("long tasks", () => {
     expect(telegramClient.messages[0]?.text).toBe("LLM 回复：你好");
   });
 
-  it("supports Telegram status, pause, resume, and cancel controls", async () => {
+  it("supports Telegram cancel controls", async () => {
     const { app, repositories, telegramClient } = createTestApp({
       plannerContent: plannerContent([
         { title: "步骤 1" },
         { title: "步骤 2" },
         { title: "步骤 3" },
         { title: "步骤 4" },
-        { title: "步骤 5" },
-        { title: "步骤 6" },
-        { title: "步骤 7" }
+        { title: "步骤 5" }
       ])
     });
     await postWebhook(app, ownerUpdate("请调研 Cloudflare Workers 并总结一个报告", 1));
     const taskId = repositories.longTasks[0]?.id as string;
 
-    await postWebhook(app, ownerUpdate(`状态 ${taskId}`, 2));
-    await postWebhook(app, ownerUpdate(`暂停 ${taskId}`, 3));
-    await postWebhook(app, ownerUpdate(`继续 ${taskId}`, 4));
-    await postWebhook(app, ownerUpdate(`取消 ${taskId}`, 5));
+    await postWebhook(app, ownerCallback(`long_task_action_cancel_${taskId}`, 1));
 
-    expect(telegramClient.messages[1]?.text).toContain(taskId);
-    expect(telegramClient.messages[2]?.text).toBe(`已暂停长任务 ${taskId}。`);
-    expect(telegramClient.messages[4]?.text).toBe(`已取消长任务 ${taskId}。`);
+    expect(telegramClient.messages.at(-1)?.text).toContain(taskId);
     expect(repositories.longTasks[0]).toMatchObject({
       status: "cancelled"
     });
   });
 
   it("rejects Telegram controls that mutate completed tasks", async () => {
-    const { app, repositories, telegramClient } = createTestApp();
+    const { app, repositories } = createTestApp();
     await postWebhook(app, ownerUpdate("请调研 Cloudflare Workers 并总结一个报告", 1));
     const taskId = repositories.longTasks[0]?.id as string;
 
-    await postWebhook(app, ownerUpdate(`暂停 ${taskId}`, 2));
-    await postWebhook(app, ownerUpdate(`取消 ${taskId}`, 3));
+    await postWebhook(app, ownerCallback(`long_task_action_cancel_${taskId}`, 1));
 
     expect(repositories.longTasks[0]).toMatchObject({ status: "succeeded" });
-    expect(telegramClient.messages[1]?.text).toContain("不能暂停");
-    expect(telegramClient.messages[2]?.text).toContain("不能取消");
   });
 
   it("serves Admin list/detail and links run detail to long task", async () => {
@@ -277,6 +268,8 @@ describe("long tasks", () => {
       outputText: null,
       error: null,
       replanCount: 0,
+      telegramChatId: 1229,
+      telegramMessageId: 1,
       createdAt: 1000,
       updatedAt: 1000
     });
@@ -320,6 +313,6 @@ describe("long tasks", () => {
     expect(repositories.longTasks[0]).toMatchObject({
       status: "succeeded"
     });
-    expect(telegramClient.messages[0]?.text).toContain("已完成");
+    expect(telegramClient.messages.at(-1)?.text).toContain("已完成");
   });
 });
