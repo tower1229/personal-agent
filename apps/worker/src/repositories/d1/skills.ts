@@ -1,9 +1,11 @@
 import {
   toSkill,
   toSkillRouteDecision,
+  toSkillIntent,
   toSkillRun,
   toSkillVersion,
   type SkillRouteDecisionRow,
+  type SkillIntentRow,
   type SkillRow,
   type SkillRunRow,
   type SkillVersionRow
@@ -80,6 +82,9 @@ export function createD1SkillRepositories(
   | "createSkillRouteDecision"
   | "listSkillRouteDecisions"
   | "getSkillRouteDecisionForRun"
+  | "createSkillIntent"
+  | "deleteSkillIntent"
+  | "listSkillIntents"
   | "createSkillRun"
   | "updateSkillRun"
   | "listSkillRuns"
@@ -641,6 +646,54 @@ export function createD1SkillRepositories(
         .first<SkillRunRow>();
 
       return row ? toSkillRun(row) : null;
+    },
+
+    async createSkillIntent(input) {
+      const row = await db
+        .prepare(
+          `INSERT INTO skill_intents (
+            id, owner_tg_user_id, skill_name, intent_text, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+          RETURNING *`
+        )
+        .bind(
+          input.id,
+          input.ownerTgUserId,
+          input.skillName,
+          input.intentText,
+          input.createdAt,
+          input.updatedAt
+        )
+        .first<SkillIntentRow>();
+
+      if (!row) {
+        throw new Error("Failed to create skill intent");
+      }
+
+      return toSkillIntent(row);
+    },
+
+    async deleteSkillIntent(input) {
+      await db
+        .prepare(
+          `DELETE FROM skill_intents
+          WHERE owner_tg_user_id = ? AND id = ?`
+        )
+        .bind(input.ownerTgUserId, input.id)
+        .run();
+    },
+
+    async listSkillIntents(ownerTgUserId) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM skill_intents
+          WHERE owner_tg_user_id = ?
+          ORDER BY updated_at DESC`
+        )
+        .bind(ownerTgUserId)
+        .all<SkillIntentRow>();
+
+      return (results ?? []).map(toSkillIntent);
     }
   };
 }

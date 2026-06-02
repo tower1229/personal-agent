@@ -259,6 +259,15 @@ export interface SkillRouteDecisionRecord {
   createdAt: number;
 }
 
+export interface SkillIntentRecord {
+  id: string;
+  ownerTgUserId: number;
+  skillName: string;
+  intentText: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface SkillRunRecord {
   id: string;
   runId: string;
@@ -653,6 +662,9 @@ export interface AgentRepositories {
     ownerTgUserId: number;
     runId: string;
   }): Promise<SkillRunRecord | null>;
+  createSkillIntent(input: SkillIntentRecord): Promise<SkillIntentRecord>;
+  deleteSkillIntent(input: { ownerTgUserId: number; id: string }): Promise<void>;
+  listSkillIntents(ownerTgUserId: number): Promise<SkillIntentRecord[]>;
   createLongTask(input: LongTaskRecord): Promise<LongTaskRecord>;
   updateLongTask(input: {
     id: string;

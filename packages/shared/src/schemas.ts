@@ -1083,3 +1083,27 @@ export const adminEvaluationsResponseSchema = z.object({
   items: z.array(runEvaluationDtoSchema)
 });
 export type AdminEvaluationsResponse = z.infer<typeof adminEvaluationsResponseSchema>;
+
+export const skillIntentSchema = z.object({
+  id: z.string().min(1),
+  ownerTgUserId: z.number().int().min(1),
+  skillName: z.string().min(1),
+  intentText: z.string().min(1),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type SkillIntent = z.infer<typeof skillIntentSchema>;
+
+export const adminSkillIntentsResponseSchema = z.object({
+  items: z.array(skillIntentSchema)
+});
+
+export type AdminSkillIntentsResponse = z.infer<typeof adminSkillIntentsResponseSchema>;
+
+export const adminSkillIntentCreateRequestSchema = z.object({
+  skillName: z.string().min(1),
+  intentText: z.string().min(1)
+});
+
+export type AdminSkillIntentCreateRequest = z.infer<typeof adminSkillIntentCreateRequestSchema>;

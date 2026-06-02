@@ -4,7 +4,9 @@ import {
   type PersonalModelLayer,
   type PersonalModelScenario,
   type SkillRouteTriggerType,
-  type ToolRiskLevel
+  type ToolRiskLevel,
+  ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD,
+  ROUTING_CONFIDENCE_CONFIRM_THRESHOLD
 } from "@personal-agent/shared";
 import {
   executeLlmAgent,
@@ -836,16 +838,24 @@ async function findSemanticSkillMatch(input: {
     };
   }
 
-  const skillCatalog = runnableSkills.map((runnable) => ({
-    name: runnable.version.name,
-    description: runnable.version.description
-  }));
+  const skillIntents = await input.runtime.repositories.listSkillIntents(
+    input.ownerTgUserId
+  );
+  const skillCatalog = runnableSkills.map((runnable) => {
+    const intentsForSkill = skillIntents
+      .filter((intent) => intent.skillName === runnable.version.name)
+      .map((intent) => intent.intentText);
+    return {
+      name: runnable.version.name,
+      description: runnable.version.description,
+      exampleIntents: intentsForSkill.length > 0 ? intentsForSkill : undefined
+    };
+  });
   const completion = await input.runtime.llmClient.createChatCompletion({
     messages: [
       {
         role: "system",
-        content:
-          "你是 skill 路由器。只根据用户输入和 skill 的 name/description 判断是否应触发一个 skill。返回严格 JSON：{\"matchedSkillName\": string|null, \"confidence\": number, \"reason\": string, \"candidates\": [{\"name\": string, \"confidence\": number, \"reason\": string}] }。confidence 低于 0.75 时 matchedSkillName 必须为 null。"
+        content: `你是 skill 路由器。只根据用户输入和 skill 的 name/description/exampleIntents 判断是否应触发一个 skill。返回严格 JSON：{"matchedSkillName": string|null, "confidence": number, "reason": string, "candidates": [{"name": string, "confidence": number, "reason": string}] }。confidence 低于 ${ROUTING_CONFIDENCE_CONFIRM_THRESHOLD} 时 matchedSkillName 必须为 null。`
       },
       {
         role: "user",
@@ -866,7 +876,7 @@ async function findSemanticSkillMatch(input: {
   }
 
   const candidatesJson = JSON.stringify(parsed.candidates);
-  if (!parsed.matchedSkillName || parsed.confidence < 0.75) {
+  if (!parsed.matchedSkillName || parsed.confidence < ROUTING_CONFIDENCE_CONFIRM_THRESHOLD) {
     return {
       match: null,
       reason: parsed.reason || "semantic skill confidence below threshold",
@@ -1017,12 +1027,22 @@ async function executeCommandOrSkillOrLlmFallback(input: {
     candidatesJson: semanticRoute.candidatesJson
   });
   if (semanticRoute.match) {
-    return executeSkill({
-      runId: input.runId,
-      ownerTgUserId: input.ownerTgUserId,
-      match: semanticRoute.match,
-      runtime: input.runtime
-    });
+    if (semanticRoute.match.confidence >= ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD) {
+      return executeSkill({
+        runId: input.runId,
+        ownerTgUserId: input.ownerTgUserId,
+        match: semanticRoute.match,
+        runtime: input.runtime
+      });
+    } else {
+      return {
+        responseText: `我猜你可能是想执行技能「${semanticRoute.match.runnable.version.name}」，是否确认？`,
+        toolName: "skill_confirm",
+        riskLevel: "read",
+        input: { name: semanticRoute.match.runnable.version.name },
+        output: { pending: true, skillId: semanticRoute.match.runnable.skill.id }
+      };
+    }
   }
 
   const decision = await classifyTaskComplexityWithLlm({
@@ -1149,6 +1169,86 @@ export async function handleOwnerUpdate(
         }
         return { runId };
     }
+  } else if (cbData && cbData.startsWith("sc_")) {
+    const confirmedRunId = cbData.substring(3);
+    const routeDecision = await input.runtime.repositories.getSkillRouteDecisionForRun({
+      ownerTgUserId: input.ownerTgUserId,
+      runId: confirmedRunId
+    });
+    if (routeDecision && routeDecision.matchedSkillName) {
+      const runnable = await input.runtime.repositories.getRunnableSkillByName({
+        ownerTgUserId: input.ownerTgUserId,
+        name: routeDecision.matchedSkillName
+      });
+      if (runnable) {
+        if (input.update.callback_query?.message?.message_id) {
+          await input.runtime.telegramClient.editMessageText({
+            chatId,
+            messageId: input.update.callback_query.message.message_id,
+            text: `确认执行 ${runnable.version.name}，处理中...`,
+            replyMarkup: { inline_keyboard: [] }
+          }).catch(() => {});
+        }
+        const run = await input.runtime.repositories.createRun({
+          id: runId,
+          ownerTgUserId: input.ownerTgUserId,
+          chatId,
+          updateId: input.update.update_id,
+          messageText: routeDecision.inputText,
+          createdAt: now,
+          updatedAt: now
+        });
+        try {
+          const match: SkillMatch = {
+            runnable,
+            inputText: routeDecision.inputText,
+            triggerType: routeDecision.triggerType,
+            confidence: routeDecision.confidence ?? 1,
+            reason: routeDecision.reason,
+            candidatesJson: routeDecision.candidatesJson
+          };
+          const skillResult = await executeSkill({
+            runId: run.id,
+            ownerTgUserId: input.ownerTgUserId,
+            match,
+            runtime: input.runtime
+          });
+          await input.runtime.telegramClient.sendMessage({
+            chatId,
+            text: skillResult.responseText
+          });
+          await input.runtime.repositories.updateRun(run.id, {
+            status: "succeeded",
+            responseText: skillResult.responseText,
+            error: null,
+            updatedAt: input.runtime.now()
+          });
+        } catch (e) {
+          const errorMsg = e instanceof Error ? e.message : "执行失败";
+          await input.runtime.telegramClient.sendMessage({
+            chatId,
+            text: `执行失败：${errorMsg}`
+          });
+          await input.runtime.repositories.updateRun(run.id, {
+            status: "failed",
+            responseText: null,
+            error: errorMsg,
+            updatedAt: input.runtime.now()
+          });
+        }
+      }
+    }
+    return { runId };
+  } else if (cbData && cbData.startsWith("sx_")) {
+    if (input.update.callback_query?.message?.message_id) {
+      await input.runtime.telegramClient.editMessageText({
+        chatId,
+        messageId: input.update.callback_query.message.message_id,
+        text: "已取消执行。",
+        replyMarkup: { inline_keyboard: [] }
+      }).catch(() => {});
+    }
+    return { runId };
   } else if (cbData && cbData.startsWith("long_task_action_")) {
     const parts = cbData.split("_");
     if (parts.length >= 4) {
@@ -1367,6 +1467,15 @@ export async function handleOwnerUpdate(
                 [
                   { text: "👍 准确", callback_data: `fb_${run.id}_positive` },
                   { text: "👎 有误", callback_data: `fb_${run.id}_negative` }
+                ]
+              ]
+            }
+          : result.toolName === "skill_confirm"
+          ? {
+              inline_keyboard: [
+                [
+                  { text: "确认执行", callback_data: `sc_${run.id}` },
+                  { text: "取消", callback_data: `sx_${run.id}` }
                 ]
               ]
             }

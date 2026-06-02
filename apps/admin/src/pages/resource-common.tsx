@@ -156,11 +156,12 @@ export function useAsyncData<T>(loader: () => Promise<T>, deps: unknown[] = []) 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setData(null);
 
     void loader()
       .then((value) => {
@@ -182,7 +183,9 @@ export function useAsyncData<T>(loader: () => Promise<T>, deps: unknown[] = []) 
     return () => {
       cancelled = true;
     };
-  }, deps);
+  }, [...deps, tick]);
 
-  return { data, error, loading, setData };
+  const reload = () => setTick((t) => t + 1);
+
+  return { data, error, loading, setData, reload };
 }

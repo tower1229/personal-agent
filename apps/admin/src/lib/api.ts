@@ -91,7 +91,9 @@ import {
   type AdminSkillTestRunResponse,
   type AdminSkillsResponse,
   type AdminSkillUpsertRequest,
-  type AdminTodosResponse
+  type AdminTodosResponse,
+  type SkillIntent,
+  type AdminSkillIntentCreateRequest
 } from "@personal-agent/shared";
 
 export interface DashboardData {
@@ -619,4 +621,23 @@ export function loadRetrievalDiagnostics(
     `/api/admin/personal-model/test-retrieval?query=${encodeURIComponent(query)}`,
     (input) => input as { chunks: any[]; trace: any }
   );
+}
+
+export function loadSkillIntents(): Promise<{ items: SkillIntent[] }> {
+  return fetchJson("/api/admin/skill-intents", (input) => input as { items: SkillIntent[] });
+}
+
+export function createSkillIntent(
+  request: AdminSkillIntentCreateRequest
+): Promise<SkillIntent> {
+  return sendJson(
+    "/api/admin/skill-intents",
+    "POST",
+    request,
+    (input) => input as SkillIntent
+  );
+}
+
+export async function deleteSkillIntent(id: string): Promise<void> {
+  await deleteEmpty(`/api/admin/skill-intents/${id}`);
 }

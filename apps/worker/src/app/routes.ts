@@ -5,6 +5,7 @@ import { registerAdminLongTaskRoutes } from "./adminLongTaskRoutes.js";
 import { registerAdminPersonalModelRoutes } from "./adminPersonalModelRoutes.js";
 import { registerAdminScheduleRoutes } from "./adminScheduleRoutes.js";
 import { registerAdminSkillRoutes } from "./adminSkillRoutes.js";
+import { registerAdminSkillIntentsRoutes } from "./adminSkillIntentsRoutes.js";
 import { registerAdminSystemRoutes } from "./adminSystemRoutes.js";
 import { registerAuthRoutes } from "./authRoutes.js";
 import { registerFallbackRoutes } from "./fallbackRoutes.js";
@@ -20,6 +21,7 @@ export function registerWorkerRoutes(
   registerAdminLongTaskRoutes(app, context);
   registerAdminPersonalModelRoutes(app, context);
   registerAdminSkillRoutes(app, context);
+  registerAdminSkillIntentsRoutes(app, context);
   registerAdminScheduleRoutes(app, context);
   registerAuthRoutes(app, context);
   registerTelegramRoutes(app, context);

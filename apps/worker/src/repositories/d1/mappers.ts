@@ -51,6 +51,7 @@ import {
   type RunRecord,
   type SkillRecord,
   type SkillRouteDecisionRecord,
+  type SkillIntentRecord,
   type SkillRunRecord,
   type SkillVersionRecord,
   type ScheduleExecutionRecord,
@@ -281,6 +282,15 @@ export interface SkillRouteDecisionRow {
   reason: string;
   candidates_json: string;
   created_at: number;
+}
+
+export interface SkillIntentRow {
+  id: string;
+  owner_tg_user_id: number;
+  skill_name: string;
+  intent_text: string;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface SkillRunRow {
@@ -645,6 +655,17 @@ export function toSkillRouteDecision(
     reason: row.reason,
     candidatesJson: row.candidates_json,
     createdAt: row.created_at
+  };
+}
+
+export function toSkillIntent(row: SkillIntentRow): SkillIntentRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    skillName: row.skill_name,
+    intentText: row.intent_text,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 

@@ -285,3 +285,6 @@ export const builtInToolNames = [
   "save_interview_source"
 ] as const;
 export type BuiltInToolName = (typeof builtInToolNames)[number];
+
+export const ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD = 0.75;
+export const ROUTING_CONFIDENCE_CONFIRM_THRESHOLD = 0.50;

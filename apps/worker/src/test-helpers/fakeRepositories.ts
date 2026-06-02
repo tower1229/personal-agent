@@ -27,6 +27,7 @@ import {
   type ScheduleExecutionRecord,
   type ScheduleRecord,
   type SkillRecord,
+  type SkillIntentRecord,
   type SkillRouteDecisionRecord,
   type SkillRunRecord,
   type SkillVersionRecord,
@@ -138,6 +139,7 @@ export function createFakeRepositories(): AgentRepositories & {
     personalModelUnderstandingGaps: [] as PersonalModelUnderstandingGapRecord[],
     approvals: [] as ApprovalRequestRecord[],
     skills: [] as SkillRecord[],
+    skillIntents: [] as SkillIntentRecord[],
     skillVersions: [] as SkillVersionRecord[],
     skillRouteDecisions: [] as SkillRouteDecisionRecord[],
     skillRuns: [] as SkillRunRecord[],
@@ -962,6 +964,16 @@ export function createFakeRepositories(): AgentRepositories & {
       skillRun.outputText = input.outputText ?? null;
       skillRun.error = input.error ?? null;
       skillRun.updatedAt = input.updatedAt;
+    },
+    async createSkillIntent(input) {
+      state.skillIntents.push(input);
+      return input;
+    },
+    async listSkillIntents() {
+      return state.skillIntents;
+    },
+    async deleteSkillIntent(input) {
+      state.skillIntents = state.skillIntents.filter((item) => item.id !== input.id);
     },
     async listSkillRuns(ownerTgUserId, limit) {
       return state.skillRuns

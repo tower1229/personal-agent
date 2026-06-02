@@ -38,7 +38,10 @@ import {
   setSkillEnabled,
   testLlm,
   testSearch,
-  testSkill
+  testSkill,
+  loadSkillIntents,
+  createSkillIntent,
+  deleteSkillIntent
 } from "@/lib/api";
 import { isCreateRoutePath } from "@/lib/admin-routes";
 import { formatDateTime, truncateText } from "@/lib/format";
@@ -68,9 +71,11 @@ export function SkillsPage() {
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [testInput, setTestInput] = useState("");
   const [testOutput, setTestOutput] = useState<string | null>(null);
+  const [newIntentText, setNewIntentText] = useState("");
   const skills = useAsyncData(() => loadSkills(), []);
   const skillRuns = useAsyncData(() => loadSkillRuns(), []);
   const routeDecisions = useAsyncData(() => loadSkillRouteDecisions(), []);
+  const skillIntents = useAsyncData(() => loadSkillIntents(), []);
   const detail = useAsyncData(
     () =>
       params.id && !isNew
@@ -203,6 +208,31 @@ export function SkillsPage() {
     const result = await testSkill(params.id, testInput);
     setTestOutput(result.output);
     toast.success("Test run completed");
+  }
+
+  async function handleAddIntent() {
+    if (!selectedSkill?.name || !newIntentText.trim()) return;
+    try {
+      await createSkillIntent({
+        skillName: selectedSkill.name,
+        intentText: newIntentText.trim()
+      });
+      setNewIntentText("");
+      skillIntents.reload();
+      toast.success("Intent added");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to add intent");
+    }
+  }
+
+  async function handleRemoveIntent(id: string) {
+    try {
+      await deleteSkillIntent(id);
+      skillIntents.reload();
+      toast.success("Intent removed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove intent");
+    }
   }
 
   return (
@@ -457,6 +487,7 @@ export function SkillsPage() {
                       <TabsTrigger value="test">Test Run</TabsTrigger>
                       <TabsTrigger value="runs">Recent Runs</TabsTrigger>
                       <TabsTrigger value="routes">Routes</TabsTrigger>
+                      <TabsTrigger value="intents">Intents</TabsTrigger>
                     </TabsList>
                     <TabsContent className="flex flex-col gap-3" value="test">
                       {isDeletedSkill ? (
@@ -499,6 +530,44 @@ export function SkillsPage() {
                           (item) => item.matchedSkillId === params.id
                         )}
                       />
+                    </TabsContent>
+                    <TabsContent value="intents" className="flex flex-col gap-3">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="例如: 添加待办事项"
+                          value={newIntentText}
+                          onChange={(e) => setNewIntentText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void handleAddIntent();
+                            }
+                          }}
+                        />
+                        <Button onClick={() => void handleAddIntent()} disabled={!newIntentText.trim()}>
+                          Add
+                        </Button>
+                      </div>
+                      <div className="grid gap-2">
+                        {(skillIntents.data?.items ?? [])
+                          .filter((intent) => intent.skillName === selectedSkill?.name)
+                          .map((intent) => (
+                            <div key={intent.id} className="flex items-center justify-between rounded-md border p-3">
+                              <span className="text-sm">{intent.intentText}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => void handleRemoveIntent(intent.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        {(skillIntents.data?.items ?? []).filter((intent) => intent.skillName === selectedSkill?.name).length === 0 ? (
+                          <EmptyState>暂无示例语料</EmptyState>
+                        ) : null}
+                      </div>
                     </TabsContent>
                   </Tabs>
                 ) : null}

@@ -57,6 +57,7 @@ export interface AssembleContextTrace {
   selectedChunkIds: string[];
   selectedGapIds: string[];
   retrievalTrace?: any;
+  executionPlan?: { step: number; tool: string; reason: string }[];
 }
 
 export async function assemblePersonalModelContext(input: {

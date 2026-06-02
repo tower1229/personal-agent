@@ -60,12 +60,17 @@ describe("Personal Model Reflection", () => {
       const mockLlmClient: LlmClient = {
         createChatCompletion: vi
           .fn()
-          // First call: Agent response
+          // First call: Planner
+          .mockResolvedValueOnce({
+            content: "[]",
+            toolCalls: []
+          })
+          // Second call: Agent response
           .mockResolvedValueOnce({
             content: "好的，我会记住你的写作习惯。",
             toolCalls: []
           })
-          // Second call: Metacognitive reflection
+          // Third call: Metacognitive reflection
           .mockResolvedValueOnce({
             content: JSON.stringify({
               proposals: [
@@ -170,12 +175,17 @@ describe("Personal Model Reflection", () => {
       const mockLlmClient: LlmClient = {
         createChatCompletion: vi
           .fn()
-          // First call: Agent response
+          // First call: Planner
+          .mockResolvedValueOnce({
+            content: "[]",
+            toolCalls: []
+          })
+          // Second call: Agent response
           .mockResolvedValueOnce({
             content: "收到你的反馈。",
             toolCalls: []
           })
-          // Second call: Reflection (returns empty because user rejected it before)
+          // Third call: Reflection (returns empty because user rejected it before)
           .mockResolvedValueOnce({
             content: JSON.stringify({ proposals: [] }),
             toolCalls: []
@@ -209,9 +219,9 @@ describe("Personal Model Reflection", () => {
         maxToolRounds: 3
       });
 
-      // Verify existing rejected claim was passed to the reflection prompt (the second LLM call)
+      // Verify existing rejected claim was passed to the reflection prompt (the third LLM call)
       const reflectionCalls = mockLlmClient.createChatCompletion as any;
-      const reflectionArgs = reflectionCalls.mock.calls[1][0];
+      const reflectionArgs = reflectionCalls.mock.calls[2][0];
       const reflectionSystemInstruction = reflectionArgs.messages[0].content;
       
       expect(reflectionSystemInstruction).toContain("[deleted]");

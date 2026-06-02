@@ -681,6 +681,36 @@ async function recordLlmCall(input: {
   });
 }
 
+async function generateAgentExecutionPlan(input: {
+  llmClient: LlmClient;
+  inputText: string;
+  allowedTools: string[];
+}): Promise<{ step: number; tool: string; reason: string }[]> {
+  const completion = await input.llmClient.createChatCompletion({
+    messages: [
+      {
+        role: "system",
+        content: `你是智能助手的执行规划者(Planner)。请根据用户的请求，在实际执行工具前制定一个单层的轻量化执行计划。
+可用工具：${input.allowedTools.join(", ")}
+要求返回严格的 JSON 数组，格式为 [{"step": 1, "tool": "toolName", "reason": "why"}...]
+如果没有需要调用的工具，可以直接返回空数组。不要包含任何 markdown 标记或其他文本。`
+      },
+      {
+        role: "user",
+        content: input.inputText
+      }
+    ]
+  });
+
+  try {
+    const text = /\[[\s\S]*\]/u.exec(completion.content)?.[0] ?? "[]";
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function executeLlmAgent(
   input: LlmAgentInput
 ): Promise<AgentToolResult> {
@@ -733,6 +763,22 @@ export async function executeLlmAgent(
     }
   }
 
+  const tools = availableToolDefinitions(input.allowedTools);
+  const plan = await generateAgentExecutionPlan({
+    llmClient: input.runtime.llmClient,
+    inputText: input.inputText,
+    allowedTools: tools.map(t => t.function.name)
+  });
+  
+  if (plan.length > 0) {
+    contextAssembly.trace.executionPlan = plan;
+  }
+
+  let planInstruction = "";
+  if (plan.length > 0) {
+    planInstruction = `你的执行计划已定：\n${plan.map(p => `步骤 ${p.step}: 调用工具 ${p.tool} (${p.reason})`).join("\n")}\n请参考此计划调用工具并动态填充参数。如果发现计划有误或任务已完成，可自行调整。`;
+  }
+
   const systemInstructions = [
     "你是一个个人 Telegram agent。用简洁中文回答。",
     "你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。",
@@ -747,7 +793,8 @@ export async function executeLlmAgent(
     "如果用户正在回答你发起的初始化采访或盲区追问，请保持专注，直到收集到完整信息，不要轻易跳出采访场景并结束采访。",
     "当你完成一项采访，或者获得关于用户性格（personality_framework）、健康（health_log）、人际关系（relationship_note）的完整描述时，必须调用 save_interview_source 将其存为原始资料。如果有关联的 Gap ID，必须在 resolveGapId 中传入以关闭对应的 Gap。",
     contextAssembly.contextString,
-    input.systemInstructions ?? ""
+    input.systemInstructions ?? "",
+    planInstruction
   ]
     .filter(Boolean)
     .join("\n");
@@ -755,7 +802,6 @@ export async function executeLlmAgent(
     { role: "system", content: systemInstructions },
     { role: "user", content: input.inputText }
   ];
-  const tools = availableToolDefinitions(input.allowedTools);
 
   for (let round = 0; round <= input.maxToolRounds; round += 1) {
     const completion = await input.runtime.llmClient.createChatCompletion({
