@@ -26,10 +26,11 @@ flowchart LR
 
 Telegram owner messages enter `/telegram/webhook`. The Worker validates the Telegram secret, ignores non-owner updates, creates a run, then applies priority order:
 
-1. explicit skill trigger such as `/skill <id> ...`;
-2. skill trigger phrase exact or prefix match;
-3. deterministic built-in commands;
-4. LLM fallback.
+1. explicit skill trigger such as `/skill <name> ...`;
+2. deterministic built-in commands;
+3. semantic skill routing by published package `name/description`;
+4. long-task classifier;
+5. LLM fallback.
 
 Every run records tool calls and error summaries for Admin trace pages.
 

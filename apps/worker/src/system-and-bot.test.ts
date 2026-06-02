@@ -6,7 +6,7 @@ import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./external
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
 import { type TelegramClient } from "./telegram.js";
 import {
-  chatSkillManifest,
+  skillPackageFiles,
   createFakeD1Database,
   createFakeLlmClient,
   createFakeRepositories,
@@ -388,7 +388,7 @@ describe("worker system and bot commands", () => {
       claimId: repositories.personalModelClaims[0]?.id,
       eventType: "created"
     });
-    expect(telegramClient.messages[0]?.text).toBe("已记录理解 id-3。");
+    expect(telegramClient.messages[0]?.text).toBe("已记录理解 id-2。");
   });
 
   it("records typed personal model claims from Telegram", async () => {
@@ -940,7 +940,7 @@ describe("worker system and bot commands", () => {
           id: 1,
           title: "从 Admin 查看",
           status: "open",
-          createdAt: 1002,
+          createdAt: 1001,
           completedAt: null
         }
       ]

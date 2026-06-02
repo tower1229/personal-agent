@@ -18,7 +18,7 @@ Open Admin runs and confirm run trace plus tool calls are recorded.
 
 ## 3. Skills
 
-Create a chat skill in Admin, add a trigger phrase, publish it, enable it, then trigger it from Telegram. Verify skill route decision, skill run, and tool calls in run detail.
+Create a standard Agent Skill package in Admin with a valid `SKILL.md`, publish it, enable it, then trigger it from Telegram with `/skill <name> ...`. Verify skill route decision, skill run, and tool calls in run detail.
 
 ## 4. Schedules
 

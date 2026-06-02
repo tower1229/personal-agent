@@ -6,7 +6,7 @@ import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./external
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
 import { type TelegramClient } from "./telegram.js";
 import {
-  chatSkillManifest,
+  skillPackageFiles,
   createFakeD1Database,
   createFakeLlmClient,
   createFakeRepositories,
@@ -23,17 +23,18 @@ import {
 describe("skill routing and execution", () => {
   it("routes explicit skill messages and records skill trace", async () => {
     const { app, repositories, telegramClient } = createTestApp();
-    await repositories.createSkill({
+    const skill = await repositories.createSkill({
       ownerTgUserId: 1229,
-      manifest: chatSkillManifest({
-        id: "coach",
+      files: skillPackageFiles({
+        name: "coach",
         instructions: "像教练一样回答。"
       }),
+      enabled: true,
       createdAt: 1000
     });
     await repositories.publishSkill({
       ownerTgUserId: 1229,
-      id: "coach",
+      id: skill.id,
       versionId: "coach-v1",
       createdAt: 1001
     });
@@ -42,12 +43,13 @@ describe("skill routing and execution", () => {
 
     expect(response.status).toBe(200);
     expect(repositories.skillRouteDecisions[0]).toMatchObject({
-      triggerType: "explicit_id",
-      matchedSkillId: "coach",
+      triggerType: "explicit_name",
+      matchedSkillId: skill.id,
+      matchedSkillName: "coach",
       matchedSkillVersionId: "coach-v1"
     });
     expect(repositories.skillRuns[0]).toMatchObject({
-      skillId: "coach",
+      skillId: skill.id,
       skillVersionId: "coach-v1",
       status: "succeeded"
     });
@@ -57,20 +59,63 @@ describe("skill routing and execution", () => {
     expect(telegramClient.messages[0]?.text).toBe("LLM 回复：今天怎么做");
   });
 
-  it("marks admin test runs failed when skill execution fails", async () => {
-    const { app, repositories } = createTestApp();
-    const cookie = await ownerCookie();
-    await repositories.createSkill({
+  it("routes by published skill name, not unpublished draft name or internal id", async () => {
+    const { app, repositories, telegramClient } = createTestApp();
+    const skill = await repositories.createSkill({
       ownerTgUserId: 1229,
-      manifest: chatSkillManifest({
-        id: "failing-skill",
-        allowedTools: ["create_todo"]
+      files: skillPackageFiles({
+        name: "coach",
+        instructions: "像教练一样回答。"
       }),
+      enabled: true,
       createdAt: 1000
     });
     await repositories.publishSkill({
       ownerTgUserId: 1229,
-      id: "failing-skill",
+      id: skill.id,
+      versionId: "coach-v1",
+      createdAt: 1001
+    });
+    await repositories.updateSkillDraft({
+      ownerTgUserId: 1229,
+      id: skill.id,
+      files: skillPackageFiles({
+        name: "mentor",
+        instructions: "未发布新版指令。"
+      }),
+      enabled: true,
+      updatedAt: 1002
+    });
+
+    await postWebhook(app, ownerUpdate("/skill coach 今天怎么做", 1));
+    await postWebhook(app, ownerUpdate("/skill mentor 今天怎么做", 2));
+    await postWebhook(app, ownerUpdate(`/skill ${skill.id} 今天怎么做`, 3));
+
+    expect(repositories.skillRouteDecisions[0]).toMatchObject({
+      triggerType: "explicit_name",
+      matchedSkillName: "coach",
+      matchedSkillVersionId: "coach-v1"
+    });
+    expect(telegramClient.messages[0]?.text).toBe("LLM 回复：今天怎么做");
+    expect(telegramClient.messages[1]?.text).toBe("没有找到 skill mentor");
+    expect(telegramClient.messages[2]?.text).toBe(`没有找到 skill ${skill.id}`);
+  });
+
+  it("marks admin test runs failed when skill execution fails", async () => {
+    const { app, repositories } = createTestApp();
+    const cookie = await ownerCookie();
+    const skill = await repositories.createSkill({
+      ownerTgUserId: 1229,
+      files: skillPackageFiles({
+        name: "failing-skill",
+        allowedTools: ["create_todo"]
+      }),
+      enabled: true,
+      createdAt: 1000
+    });
+    await repositories.publishSkill({
+      ownerTgUserId: 1229,
+      id: skill.id,
       versionId: "failing-skill-v1",
       createdAt: 1001
     });
@@ -79,7 +124,7 @@ describe("skill routing and execution", () => {
     };
 
     const response = await app.request(
-      "/api/admin/skills/failing-skill/test-run",
+      `/api/admin/skills/${skill.id}/test-run`,
       {
         method: "POST",
         headers: {
@@ -109,14 +154,15 @@ describe("skill routing and execution", () => {
     });
   });
 
-  it("routes trigger phrases and falls back when skills are disabled", async () => {
+  it("routes semantically by name and description and falls back when skills are disabled", async () => {
     const { app, repositories, telegramClient } = createTestApp();
     const skill = await repositories.createSkill({
       ownerTgUserId: 1229,
-      manifest: chatSkillManifest({
-        id: "planner",
-        triggerPhrases: ["规划"]
+      files: skillPackageFiles({
+        name: "planner",
+        description: "规划任务和后续行动"
       }),
+      enabled: true,
       createdAt: 1000
     });
     await repositories.publishSkill({
@@ -136,8 +182,9 @@ describe("skill routing and execution", () => {
     await postWebhook(app, ownerUpdate("规划 后天任务", 2));
 
     expect(repositories.skillRouteDecisions[0]).toMatchObject({
-      triggerType: "trigger_phrase",
-      matchedSkillId: "planner"
+      triggerType: "semantic",
+      matchedSkillId: skill.id,
+      matchedSkillName: "planner"
     });
     expect(repositories.skillRouteDecisions[1]).toMatchObject({
       triggerType: "none",
@@ -149,17 +196,18 @@ describe("skill routing and execution", () => {
 
   it("blocks tools outside skill allowlists and keeps destructive approval required", async () => {
     const { app, repositories, telegramClient } = createTestApp();
-    await repositories.createSkill({
+    const skill = await repositories.createSkill({
       ownerTgUserId: 1229,
-      manifest: chatSkillManifest({
-        id: "memory-safe",
+      files: skillPackageFiles({
+        name: "memory-safe",
         allowedTools: ["search_memory"]
       }),
+      enabled: true,
       createdAt: 1000
     });
     await repositories.publishSkill({
       ownerTgUserId: 1229,
-      id: "memory-safe",
+      id: skill.id,
       versionId: "memory-safe-v1",
       createdAt: 1001
     });

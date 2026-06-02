@@ -20,10 +20,14 @@ import {
   type RunStatus,
   type ScheduleCadence,
   type ScheduleExecutionStatus,
-  skillManifestSchema,
-  type SkillManifest,
+  skillPackageFileInventoryItemSchema,
+  skillPackageMetadataSchema,
+  skillValidationResultSchema,
+  type SkillPackageFileInventoryItem,
+  type SkillPackageMetadata,
   type SkillRouteTriggerType,
   type SkillRunStatus,
+  type SkillValidationResult,
   type TodoStatus,
   type ToolCallStatus,
   type ToolRiskLevel,
@@ -230,7 +234,14 @@ export interface PersonalModelUnderstandingGapRow {
 export interface SkillRow {
   id: string;
   owner_tg_user_id: number;
-  draft_manifest_json: string;
+  name: string;
+  description: string;
+  draft_files_json: string;
+  draft_metadata_json: string;
+  draft_body: string;
+  draft_file_inventory_json: string;
+  draft_validation_json: string;
+  draft_content_hash: string;
   enabled: number;
   deleted_at: number | null;
   published_version_id: string | null;
@@ -244,7 +255,14 @@ export interface SkillVersionRow {
   skill_id: string;
   owner_tg_user_id: number;
   version: number;
-  manifest_json: string;
+  name: string;
+  description: string;
+  files_json: string;
+  metadata_json: string;
+  body: string;
+  file_inventory_json: string;
+  validation_json: string;
+  content_hash: string;
   created_at: number;
 }
 
@@ -255,9 +273,11 @@ export interface SkillRouteDecisionRow {
   input_text: string;
   trigger_type: SkillRouteTriggerType;
   matched_skill_id: string | null;
+  matched_skill_name: string | null;
   matched_skill_version_id: string | null;
   confidence: number | null;
   reason: string;
+  candidates_json: string;
   created_at: number;
 }
 
@@ -537,15 +557,45 @@ export function toPersonalModelUnderstandingGap(
   };
 }
 
-export function parseSkillManifest(value: string): SkillManifest {
-  return skillManifestSchema.parse(JSON.parse(value));
+function parseSkillFiles(value: string): Record<string, string> {
+  const parsed = JSON.parse(value) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(parsed as Record<string, unknown>).map(([path, content]) => [
+      path,
+      String(content)
+    ])
+  );
+}
+
+function parseSkillMetadata(value: string): SkillPackageMetadata {
+  return skillPackageMetadataSchema.parse(JSON.parse(value));
+}
+
+function parseSkillFileInventory(
+  value: string
+): SkillPackageFileInventoryItem[] {
+  return skillPackageFileInventoryItemSchema.array().parse(JSON.parse(value));
+}
+
+function parseSkillValidation(value: string): SkillValidationResult {
+  return skillValidationResultSchema.parse(JSON.parse(value));
 }
 
 export function toSkill(row: SkillRow): SkillRecord {
   return {
     id: row.id,
     ownerTgUserId: row.owner_tg_user_id,
-    draftManifest: parseSkillManifest(row.draft_manifest_json),
+    name: row.name,
+    description: row.description,
+    draftFiles: parseSkillFiles(row.draft_files_json),
+    draftMetadata: parseSkillMetadata(row.draft_metadata_json),
+    draftBody: row.draft_body,
+    draftFileInventory: parseSkillFileInventory(row.draft_file_inventory_json),
+    draftValidation: parseSkillValidation(row.draft_validation_json),
+    draftContentHash: row.draft_content_hash,
     enabled: row.enabled === 1,
     deletedAt: row.deleted_at,
     publishedVersionId: row.published_version_id,
@@ -561,7 +611,14 @@ export function toSkillVersion(row: SkillVersionRow): SkillVersionRecord {
     skillId: row.skill_id,
     ownerTgUserId: row.owner_tg_user_id,
     version: row.version,
-    manifest: parseSkillManifest(row.manifest_json),
+    name: row.name,
+    description: row.description,
+    files: parseSkillFiles(row.files_json),
+    metadata: parseSkillMetadata(row.metadata_json),
+    body: row.body,
+    fileInventory: parseSkillFileInventory(row.file_inventory_json),
+    validation: parseSkillValidation(row.validation_json),
+    contentHash: row.content_hash,
     createdAt: row.created_at
   };
 }
@@ -576,9 +633,11 @@ export function toSkillRouteDecision(
     inputText: row.input_text,
     triggerType: row.trigger_type,
     matchedSkillId: row.matched_skill_id,
+    matchedSkillName: row.matched_skill_name,
     matchedSkillVersionId: row.matched_skill_version_id,
     confidence: row.confidence,
     reason: row.reason,
+    candidatesJson: row.candidates_json,
     createdAt: row.created_at
   };
 }

@@ -6,7 +6,7 @@ import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./external
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
 import { type TelegramClient } from "./telegram.js";
 import {
-  chatSkillManifest,
+  skillPackageFiles,
   createFakeD1Database,
   createFakeLlmClient,
   createFakeRepositories,
@@ -236,9 +236,9 @@ describe("schedules", () => {
   it("creates, updates, publishes, disables, and deletes skills", async () => {
     const { app, repositories } = createTestApp();
     const cookie = await ownerCookie();
-    const manifest = chatSkillManifest({
-      id: "brief",
-      triggerPhrases: ["简报"]
+    const manifest = skillPackageFiles({
+      name: "brief",
+      instructions: "旧版指令"
     });
     const create = await app.request(
       "/api/admin/skills",
@@ -248,31 +248,34 @@ describe("schedules", () => {
           "Content-Type": "application/json",
           Cookie: cookie
         },
-        body: JSON.stringify({ manifest })
+        body: JSON.stringify({ files: manifest, enabled: true })
       },
       env
     );
 
     expect(create.status).toBe(201);
+    const created = (await create.json()) as { skill: { id: string } };
     const updatedManifest = {
       ...manifest,
-      name: "brief updated",
-      instructions: "新版指令"
+      "SKILL.md": skillPackageFiles({
+        name: "brief-updated",
+        instructions: "新版指令"
+      })["SKILL.md"]
     };
     const update = await app.request(
-      "/api/admin/skills/brief",
+      `/api/admin/skills/${created.skill.id}`,
       {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Cookie: cookie
         },
-        body: JSON.stringify({ manifest: updatedManifest })
+        body: JSON.stringify({ files: updatedManifest, enabled: true })
       },
       env
     );
     const publish = await app.request(
-      "/api/admin/skills/brief/publish",
+      `/api/admin/skills/${created.skill.id}/publish`,
       {
         method: "POST",
         headers: {
@@ -287,10 +290,10 @@ describe("schedules", () => {
       ok: true,
       version: 1
     });
-    expect(repositories.skillVersions[0]?.manifest.name).toBe("brief updated");
+    expect(repositories.skillVersions[0]?.name).toBe("brief-updated");
 
     await app.request(
-      "/api/admin/skills/brief/disable",
+      `/api/admin/skills/${created.skill.id}/disable`,
       {
         method: "POST",
         headers: {
@@ -302,7 +305,7 @@ describe("schedules", () => {
     expect(repositories.skills[0]?.enabled).toBe(false);
 
     await app.request(
-      "/api/admin/skills/brief",
+      `/api/admin/skills/${created.skill.id}`,
       {
         method: "DELETE",
         headers: {
@@ -314,7 +317,7 @@ describe("schedules", () => {
     expect(repositories.skills[0]?.deletedAt).not.toBeNull();
 
     const secondRemove = await app.request(
-      "/api/admin/skills/brief",
+      `/api/admin/skills/${created.skill.id}`,
       {
         method: "DELETE",
         headers: {

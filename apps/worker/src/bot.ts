@@ -1,8 +1,6 @@
 import {
-  builtInToolNames,
   personalModelLayers,
   personalModelScenarios,
-  type SkillManifest,
   type PersonalModelLayer,
   type PersonalModelScenario,
   type SkillRouteTriggerType,
@@ -33,6 +31,7 @@ import {
 } from "./telegram.js";
 import { type TelegramWebhookUpdate } from "@personal-agent/shared";
 import { type RunnableSkillRecord } from "./repositories.js";
+import { allowedBuiltInToolsForSkill } from "./skillPackages.js";
 
 export interface BotRuntime extends AgentRuntime {
   repositories: AgentRepositories;
@@ -79,7 +78,9 @@ export interface SkillMatch {
   runnable: RunnableSkillRecord;
   inputText: string;
   triggerType: SkillRouteTriggerType;
+  confidence: number;
   reason: string;
+  candidatesJson: string;
 }
 
 const CREATE_TODO_PATTERN = /^(新增待办|创建待办)[:：]\s*(.+)$/u;
@@ -860,80 +861,207 @@ export async function executeCommand(
   };
 }
 
-function buildSkillFallback(
-  manifest: SkillManifest,
-  inputText: string
-): string {
-  return [
-    `【${manifest.name}】`,
-    manifest.instructions,
-    "",
-    inputText ? `输入：${inputText}` : "已触发该 skill。"
-  ].join("\n");
+function buildSkillInstructions(runnable: RunnableSkillRecord): string {
+  return runnable.version.body;
 }
 
-async function findSkillMatch(input: {
+function parseExplicitSkill(text: string): { name: string; inputText: string } | null {
+  const explicit = EXPLICIT_SKILL_PATTERN.exec(text.trim());
+  if (!explicit) {
+    return null;
+  }
+
+  return {
+    name: explicit[1] ?? "",
+    inputText: (explicit[2] ?? "").trim()
+  };
+}
+
+async function findExplicitSkillMatch(input: {
+  ownerTgUserId: number;
+  name: string;
+  inputText: string;
+  runtime: BotRuntime;
+}): Promise<SkillMatch | null> {
+  const runnable = await input.runtime.repositories.getRunnableSkillByName({
+    ownerTgUserId: input.ownerTgUserId,
+    name: input.name
+  });
+
+  if (!runnable || !runnable.version.validation.ok) {
+    return null;
+  }
+
+  return {
+    runnable,
+    inputText: input.inputText,
+    triggerType: "explicit_name",
+    confidence: 1,
+    reason: `explicit skill name ${input.name}`,
+    candidatesJson: JSON.stringify([
+      {
+        name: runnable.version.name,
+        confidence: 1,
+        reason: "explicit skill name"
+      }
+    ])
+  };
+}
+
+function parseSemanticRoutingJson(content: string): {
+  matchedSkillName: string | null;
+  confidence: number;
+  reason: string;
+  candidates: Array<{ name: string; confidence: number; reason?: string }>;
+} | null {
+  const jsonText = /\{[\s\S]*\}/u.exec(content)?.[0] ?? "";
+  if (!jsonText) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText) as {
+      matchedSkillName?: unknown;
+      confidence?: unknown;
+      reason?: unknown;
+      candidates?: unknown;
+    };
+    return {
+      matchedSkillName:
+        typeof parsed.matchedSkillName === "string"
+          ? parsed.matchedSkillName
+          : null,
+      confidence:
+        typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
+          ? Math.min(Math.max(parsed.confidence, 0), 1)
+          : 0,
+      reason:
+        typeof parsed.reason === "string" ? parsed.reason : "semantic route",
+      candidates: Array.isArray(parsed.candidates)
+        ? parsed.candidates.reduce<
+            Array<{ name: string; confidence: number; reason?: string }>
+          >((items, candidate) => {
+            if (typeof candidate !== "object" || candidate === null) {
+              return items;
+            }
+            const item = candidate as {
+              name?: unknown;
+              confidence?: unknown;
+              reason?: unknown;
+            };
+            if (typeof item.name !== "string") {
+              return items;
+            }
+            const normalized: {
+              name: string;
+              confidence: number;
+              reason?: string;
+            } = {
+              name: item.name,
+              confidence:
+                typeof item.confidence === "number" &&
+                Number.isFinite(item.confidence)
+                  ? Math.min(Math.max(item.confidence, 0), 1)
+                  : 0
+            };
+            if (typeof item.reason === "string") {
+              normalized.reason = item.reason;
+            }
+            items.push(normalized);
+            return items;
+          }, [])
+        : []
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function findSemanticSkillMatch(input: {
   ownerTgUserId: number;
   text: string;
   runtime: BotRuntime;
-}): Promise<SkillMatch | null> {
-  const explicit = EXPLICIT_SKILL_PATTERN.exec(input.text.trim());
-
-  if (explicit) {
-    const skillId = explicit[1] ?? "";
-    const runnable = await input.runtime.repositories.getRunnableSkillById({
-      ownerTgUserId: input.ownerTgUserId,
-      id: skillId
-    });
-
-    if (!runnable) {
-      return null;
-    }
-
+}): Promise<{ match: SkillMatch | null; reason: string; candidatesJson: string }> {
+  if (!input.runtime.llmClient) {
     return {
-      runnable,
-      inputText: (explicit[2] ?? "").trim(),
-      triggerType: "explicit_id",
-      reason: `explicit skill id ${skillId}`
+      match: null,
+      reason: "semantic skill routing skipped: LLM not configured",
+      candidatesJson: "[]"
     };
   }
 
-  const runnableSkills = await input.runtime.repositories.listRunnableSkills(
-    input.ownerTgUserId
-  );
-  const text = input.text.trim();
-
-  for (const runnable of runnableSkills) {
-    for (const phrase of runnable.version.manifest.triggerPhrases) {
-      const trigger = phrase.trim();
-      if (!trigger) {
-        continue;
-      }
-
-      if (text === trigger) {
-        return {
-          runnable,
-          inputText: "",
-          triggerType: "trigger_phrase",
-          reason: `exact trigger phrase ${trigger}`
-        };
-      }
-
-      for (const separator of [" ", "：", ":"]) {
-        const prefix = `${trigger}${separator}`;
-        if (text.startsWith(prefix)) {
-          return {
-            runnable,
-            inputText: text.slice(prefix.length).trim(),
-            triggerType: "trigger_phrase",
-            reason: `prefix trigger phrase ${trigger}`
-          };
-        }
-      }
-    }
+  const runnableSkills = (
+    await input.runtime.repositories.listRunnableSkills(input.ownerTgUserId)
+  ).filter((runnable) => runnable.version.validation.ok);
+  if (runnableSkills.length === 0) {
+    return {
+      match: null,
+      reason: "no runnable skill packages",
+      candidatesJson: "[]"
+    };
   }
 
-  return null;
+  const skillCatalog = runnableSkills.map((runnable) => ({
+    name: runnable.version.name,
+    description: runnable.version.description
+  }));
+  const completion = await input.runtime.llmClient.createChatCompletion({
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是 skill 路由器。只根据用户输入和 skill 的 name/description 判断是否应触发一个 skill。返回严格 JSON：{\"matchedSkillName\": string|null, \"confidence\": number, \"reason\": string, \"candidates\": [{\"name\": string, \"confidence\": number, \"reason\": string}] }。confidence 低于 0.75 时 matchedSkillName 必须为 null。"
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          input: input.text,
+          skills: skillCatalog
+        })
+      }
+    ]
+  });
+  const parsed = parseSemanticRoutingJson(completion.content);
+  if (!parsed) {
+    return {
+      match: null,
+      reason: "semantic skill routing returned invalid JSON",
+      candidatesJson: "[]"
+    };
+  }
+
+  const candidatesJson = JSON.stringify(parsed.candidates);
+  if (!parsed.matchedSkillName || parsed.confidence < 0.75) {
+    return {
+      match: null,
+      reason: parsed.reason || "semantic skill confidence below threshold",
+      candidatesJson
+    };
+  }
+
+  const runnable = runnableSkills.find(
+    (candidate) => candidate.version.name === parsed.matchedSkillName
+  );
+  if (!runnable) {
+    return {
+      match: null,
+      reason: `semantic skill ${parsed.matchedSkillName} is not runnable`,
+      candidatesJson
+    };
+  }
+
+  return {
+    match: {
+      runnable,
+      inputText: input.text.trim(),
+      triggerType: "semantic",
+      confidence: parsed.confidence,
+      reason: parsed.reason,
+      candidatesJson
+    },
+    reason: parsed.reason,
+    candidatesJson
+  };
 }
 
 async function recordRouteDecision(input: {
@@ -942,6 +1070,8 @@ async function recordRouteDecision(input: {
   text: string;
   runtime: BotRuntime;
   match: SkillMatch | null;
+  reason?: string;
+  candidatesJson?: string;
 }): Promise<void> {
   await input.runtime.repositories.createSkillRouteDecision({
     id: input.runtime.generateId(),
@@ -950,9 +1080,11 @@ async function recordRouteDecision(input: {
     inputText: input.text,
     triggerType: input.match?.triggerType ?? "none",
     matchedSkillId: input.match?.runnable.skill.id ?? null,
+    matchedSkillName: input.match?.runnable.version.name ?? null,
     matchedSkillVersionId: input.match?.runnable.version.id ?? null,
-    confidence: input.match ? 1 : null,
-    reason: input.match?.reason ?? "no explicit skill matched",
+    confidence: input.match?.confidence ?? null,
+    reason: input.match?.reason ?? input.reason ?? "no skill matched",
+    candidatesJson: input.match?.candidatesJson ?? input.candidatesJson ?? "[]",
     createdAt: input.runtime.now()
   });
 }
@@ -963,7 +1095,6 @@ export async function executeSkill(input: {
   match: SkillMatch;
   runtime: BotRuntime;
 }): Promise<CommandResult & { skillRunId: string }> {
-  const manifest = input.match.runnable.version.manifest;
   const skillRun = await input.runtime.repositories.createSkillRun({
     id: input.runtime.generateId(),
     runId: input.runId,
@@ -977,10 +1108,8 @@ export async function executeSkill(input: {
     createdAt: input.runtime.now(),
     updatedAt: input.runtime.now()
   });
-  const allowedTools = new Set(
-    manifest.allowedTools.filter((tool) =>
-      builtInToolNames.includes(tool as (typeof builtInToolNames)[number])
-    )
+  const allowedTools = allowedBuiltInToolsForSkill(
+    input.match.runnable.version.metadata
   );
 
   try {
@@ -991,7 +1120,7 @@ export async function executeSkill(input: {
         inputText: input.match.inputText,
         runtime: input.runtime,
         allowedTools,
-        systemInstructions: buildSkillFallback(manifest, input.match.inputText),
+        systemInstructions: buildSkillInstructions(input.match.runnable),
         maxToolRounds: input.runtime.maxToolRounds
       })
     );
@@ -1021,7 +1150,7 @@ export async function executeSkill(input: {
   }
 }
 
-async function executeCommandOrLlmFallback(input: {
+async function executeCommandOrSkillOrLlmFallback(input: {
   runId: string;
   ownerTgUserId: number;
   text: string;
@@ -1036,6 +1165,29 @@ async function executeCommandOrLlmFallback(input: {
 
   if (commandResult.toolName !== "fallback") {
     return commandResult;
+  }
+
+  const semanticRoute = await findSemanticSkillMatch({
+    ownerTgUserId: input.ownerTgUserId,
+    text: input.text,
+    runtime: input.runtime
+  });
+  await recordRouteDecision({
+    runId: input.runId,
+    ownerTgUserId: input.ownerTgUserId,
+    text: input.text,
+    runtime: input.runtime,
+    match: semanticRoute.match,
+    reason: semanticRoute.reason,
+    candidatesJson: semanticRoute.candidatesJson
+  });
+  if (semanticRoute.match) {
+    return executeSkill({
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      match: semanticRoute.match,
+      runtime: input.runtime
+    });
   }
 
   const decision = await classifyTaskComplexityWithLlm({
@@ -1175,43 +1327,63 @@ export async function handleOwnerUpdate(
   });
 
   try {
-    const match = await findSkillMatch({
-      ownerTgUserId: input.ownerTgUserId,
-      text: text ?? "",
-      runtime: input.runtime
-    });
-    await recordRouteDecision({
-      runId: run.id,
-      ownerTgUserId: input.ownerTgUserId,
-      text: text ?? "",
-      runtime: input.runtime,
-      match
-    });
+    const messageText = text ?? "";
+    const explicitSkill = parseExplicitSkill(messageText);
+    let matchedSkill: SkillMatch | null = null;
+    let result: CommandResult & { skillRunId?: string };
 
-    const result = match
-      ? await executeSkill({
+    if (explicitSkill) {
+      matchedSkill = await findExplicitSkillMatch({
+        ownerTgUserId: input.ownerTgUserId,
+        name: explicitSkill.name,
+        inputText: explicitSkill.inputText,
+        runtime: input.runtime
+      });
+      await recordRouteDecision({
+        runId: run.id,
+        ownerTgUserId: input.ownerTgUserId,
+        text: messageText,
+        runtime: input.runtime,
+        match: matchedSkill,
+        reason: matchedSkill
+          ? undefined
+          : `没有找到 skill ${explicitSkill.name}`,
+        candidatesJson: "[]"
+      });
+
+      result = matchedSkill
+        ? await executeSkill({
           runId: run.id,
           ownerTgUserId: input.ownerTgUserId,
-          match,
+            match: matchedSkill,
           runtime: input.runtime
         })
-      : agentResultToCommandResult(
-          await executeCommandOrLlmFallback({
+        : {
+            responseText: `没有找到 skill ${explicitSkill.name}`,
+            toolName: "skill_not_found",
+            riskLevel: "read",
+            input: { name: explicitSkill.name },
+            output: { found: false }
+          };
+    } else {
+      result = agentResultToCommandResult(
+          await executeCommandOrSkillOrLlmFallback({
             runId: run.id,
             ownerTgUserId: input.ownerTgUserId,
-            text: text ?? "",
+          text: messageText,
             runtime: input.runtime
           })
         );
+    }
 
     if (
-      !match && result.toolName !== "llm_agent"
+      !matchedSkill && result.toolName !== "llm_agent"
     ) {
       await recordToolCall(
         {
           runId: run.id,
           ownerTgUserId: input.ownerTgUserId,
-          text: text ?? "",
+          text: messageText,
           runtime: input.runtime
         },
         result,

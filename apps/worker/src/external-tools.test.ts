@@ -6,7 +6,7 @@ import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./external
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
 import { type TelegramClient } from "./telegram.js";
 import {
-  chatSkillManifest,
+  skillPackageFiles,
   createFakeD1Database,
   createFakeLlmClient,
   createFakeRepositories,

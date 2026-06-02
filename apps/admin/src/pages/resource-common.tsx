@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { skillManifestSchema, type AdminSkillDetail, type AdminSkillListItem, type BuiltInToolName, type SkillKind } from "@personal-agent/shared";
+import { type AdminSkillDetail, type AdminSkillListItem, type AdminSkillUpsertRequest } from "@personal-agent/shared";
 
 export const weekDays = [
   { value: 1, label: "周一" },
@@ -12,14 +12,9 @@ export const weekDays = [
 ];
 
 export interface SkillFormState {
-  id: string;
-  name: string;
-  description: string;
-  kind: SkillKind;
+  skillMarkdown: string;
+  filesJson: string;
   enabled: boolean;
-  triggerPhrases: string;
-  instructions: string;
-  allowedTools: BuiltInToolName[];
 }
 
 export interface ScheduleFormState {
@@ -33,14 +28,18 @@ export interface ScheduleFormState {
 }
 
 export const emptySkillForm: SkillFormState = {
-  id: "",
-  name: "",
-  description: "",
-  kind: "chat",
-  enabled: true,
-  triggerPhrases: "",
-  instructions: "",
-  allowedTools: ["list_todos", "search_memory"]
+  skillMarkdown: [
+    "---",
+    "name: daily-brief",
+    "description: Generate a concise daily briefing from available context.",
+    "allowed-tools:",
+    "  - list_todos",
+    "  - search_memory",
+    "---",
+    "用简洁中文整理用户输入，并在需要时调用允许的内置工具。"
+  ].join("\n"),
+  filesJson: "{\n}",
+  enabled: true
 };
 
 export const emptyScheduleForm: ScheduleFormState = {
@@ -113,36 +112,37 @@ export function skillStatus(skill: AdminSkillListItem | AdminSkillDetail) {
 }
 
 export function formFromSkill(skill: AdminSkillDetail): SkillFormState {
+  const { "SKILL.md": skillMarkdown = "", ...restFiles } = skill.files;
   return {
-    id: skill.manifest.id,
-    name: skill.manifest.name,
-    description: skill.manifest.description,
-    kind: skill.manifest.kind,
-    enabled: skill.enabled,
-    triggerPhrases: skill.manifest.triggerPhrases.join("\n"),
-    instructions: skill.manifest.instructions,
-    allowedTools: [...skill.manifest.allowedTools]
+    skillMarkdown,
+    filesJson: JSON.stringify(restFiles, null, 2),
+    enabled: skill.enabled
   };
 }
 
-export function manifestFromForm(form: SkillFormState) {
-  return skillManifestSchema.parse({
-    id: form.id.trim(),
-    name: form.name.trim(),
-    description: form.description.trim(),
-    kind: form.kind,
-    enabled: form.enabled,
-    triggerPhrases: form.triggerPhrases
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean),
-    intentExamples: [],
-    instructions: form.instructions.trim(),
-    allowedTools: form.allowedTools,
-    riskLevel: "read",
-    autoRunThreshold: 0.75,
-    confirmThreshold: 0.45
-  });
+export function skillRequestFromForm(form: SkillFormState): AdminSkillUpsertRequest {
+  const parsedFiles = JSON.parse(form.filesJson || "{}") as unknown;
+  if (
+    typeof parsedFiles !== "object" ||
+    parsedFiles === null ||
+    Array.isArray(parsedFiles)
+  ) {
+    throw new Error("File map JSON must be an object");
+  }
+
+  const files: Record<string, string> = {};
+  for (const [path, content] of Object.entries(parsedFiles)) {
+    files[path] =
+      typeof content === "string" ? content : JSON.stringify(content, null, 2);
+  }
+
+  return {
+    files: {
+      ...files,
+      "SKILL.md": form.skillMarkdown
+    },
+    enabled: form.enabled
+  };
 }
 
 export function filterText(...parts: Array<string | null | undefined>) {

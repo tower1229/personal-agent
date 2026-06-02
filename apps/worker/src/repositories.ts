@@ -18,9 +18,11 @@ import {
   type RunStatus,
   type ScheduleCadence,
   type ScheduleExecutionStatus,
-  type SkillManifest,
+  type SkillPackageFileInventoryItem,
+  type SkillPackageMetadata,
   type SkillRouteTriggerType,
   type SkillRunStatus,
+  type SkillValidationResult,
   type TodoStatus,
   type ToolCallStatus,
   type ToolRiskLevel,
@@ -203,7 +205,14 @@ export interface PersonalModelUnderstandingGapRecord {
 export interface SkillRecord {
   id: string;
   ownerTgUserId: number;
-  draftManifest: SkillManifest;
+  name: string;
+  description: string;
+  draftFiles: Record<string, string>;
+  draftMetadata: SkillPackageMetadata;
+  draftBody: string;
+  draftFileInventory: SkillPackageFileInventoryItem[];
+  draftValidation: SkillValidationResult;
+  draftContentHash: string;
   enabled: boolean;
   deletedAt: number | null;
   publishedVersionId: string | null;
@@ -217,7 +226,14 @@ export interface SkillVersionRecord {
   skillId: string;
   ownerTgUserId: number;
   version: number;
-  manifest: SkillManifest;
+  name: string;
+  description: string;
+  files: Record<string, string>;
+  metadata: SkillPackageMetadata;
+  body: string;
+  fileInventory: SkillPackageFileInventoryItem[];
+  validation: SkillValidationResult;
+  contentHash: string;
   createdAt: number;
 }
 
@@ -233,9 +249,11 @@ export interface SkillRouteDecisionRecord {
   inputText: string;
   triggerType: SkillRouteTriggerType;
   matchedSkillId: string | null;
+  matchedSkillName: string | null;
   matchedSkillVersionId: string | null;
   confidence: number | null;
   reason: string;
+  candidatesJson: string;
   createdAt: number;
 }
 
@@ -554,13 +572,15 @@ export interface AgentRepositories {
   }): Promise<void>;
   createSkill(input: {
     ownerTgUserId: number;
-    manifest: SkillManifest;
+    files: Record<string, string>;
+    enabled: boolean;
     createdAt: number;
   }): Promise<SkillRecord>;
   updateSkillDraft(input: {
     ownerTgUserId: number;
     id: string;
-    manifest: SkillManifest;
+    files: Record<string, string>;
+    enabled: boolean;
     updatedAt: number;
   }): Promise<SkillRecord | null>;
   listSkills(ownerTgUserId: number, limit: number): Promise<SkillRecord[]>;
@@ -585,9 +605,9 @@ export interface AgentRepositories {
     versionId: string;
     createdAt: number;
   }): Promise<SkillVersionRecord | null>;
-  getRunnableSkillById(input: {
+  getRunnableSkillByName(input: {
     ownerTgUserId: number;
-    id: string;
+    name: string;
   }): Promise<RunnableSkillRecord | null>;
   listRunnableSkills(ownerTgUserId: number): Promise<RunnableSkillRecord[]>;
   createSkillRouteDecision(

@@ -6,7 +6,7 @@ import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./external
 import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
 import { type TelegramClient } from "./telegram.js";
 import {
-  chatSkillManifest,
+  skillPackageFiles,
   createFakeD1Database,
   createFakeLlmClient,
   createFakeRepositories,
@@ -55,9 +55,11 @@ describe("admin data and run traces", () => {
       inputText: "新增待办：Trace 详情",
       triggerType: "none",
       matchedSkillId: null,
+      matchedSkillName: null,
       matchedSkillVersionId: null,
       confidence: null,
       reason: "fallback",
+      candidatesJson: "[]",
       createdAt: 1010
     });
     repositories.skillRuns.push({

@@ -185,20 +185,26 @@ export function toAdminPersonalModelUnderstandingGap(
 export function toAdminSkill(skill: SkillRecord) {
   return {
     id: skill.id,
-    name: skill.draftManifest.name,
-    description: skill.draftManifest.description,
-    kind: skill.draftManifest.kind,
+    name: skill.name,
+    description: skill.description,
     enabled: skill.enabled,
     deleted: skill.deletedAt !== null,
     publishedVersionId: skill.publishedVersionId,
-    updatedAt: skill.updatedAt
+    updatedAt: skill.updatedAt,
+    validation: skill.draftValidation
   };
 }
 
 export function toAdminSkillDetail(skill: SkillRecord) {
   return {
     id: skill.id,
-    manifest: skill.draftManifest,
+    name: skill.name,
+    description: skill.description,
+    files: skill.draftFiles,
+    metadata: skill.draftMetadata,
+    body: skill.draftBody,
+    fileInventory: skill.draftFileInventory,
+    validation: skill.draftValidation,
     enabled: skill.enabled,
     deleted: skill.deletedAt !== null,
     publishedVersionId: skill.publishedVersionId,
@@ -229,9 +235,12 @@ export function toAdminSkillRouteDecision(decision: SkillRouteDecisionRecord) {
     runId: decision.runId,
     triggerType: decision.triggerType,
     matchedSkillId: decision.matchedSkillId,
+    matchedSkillName: decision.matchedSkillName,
     matchedSkillVersionId: decision.matchedSkillVersionId,
+    confidence: decision.confidence,
     inputText: decision.inputText,
     reason: decision.reason,
+    candidatesJson: decision.candidatesJson,
     createdAt: decision.createdAt
   };
 }

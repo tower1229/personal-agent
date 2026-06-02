@@ -12,8 +12,7 @@ import {
   type AdminSkillDetail,
   type AdminSkillListItem,
   type AdminTodo,
-  type BuiltInToolName,
-  type SkillKind
+  type BuiltInToolName
 } from "@personal-agent/shared";
 import { PageHeader } from "@/components/layout/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -57,7 +56,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { CodeBlock, EmptyState, Field, emptyScheduleForm, emptySkillForm, filterText, formFromSkill, manifestFromForm, parseJsonText, skillStatus, useAsyncData, weekDays, type ScheduleFormState, type SkillFormState } from "./resource-common";
+import { CodeBlock, EmptyState, Field, emptyScheduleForm, emptySkillForm, filterText, formFromSkill, parseJsonText, skillStatus, useAsyncData, weekDays, type ScheduleFormState, type SkillFormState } from "./resource-common";
 
 export function ApprovalsPage() {
   const approvals = useAsyncData(() => loadApprovals(), []);

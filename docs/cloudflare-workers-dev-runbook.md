@@ -188,10 +188,10 @@ curl.exe "https://api.telegram.org/bot8966479686:AAH-wXkTI9VfkKCihaWbC-bsvbr78FM
 
 ### Skill
 
-- [ ] Admin 创建 chat skill
-- [ ] 发布并启用 chat skill
-- [ ] Telegram `/skill <skillId> hello` 能触发
-- [ ] trigger phrase 能触发
+- [ ] Admin 创建标准 Agent Skill package
+- [ ] 发布并启用 Agent Skill
+- [ ] Telegram `/skill <name> hello` 能触发
+- [ ] 非命令消息可通过 `name/description` 语义路由命中 skill
 - [ ] Admin 能看到 skill run / route decision
 
 ### Schedule
@@ -206,10 +206,10 @@ curl.exe "https://api.telegram.org/bot8966479686:AAH-wXkTI9VfkKCihaWbC-bsvbr78FM
 
 - [ ] Admin Settings 显示 LLM configured
 - [ ] Admin `test-llm` 成功返回文本
-- [ ] 普通 Telegram 消息在未命中命令/skill 时进入 LLM fallback
+- [ ] 普通 Telegram 消息在未命中命令、skill 和 long-task classifier 时进入 LLM fallback
 - [ ] Admin Settings 显示 Brave Search configured
 - [ ] Admin `test-search` 成功返回结果
-- [ ] skill allowedTools 包含 `web_search` 时可以调用搜索
+- [ ] skill `allowed-tools` 包含 `web_search` 时可以调用搜索
 - [ ] `fetch_url` 只接受 `http` / `https` URL
 
 ## 9. 回滚

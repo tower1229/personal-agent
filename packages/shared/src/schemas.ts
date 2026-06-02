@@ -25,7 +25,6 @@ import {
   runStatuses,
   scheduleCadences,
   scheduleExecutionStatuses,
-  skillKinds,
   skillRouteTriggerTypes,
   skillRunStatuses,
   todoStatuses,
@@ -37,38 +36,71 @@ import {
 
 export const toolRiskLevelSchema = z.enum(toolRiskLevels);
 export const builtInToolNameSchema = z.enum(builtInToolNames);
-export const skillKindSchema = z.enum(skillKinds);
 export const scheduleCadenceSchema = z.enum(scheduleCadences);
 export const longTaskStatusSchema = z.enum(longTaskStatuses);
 export const longTaskStepStatusSchema = z.enum(longTaskStepStatuses);
 export const longTaskToolPolicySchema = z.enum(longTaskToolPolicies);
 
-export const skillManifestSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().min(1),
-  kind: skillKindSchema,
-  enabled: z.boolean(),
-  triggerPhrases: z.array(z.string().min(1)).default([]),
-  intentExamples: z.array(z.string().min(1)).default([]),
-  instructions: z.string().min(1),
-  allowedTools: z.array(builtInToolNameSchema).default([]),
-  riskLevel: toolRiskLevelSchema.default("read"),
-  autoRunThreshold: z.number().min(0).max(1).default(0.75),
-  confirmThreshold: z.number().min(0).max(1).default(0.45)
+export const skillPackageNameSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/, {
+    message:
+      "Skill name must use lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen"
+  });
+
+export const skillPackageFileInventoryItemSchema = z.object({
+  path: z.string().min(1),
+  directory: z.enum(["root", "scripts", "references", "assets", "other"]),
+  sizeBytes: z.number().int().min(0)
 });
 
-export type SkillManifest = z.infer<typeof skillManifestSchema>;
+export type SkillPackageFileInventoryItem = z.infer<
+  typeof skillPackageFileInventoryItemSchema
+>;
+
+export const skillPackageMetadataSchema = z.object({
+  name: skillPackageNameSchema,
+  description: z.string().min(1).max(1024),
+  allowedTools: z.array(z.string().min(1)).default([]),
+  raw: z.record(z.unknown()).default({})
+});
+
+export type SkillPackageMetadata = z.infer<typeof skillPackageMetadataSchema>;
+
+export const skillValidationIssueSchema = z.object({
+  path: z.string().min(1),
+  message: z.string().min(1)
+});
+
+export type SkillValidationIssue = z.infer<typeof skillValidationIssueSchema>;
+
+export const skillValidationResultSchema = z.object({
+  ok: z.boolean(),
+  errors: z.array(skillValidationIssueSchema),
+  warnings: z.array(skillValidationIssueSchema)
+});
+
+export type SkillValidationResult = z.infer<
+  typeof skillValidationResultSchema
+>;
+
+export const skillPackageFilesSchema = z
+  .record(z.string().min(1), z.string())
+  .refine((files) => Object.prototype.hasOwnProperty.call(files, "SKILL.md"), {
+    message: "SKILL.md is required"
+  });
 
 export const adminSkillListItemSchema = z.object({
   id: z.string().min(1),
-  name: z.string().min(1),
+  name: skillPackageNameSchema,
   description: z.string().min(1),
-  kind: skillKindSchema,
   enabled: z.boolean(),
   deleted: z.boolean(),
   publishedVersionId: z.string().min(1).nullable(),
-  updatedAt: z.number().int().min(0)
+  updatedAt: z.number().int().min(0),
+  validation: skillValidationResultSchema
 });
 
 export type AdminSkillListItem = z.infer<typeof adminSkillListItemSchema>;
@@ -81,7 +113,13 @@ export type AdminSkillsResponse = z.infer<typeof adminSkillsResponseSchema>;
 
 export const adminSkillDetailSchema = z.object({
   id: z.string().min(1),
-  manifest: skillManifestSchema,
+  name: skillPackageNameSchema,
+  description: z.string().min(1),
+  files: skillPackageFilesSchema,
+  metadata: skillPackageMetadataSchema,
+  body: z.string(),
+  fileInventory: z.array(skillPackageFileInventoryItemSchema),
+  validation: skillValidationResultSchema,
   enabled: z.boolean(),
   deleted: z.boolean(),
   publishedVersionId: z.string().min(1).nullable(),
@@ -101,7 +139,8 @@ export type AdminSkillDetailResponse = z.infer<
 >;
 
 export const adminSkillUpsertRequestSchema = z.object({
-  manifest: skillManifestSchema
+  files: skillPackageFilesSchema,
+  enabled: z.boolean()
 });
 
 export type AdminSkillUpsertRequest = z.infer<
@@ -167,9 +206,12 @@ export const adminSkillRouteDecisionSchema = z.object({
   runId: z.string().min(1),
   triggerType: z.enum(skillRouteTriggerTypes),
   matchedSkillId: z.string().min(1).nullable(),
+  matchedSkillName: skillPackageNameSchema.nullable(),
   matchedSkillVersionId: z.string().min(1).nullable(),
+  confidence: z.number().min(0).max(1).nullable(),
   inputText: z.string(),
   reason: z.string(),
+  candidatesJson: z.string(),
   createdAt: z.number().int().min(0)
 });
 

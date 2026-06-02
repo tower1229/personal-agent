@@ -26,7 +26,6 @@ import {
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
-  skillManifestSchema,
   telegramWebhookResponseSchema,
   userProfileSchema,
   userProfileUpdateRequestSchema

@@ -252,9 +252,6 @@ export const toolRiskLevels = [
 ] as const;
 export type ToolRiskLevel = (typeof toolRiskLevels)[number];
 
-export const skillKinds = ["chat"] as const;
-export type SkillKind = (typeof skillKinds)[number];
-
 export const skillStatuses = [
   "draft",
   "published",
@@ -264,8 +261,8 @@ export const skillStatuses = [
 export type SkillStatus = (typeof skillStatuses)[number];
 
 export const skillRouteTriggerTypes = [
-  "explicit_id",
-  "trigger_phrase",
+  "explicit_name",
+  "semantic",
   "none"
 ] as const;
 export type SkillRouteTriggerType =

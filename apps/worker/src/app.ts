@@ -27,7 +27,6 @@ import {
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
-  skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
 import {

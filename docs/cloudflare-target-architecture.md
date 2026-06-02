@@ -9,8 +9,8 @@
 - Admin 是 owner 控制台，不面向多用户 SaaS。
 - Admin 使用 Telegram Login，只允许 owner 的 Telegram numeric user id 登录。
 - 部署目标优先兼容 Cloudflare 免费层。
-- Skill 第一版是声明式 chat skill，支持 Admin 动态增删改查，不支持 Admin 上传任意 JS/TS 代码执行。
-- Skill 触发支持显式触发和 trigger phrase；LLM intent routing 仍是后续能力。
+- Skill 第一版是标准 Agent Skill package：以 `SKILL.md` 为核心，支持 Admin 文件映射编辑、发布和启停，不支持 Admin 上传任意 JS/TS 代码执行。
+- Skill 触发支持 Telegram `/skill <name>` 显式触发，以及基于 `name/description` 的语义路由；不再支持旧 trigger phrase 路由。
 - 定时任务使用 Cloudflare Cron Trigger 触发统一 tick，再由 D1 中的 schedule 表决定具体任务。
 - 联网能力使用搜索 API、`fetch_url` 和来源总结，不做浏览器自动化。
 - 自动长任务 V1 已实现：复杂消息先分类，再创建 D1 long task、规划步骤、执行 bounded steps，并由 Cron 续跑。
@@ -68,39 +68,34 @@ Skill is an Admin-managed, declarative chat behavior.
 
 ```text
 skill
-  stable identity
-  draft manifest
+  internal id
+  protocol name
+  draft files / parsed metadata / validation
   enabled / deleted flags
 
 skill_version
-  immutable published manifest
+  immutable published package snapshot
   referenced by every skill run
 ```
 
-Current manifest core:
+Current skill package core:
 
 ```text
-id
 name
 description
-kind: chat
-enabled
-triggerPhrases
-intentExamples
-instructions
-allowedTools
-riskLevel
-autoRunThreshold
-confirmThreshold
+SKILL.md body
+files inventory
+allowed-tools warnings
+validation result
 ```
 
 ## Routing
 
 Current routing order:
 
-1. Explicit skill id: `/skill <id> ...`
-2. Skill trigger phrase exact or prefix match.
-3. Deterministic built-in commands.
+1. Explicit skill name: `/skill <name> ...`.
+2. Deterministic built-in commands.
+3. Skill semantic routing by published package `name/description`.
 4. Complexity classifier.
 5. Simple LLM fallback or long-task planner/executor.
 
@@ -108,7 +103,7 @@ Current routing order inserts long-task classification before ordinary LLM fallb
 
 ```text
 message
-  -> explicit skill / trigger phrase / built-in command
+  -> explicit skill name / built-in command / semantic skill route
   -> complexity classifier
   -> simple LLM answer OR long task plan
 ```

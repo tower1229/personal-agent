@@ -20,7 +20,7 @@ Telegram remains the natural-language entrypoint.
 For simple tasks:
 
 ```text
-message -> normal command / chat skill / LLM agent -> reply
+message -> normal command / Agent Skill / LLM agent -> reply
 ```
 
 For complex tasks:
@@ -226,4 +226,4 @@ Run detail should link to the long task if the originating run created one.
 - A failed step leaves a useful error and task status.
 - The user can pause, resume, cancel, and query status from Telegram.
 - Admin can inspect task plan, events, tool calls, and final output.
-- Existing simple commands and chat skills still use the normal fast path.
+- Existing simple commands and Agent Skills still use the normal fast path.

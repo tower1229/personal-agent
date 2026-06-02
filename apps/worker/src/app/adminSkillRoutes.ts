@@ -26,7 +26,6 @@ import {
   adminSchedulesResponseSchema,
   adminRunsResponseSchema,
   adminTodosResponseSchema,
-  skillManifestSchema,
   telegramWebhookResponseSchema
 } from "@personal-agent/shared";
 import {
@@ -110,13 +109,14 @@ export function registerAdminSkillRoutes(
       await c.req.json().catch(() => null)
     );
     if (!body.success) {
-      return c.json({ error: "Invalid skill manifest" }, 400);
+      return c.json({ error: "Invalid skill package" }, 400);
     }
 
     const now = (options.now ?? Date.now)();
     const skill = await repositories(c.env).createSkill({
       ownerTgUserId: authenticatedOwnerId,
-      manifest: body.data.manifest,
+      files: body.data.files,
+      enabled: body.data.enabled,
       createdAt: now
     });
 
@@ -158,14 +158,15 @@ export function registerAdminSkillRoutes(
     const body = adminSkillUpsertRequestSchema.safeParse(
       await c.req.json().catch(() => null)
     );
-    if (!body.success || body.data.manifest.id !== c.req.param("id")) {
-      return c.json({ error: "Invalid skill manifest" }, 400);
+    if (!body.success) {
+      return c.json({ error: "Invalid skill package" }, 400);
     }
 
     const skill = await repositories(c.env).updateSkillDraft({
       ownerTgUserId: authenticatedOwnerId,
       id: c.req.param("id"),
-      manifest: body.data.manifest,
+      files: body.data.files,
+      enabled: body.data.enabled,
       updatedAt: (options.now ?? Date.now)()
     });
     if (!skill) {
@@ -192,7 +193,15 @@ export function registerAdminSkillRoutes(
     if (!skill) {
       return c.json({ error: "Skill not found" }, 404);
     }
-    const manifest = skillManifestSchema.parse(skill.draftManifest);
+    if (!skill.draftValidation.ok) {
+      return c.json(
+        {
+          error: "Skill package has validation errors",
+          details: skill.draftValidation
+        },
+        400
+      );
+    }
     const version = await repositories(c.env).publishSkill({
       ownerTgUserId: authenticatedOwnerId,
       id: c.req.param("id"),
@@ -200,7 +209,7 @@ export function registerAdminSkillRoutes(
       createdAt: (options.now ?? Date.now)()
     });
     if (!version) {
-      return c.json({ error: "Skill not found" }, 404);
+      return c.json({ error: "Skill package is not publishable" }, 400);
     }
 
     return c.json(
@@ -281,12 +290,18 @@ export function registerAdminSkillRoutes(
       return c.json({ error: "Invalid test input" }, 400);
     }
 
-    const runnable = await repositories(c.env).getRunnableSkillById({
+    const skill = await repositories(c.env).getSkill({
       ownerTgUserId: authenticatedOwnerId,
       id: c.req.param("id")
     });
-    if (!runnable || runnable.version.manifest.kind !== "chat") {
-      return c.json({ error: "Runnable chat skill not found" }, 404);
+    if (!skill) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+    const runnable = (await repositories(c.env).listRunnableSkills(
+      authenticatedOwnerId
+    )).find((item) => item.skill.id === skill.id);
+    if (!runnable || runnable.skill.id !== skill.id || !runnable.version.validation.ok) {
+      return c.json({ error: "Runnable skill package not found" }, 404);
     }
 
     const rt = runtime(c.env);
@@ -305,11 +320,19 @@ export function registerAdminSkillRoutes(
       runId: run.id,
       ownerTgUserId: authenticatedOwnerId,
       inputText: body.data.input,
-      triggerType: "explicit_id",
+      triggerType: "explicit_name",
       matchedSkillId: runnable.skill.id,
+      matchedSkillName: runnable.version.name,
       matchedSkillVersionId: runnable.version.id,
       confidence: 1,
       reason: "admin test run",
+      candidatesJson: JSON.stringify([
+        {
+          name: runnable.version.name,
+          confidence: 1,
+          reason: "admin test run"
+        }
+      ]),
       createdAt: rt.now()
     });
     let result: Awaited<ReturnType<typeof executeSkill>>;
@@ -320,8 +343,16 @@ export function registerAdminSkillRoutes(
         match: {
           runnable,
           inputText: body.data.input,
-          triggerType: "explicit_id",
-          reason: "admin test run"
+          triggerType: "explicit_name",
+          confidence: 1,
+          reason: "admin test run",
+          candidatesJson: JSON.stringify([
+            {
+              name: runnable.version.name,
+              confidence: 1,
+              reason: "admin test run"
+            }
+          ])
         },
         runtime: rt
       });

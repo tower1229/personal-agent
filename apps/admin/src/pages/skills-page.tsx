@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  builtInToolNames,
   type AdminAgentConfigResponse,
   type AdminApproval,
   type AdminD1ReadinessResponse,
@@ -11,9 +10,7 @@ import {
   type AdminScheduleExecution,
   type AdminSkillDetail,
   type AdminSkillListItem,
-  type AdminTodo,
-  type BuiltInToolName,
-  type SkillKind
+  type AdminTodo
 } from "@personal-agent/shared";
 import { PageHeader } from "@/components/layout/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -49,7 +46,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,7 +53,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { CodeBlock, EmptyState, Field, emptyScheduleForm, emptySkillForm, filterText, formFromSkill, manifestFromForm, parseJsonText, skillStatus, useAsyncData, weekDays, type ScheduleFormState, type SkillFormState } from "./resource-common";
+import { CodeBlock, EmptyState, Field, emptyScheduleForm, emptySkillForm, filterText, formFromSkill, parseJsonText, skillRequestFromForm, skillStatus, useAsyncData, weekDays, type ScheduleFormState, type SkillFormState } from "./resource-common";
 
 export function SkillsPage() {
   const params = useParams();
@@ -66,7 +62,6 @@ export function SkillsPage() {
   const isNew = isCreateRoutePath(location.pathname);
   const hasDetailTarget = isNew || Boolean(params.id);
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState("all");
   const [status, setStatus] = useState("all");
   const [form, setForm] = useState<SkillFormState>(emptySkillForm);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -97,7 +92,6 @@ export function SkillsPage() {
 
   const filtered = useMemo(() => {
     return (skills.data?.items ?? []).filter((skill) => {
-      const matchesKind = kind === "all" || skill.kind === kind;
       const currentStatus = skillStatus(skill);
       const matchesStatus =
         status === "all" ? currentStatus !== "deleted" : currentStatus === status;
@@ -106,19 +100,19 @@ export function SkillsPage() {
         skill.name,
         skill.description
       ).includes(query.toLowerCase());
-      return matchesKind && matchesStatus && matchesQuery;
+      return matchesStatus && matchesQuery;
     });
-  }, [kind, query, skills.data, status]);
+  }, [query, skills.data, status]);
   const selectedSkill = detail.data?.skill ?? null;
   const isDeletedSkill = selectedSkill?.deleted === true;
 
   async function save() {
     setInlineError(null);
     try {
-      const manifest = manifestFromForm(form);
+      const request = skillRequestFromForm(form);
       const response = await saveSkillDraft({
         id: isNew ? null : params.id ?? null,
-        request: { manifest }
+        request
       });
       toast.success("Skill draft saved");
       navigate(`/admin/skills/${response.skill.id}`);
@@ -188,7 +182,7 @@ export function SkillsPage() {
             <Link to="/admin/skills/new">New Skill</Link>
           </Button>
         }
-        description="管理声明式 chat skill、发布版本和测试运行。"
+        description="管理标准 Agent Skill package、发布版本和测试运行。"
         title="Skills"
       />
       <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -203,18 +197,7 @@ export function SkillsPage() {
               placeholder="搜索 skill"
               value={query}
             />
-            <div className="grid grid-cols-2 gap-2">
-              <Select onValueChange={setKind} value={kind}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">All kinds</SelectItem>
-                    <SelectItem value="chat">Chat</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+            <div className="grid gap-2">
               <Select onValueChange={setStatus} value={status}>
                 <SelectTrigger>
                   <SelectValue />
@@ -243,8 +226,8 @@ export function SkillsPage() {
                     <span className="flex min-w-0 flex-col items-start gap-1">
                       <span className="truncate font-medium">{skill.name}</span>
                       <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {skill.kind}
                         <StatusBadge status={skillStatus(skill)} />
+                        {skill.validation.ok ? "valid" : "invalid"}
                       </span>
                     </span>
                   </Link>
@@ -279,41 +262,8 @@ export function SkillsPage() {
                 {!detail.error ? (
                   <>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="ID">
-                    <Input
-                      disabled={!isNew || isDeletedSkill}
-                      onChange={(event) =>
-                        setForm({ ...form, id: event.target.value })
-                      }
-                      value={form.id}
-                    />
-                  </Field>
-                  <Field label="Kind">
-                    <Select
-                      disabled={isDeletedSkill}
-                      onValueChange={(value) =>
-                        setForm({ ...form, kind: value as SkillKind })
-                      }
-                      value={form.kind}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="chat">Chat</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label="Name">
-                    <Input
-                      disabled={isDeletedSkill}
-                      onChange={(event) =>
-                        setForm({ ...form, name: event.target.value })
-                      }
-                      value={form.name}
-                    />
+                  <Field label="Protocol name">
+                    <Input disabled value={selectedSkill?.name ?? "read from SKILL.md"} />
                   </Field>
                   <Field label="Enabled">
                     <div className="flex h-8 items-center gap-2">
@@ -325,65 +275,51 @@ export function SkillsPage() {
                         }
                       />
                       <span className="text-sm text-muted-foreground">
-                        draft manifest enabled flag
+                        package can be routed after publish
                       </span>
                     </div>
                   </Field>
                 </div>
-                <Field label="Description">
-                  <Input
-                    disabled={isDeletedSkill}
-                    onChange={(event) =>
-                      setForm({ ...form, description: event.target.value })
-                    }
-                    value={form.description}
-                  />
-                </Field>
-                <Field label="Trigger phrases" description="一行一个 trigger phrase。">
+                {selectedSkill ? (
+                  <EmptyState>
+                    Telegram 触发格式：/skill {selectedSkill.name}
+                  </EmptyState>
+                ) : null}
+                <Field label="SKILL.md">
                   <Textarea
                     disabled={isDeletedSkill}
                     onChange={(event) =>
-                      setForm({ ...form, triggerPhrases: event.target.value })
+                      setForm({ ...form, skillMarkdown: event.target.value })
                     }
-                    rows={4}
-                    value={form.triggerPhrases}
+                    rows={14}
+                    value={form.skillMarkdown}
                   />
                 </Field>
-                <Field label="Instructions">
+                <Field
+                  description='JSON object for extra text files, for example {"references/style.md":"..."}'
+                  label="Optional file map JSON"
+                >
                   <Textarea
                     disabled={isDeletedSkill}
                     onChange={(event) =>
-                      setForm({ ...form, instructions: event.target.value })
+                      setForm({ ...form, filesJson: event.target.value })
                     }
-                    rows={6}
-                    value={form.instructions}
+                    rows={8}
+                    value={form.filesJson}
                   />
                 </Field>
-                <div className="flex flex-col gap-3">
-                  <span className="text-sm font-medium">Allowed tools</span>
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    {builtInToolNames.map((toolName) => (
-                      <label className="flex items-center gap-2 text-sm" key={toolName}>
-                        <Checkbox
-                          checked={form.allowedTools.includes(toolName)}
-                          disabled={isDeletedSkill}
-                          onCheckedChange={(checked) => {
-                            setForm({
-                              ...form,
-                              allowedTools:
-                                checked === true
-                                  ? [...form.allowedTools, toolName]
-                                  : form.allowedTools.filter(
-                                      (item) => item !== toolName
-                                    )
-                            });
-                          }}
-                        />
-                        {toolName}
-                      </label>
-                    ))}
+                {selectedSkill ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <span className="text-sm font-medium">Validation</span>
+                      <CodeBlock value={selectedSkill.validation} />
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">File inventory</span>
+                      <CodeBlock value={selectedSkill.fileInventory} />
+                    </div>
                   </div>
-                </div>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   {!isDeletedSkill ? (
                     <>

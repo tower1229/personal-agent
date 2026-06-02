@@ -1,4 +1,3 @@
-import { type BuiltInToolName } from "@personal-agent/shared";
 import { buildSessionCookie, signSession } from "../auth.js";
 import { createWorkerApp } from "../app.js";
 import {
@@ -39,6 +38,8 @@ import {
 } from "../repositories.js";
 import { type TelegramClient } from "../telegram.js";
 import { type WorkerEnv } from "../types.js";
+import { parseSkillPackageFiles } from "../skillPackages.js";
+import { markSkillPackageNameConflict } from "../skillPackages.js";
 
 export const env: WorkerEnv = {
   DB: {} as D1Database,
@@ -72,25 +73,28 @@ export function ownerUpdate(text: string, updateId = 1) {
   };
 }
 
-export function chatSkillManifest(input: {
-  id: string;
-  triggerPhrases?: string[];
-  allowedTools?: BuiltInToolName[];
+export function skillPackageFiles(input: {
+  name: string;
+  allowedTools?: string[];
+  description?: string;
   instructions?: string;
-}) {
+}): Record<string, string> {
+  const allowedTools = (input.allowedTools ?? [])
+    .map((tool) => `  - ${tool}`)
+    .join("\n");
+
   return {
-    id: input.id,
-    name: input.id,
-    description: `${input.id} description`,
-    kind: "chat" as const,
-    enabled: true,
-    triggerPhrases: input.triggerPhrases ?? [],
-    intentExamples: [],
-    instructions: input.instructions ?? "用简洁中文回应。",
-    allowedTools: input.allowedTools ?? [],
-    riskLevel: "read" as const,
-    autoRunThreshold: 0.75,
-    confirmThreshold: 0.45
+    "SKILL.md": [
+      "---",
+      `name: ${input.name}`,
+      `description: ${JSON.stringify(input.description ?? `${input.name} description`)}`,
+      allowedTools ? "allowed-tools:" : "",
+      allowedTools,
+      "---",
+      input.instructions ?? "用简洁中文回应。"
+    ]
+      .filter((line) => line !== "")
+      .join("\n")
   };
 }
 
@@ -656,11 +660,34 @@ export function createFakeRepositories(): AgentRepositories & {
       }
     },
     async createSkill(input) {
+      const baseParsed = parseSkillPackageFiles(input.files);
+      const parsed = state.skills.some(
+        (skill) => {
+          const publishedVersion = state.skillVersions.find(
+            (version) => version.id === skill.publishedVersionId
+          );
+          return (
+            skill.ownerTgUserId === input.ownerTgUserId &&
+            skill.deletedAt === null &&
+            (skill.name === baseParsed.metadata.name ||
+              publishedVersion?.name === baseParsed.metadata.name)
+          );
+        }
+      )
+        ? markSkillPackageNameConflict(baseParsed)
+        : baseParsed;
       const skill: SkillRecord = {
-        id: input.manifest.id,
+        id: `skill-${state.skills.length + 1}`,
         ownerTgUserId: input.ownerTgUserId,
-        draftManifest: input.manifest,
-        enabled: input.manifest.enabled,
+        name: parsed.metadata.name,
+        description: parsed.metadata.description,
+        draftFiles: parsed.files,
+        draftMetadata: parsed.metadata,
+        draftBody: parsed.body,
+        draftFileInventory: parsed.fileInventory,
+        draftValidation: parsed.validation,
+        draftContentHash: parsed.contentHash,
+        enabled: input.enabled,
         deletedAt: null,
         publishedVersionId: null,
         publishedVersion: null,
@@ -680,8 +707,32 @@ export function createFakeRepositories(): AgentRepositories & {
       if (!skill) {
         return null;
       }
-      skill.draftManifest = input.manifest;
-      skill.enabled = input.manifest.enabled;
+      const baseParsed = parseSkillPackageFiles(input.files);
+      const parsed = state.skills.some(
+        (item) => {
+          const publishedVersion = state.skillVersions.find(
+            (version) => version.id === item.publishedVersionId
+          );
+          return (
+            item.ownerTgUserId === input.ownerTgUserId &&
+            item.id !== input.id &&
+            item.deletedAt === null &&
+            (item.name === baseParsed.metadata.name ||
+              publishedVersion?.name === baseParsed.metadata.name)
+          );
+        }
+      )
+        ? markSkillPackageNameConflict(baseParsed)
+        : baseParsed;
+      skill.name = parsed.metadata.name;
+      skill.description = parsed.metadata.description;
+      skill.draftFiles = parsed.files;
+      skill.draftMetadata = parsed.metadata;
+      skill.draftBody = parsed.body;
+      skill.draftFileInventory = parsed.fileInventory;
+      skill.draftValidation = parsed.validation;
+      skill.draftContentHash = parsed.contentHash;
+      skill.enabled = input.enabled;
       skill.updatedAt = input.updatedAt;
       return skill;
     },
@@ -715,10 +766,6 @@ export function createFakeRepositories(): AgentRepositories & {
         return null;
       }
       skill.enabled = input.enabled;
-      skill.draftManifest = {
-        ...skill.draftManifest,
-        enabled: input.enabled
-      };
       skill.updatedAt = input.updatedAt;
       return skill;
     },
@@ -754,13 +801,23 @@ export function createFakeRepositories(): AgentRepositories & {
       if (!skill) {
         return null;
       }
+      if (!skill.draftValidation.ok) {
+        return null;
+      }
       const versionNumber = (skill.publishedVersion ?? 0) + 1;
       const version: SkillVersionRecord = {
         id: input.versionId,
         skillId: skill.id,
         ownerTgUserId: input.ownerTgUserId,
         version: versionNumber,
-        manifest: skill.draftManifest,
+        name: skill.name,
+        description: skill.description,
+        files: skill.draftFiles,
+        metadata: skill.draftMetadata,
+        body: skill.draftBody,
+        fileInventory: skill.draftFileInventory,
+        validation: skill.draftValidation,
+        contentHash: skill.draftContentHash,
         createdAt: input.createdAt
       };
       state.skillVersions.push(version);
@@ -769,14 +826,18 @@ export function createFakeRepositories(): AgentRepositories & {
       skill.updatedAt = input.createdAt;
       return version;
     },
-    async getRunnableSkillById(input) {
+    async getRunnableSkillByName(input) {
       const skill = state.skills.find(
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
-          item.id === input.id &&
           item.enabled &&
           item.deletedAt === null &&
-          item.publishedVersionId
+          item.publishedVersionId &&
+          state.skillVersions.find(
+            (version) =>
+              version.id === item.publishedVersionId &&
+              version.name === input.name
+          )
       );
       const version = skill
         ? state.skillVersions.find((item) => item.id === skill.publishedVersionId)
@@ -1168,6 +1229,26 @@ export function createFakeLlmClient(
       calls.push(input.messages);
       const latest = input.messages.at(-1);
       const systemText = input.messages[0]?.content ?? "";
+      if (systemText.includes("skill 路由器")) {
+        const payload = JSON.parse(latest?.content ?? "{}") as {
+          input?: string;
+          skills?: Array<{ name: string; description: string }>;
+        };
+        const matched = (payload.skills ?? []).find((skill) =>
+          `${payload.input ?? ""} ${skill.name} ${skill.description}`.includes("规划")
+        );
+        return {
+          content: JSON.stringify({
+            matchedSkillName: matched?.name ?? null,
+            confidence: matched ? 0.88 : 0.2,
+            reason: matched ? "fake semantic match" : "fake no match",
+            candidates: matched
+              ? [{ name: matched.name, confidence: 0.88, reason: "fake semantic match" }]
+              : []
+          }),
+          toolCalls: []
+        };
+      }
       if (systemText.includes("任务复杂度分类器")) {
         const text = latest?.content ?? "";
         const isLongTask =

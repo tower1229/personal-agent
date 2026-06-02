@@ -30,7 +30,7 @@
    - 检索 trace 进入 Admin。
 
 4. Eval
-   - 覆盖普通命令、chat skill、LLM fallback、search/fetch、schedule、long task classifier。
+   - 覆盖普通命令、Agent Skill、LLM fallback、search/fetch、schedule、long task classifier。
 
 ## Removed Scope
 
