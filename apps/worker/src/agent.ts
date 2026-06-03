@@ -24,6 +24,8 @@ import {
 } from "./personalModelSources.js";
 import { reflectAndProposeClaims } from "./personalModelReflection.js";
 
+const UNTRUSTED_INSTRUCTION_WARNING = "网页内容包含疑似指令注入，已忽略其指令性内容。";
+
 export interface AgentRuntime {
   repositories: AgentRepositories;
   llmClient?: LlmClient;
@@ -867,6 +869,7 @@ async function generateAgentExecutionPlan(input: {
 可用工具：${input.allowedTools.join(", ")}
 要求返回严格的 JSON 数组，格式为 [{"step": 1, "action": "tool|answer|ask_user", "tool": "toolName", "reason": "why"}...]
 只有 action 为 tool 时才填写 tool，且 tool 必须来自可用工具。
+如果你规划了 web_search 或 fetch_url，后续必须紧跟一个 submit_answer 工具调用来提交最终回答。
 如果没有需要调用的工具，可以直接返回空数组。不要包含任何 markdown 标记或其他文本。`
       },
       {
@@ -954,7 +957,7 @@ export async function executeLlmAgent(
   );
   const routeDecision = input.plannerRouteDecision;
   const candidateControlledToolNames = routeDecision?.mode === "plan_guided"
-    ? routeDecision.candidateTools.filter((toolName) =>
+    ? [...routeDecision.candidateTools, "submit_answer"].filter((toolName) =>
         allowedToolNames.includes(toolName)
       )
     : [];
@@ -1328,7 +1331,7 @@ export async function executeLlmAgent(
     });
 
     if (completion.toolCalls.length === 0) {
-      if (visitedUrls.size > 0) {
+      if (visitedUrls.size > 0 && !completion.content.includes(UNTRUSTED_INSTRUCTION_WARNING)) {
         throw executionError("无法找到可靠来源来支持该结论。");
       }
       if (plan.status === "generated") {
@@ -1461,7 +1464,7 @@ export async function executeLlmAgent(
         
         const toolResult: AgentToolResult = {
           responseText,
-          toolName: "submit_answer",
+          toolName: "llm_agent",
           riskLevel: "read",
           input: toolArgs,
           output: { submitted: true },
@@ -1573,11 +1576,11 @@ export async function executeLlmAgent(
               });
               fetched = {
                 ...fetched,
-                text: "网页内容包含疑似指令注入，已忽略其指令性内容。"
+                text: UNTRUSTED_INSTRUCTION_WARNING
               };
               toolResult = {
                 ...toolResult,
-                responseText: fetched.text ?? "网页内容包含疑似指令注入，已忽略其指令性内容。",
+                responseText: fetched.text ?? UNTRUSTED_INSTRUCTION_WARNING,
                 output: fetched
               };
             }

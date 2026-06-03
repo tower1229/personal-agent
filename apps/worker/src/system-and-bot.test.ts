@@ -164,12 +164,14 @@ describe("worker system and bot commands", () => {
       "llm_chat_completion",
       "web_search",
       "llm_chat_completion",
+      "llm_agent",
       "llm_chat_completion",
       "fetch_url",
-      "llm_chat_completion"
+      "llm_chat_completion",
+      "llm_agent"
     ]);
-    expect(telegramClient.messages[0]?.text).toContain("工具结果已处理");
-    expect(telegramClient.messages[1]?.text).toContain("工具结果已处理");
+    expect(telegramClient.messages[0]?.text).toContain("边缘计算平台");
+    expect(telegramClient.messages[1]?.text).toContain("边缘计算平台");
   });
 
   it("records the lightweight execution plan and planned fallback tool calls", async () => {
@@ -186,6 +188,12 @@ describe("worker system and bot commands", () => {
         action: "tool",
         tool: "web_search",
         reason: "需要搜索公开网页"
+      },
+      {
+        step: 2,
+        action: "tool",
+        tool: "submit_answer",
+        reason: "提交搜索结果"
       }
     ]);
     expect(trace.actualToolCalls).toEqual([
@@ -193,6 +201,12 @@ describe("worker system and bot commands", () => {
         round: 0,
         toolName: "web_search",
         plannedStep: 1,
+        status: "planned"
+      },
+      {
+        round: 1,
+        toolName: "submit_answer",
+        plannedStep: 2,
         status: "planned"
       }
     ]);
@@ -227,7 +241,7 @@ describe("worker system and bot commands", () => {
       "plan_guided"
     ]);
     expect(telegramClient.messages[0]?.text).toContain("联网");
-    expect(telegramClient.messages[1]?.text).toContain("工具结果已处理");
+    expect(telegramClient.messages[1]?.text).toContain("边缘计算平台");
   });
 
   it("blocks private network fetch_url calls through planner guardrails", async () => {

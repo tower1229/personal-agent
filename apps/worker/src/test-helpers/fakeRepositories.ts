@@ -1460,6 +1460,12 @@ export function createFakeLlmClient(
                 action: "tool",
                 tool: "web_search",
                 reason: "需要搜索公开网页"
+              },
+              {
+                step: 2,
+                action: "tool",
+                tool: "submit_answer",
+                reason: "提交搜索结果"
               }
             ]),
             toolCalls: []
@@ -1473,6 +1479,12 @@ export function createFakeLlmClient(
                 action: "tool",
                 tool: "fetch_url",
                 reason: "需要读取指定网页"
+              },
+              {
+                step: 2,
+                action: "tool",
+                tool: "submit_answer",
+                reason: "提交网页内容"
               }
             ]),
             toolCalls: []
@@ -1533,6 +1545,47 @@ export function createFakeLlmClient(
             toolCalls: []
           };
         }
+
+        const toolResultContent = latest.content ?? "";
+        if (toolResultContent.includes("疑似指令注入")) {
+          return {
+            content: toolResultContent,
+            toolCalls: []
+          };
+        }
+
+        const isSearchOrFetch =
+          toolResultContent.includes("https://") ||
+          toolResultContent.includes("Cloudflare Workers") ||
+          toolResultContent.includes("Example page content");
+
+        if (isSearchOrFetch) {
+          return {
+            content: "",
+            toolCalls: [
+              {
+                id: "call-submit-answer",
+                type: "function",
+                function: {
+                  name: "submit_answer",
+                  arguments: JSON.stringify({
+                    text: "根据搜索结果，Cloudflare Workers 是一个边缘计算平台。",
+                    citations: [
+                      {
+                        url: toolResultContent.includes("https://example.com/")
+                          ? "https://example.com/"
+                          : "https://developers.cloudflare.com/workers/",
+                        title: "Cloudflare Workers",
+                        snippet_used: "Workers docs"
+                      }
+                    ]
+                  })
+                }
+              }
+            ]
+          };
+        }
+
         return {
           content: `工具结果已处理：${latest.content ?? ""}`,
           toolCalls: options.alwaysTool
