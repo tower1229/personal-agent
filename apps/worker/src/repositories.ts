@@ -407,6 +407,8 @@ export interface UserProfileRecord {
   name: string;
   birthdayTimestamp: number | null;
   gender: string | null;
+  interpretationFramework: string | null;
+  preferences: string | null;
   createdAt: number;
   updatedAt: number;
 }

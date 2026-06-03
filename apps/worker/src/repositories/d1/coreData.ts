@@ -366,6 +366,8 @@ export function createD1CoreDataRepositories(
           name: string;
           birthday_timestamp: number | null;
           gender: string | null;
+          interpretation_framework: string | null;
+          preferences: string | null;
           created_at: number;
           updated_at: number;
         }>();
@@ -375,6 +377,8 @@ export function createD1CoreDataRepositories(
         name: row.name,
         birthdayTimestamp: row.birthday_timestamp,
         gender: row.gender,
+        interpretationFramework: row.interpretation_framework,
+        preferences: row.preferences,
         createdAt: row.created_at,
         updatedAt: row.updated_at
       };
@@ -383,12 +387,14 @@ export function createD1CoreDataRepositories(
     async upsertUserProfile(input) {
       await db
         .prepare(
-          `INSERT INTO user_profiles (id, name, birthday_timestamp, gender, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+          `INSERT INTO user_profiles (id, name, birthday_timestamp, gender, interpretation_framework, preferences, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET
              name = excluded.name,
              birthday_timestamp = excluded.birthday_timestamp,
              gender = excluded.gender,
+             interpretation_framework = excluded.interpretation_framework,
+             preferences = excluded.preferences,
              updated_at = excluded.updated_at`
         )
         .bind(
@@ -396,6 +402,8 @@ export function createD1CoreDataRepositories(
           input.name,
           input.birthdayTimestamp,
           input.gender,
+          input.interpretationFramework,
+          input.preferences,
           input.createdAt,
           input.updatedAt
         )

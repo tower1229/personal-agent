@@ -4,7 +4,9 @@ import {
   controlledToolNames,
   type ControlledToolName,
   type PlannerRouteDecision,
-  type ToolRiskLevel
+  type ToolRiskLevel,
+  type PersonalModelLayer,
+  type PersonalModelConfidence
 } from "@personal-agent/shared";
 import { type SearchClient, type UrlFetcher } from "./externalTools.js";
 import {
@@ -414,6 +416,7 @@ export async function executeAgentTool(input: {
       const content = stringArg(input.args, "content");
       const metadata = (input.args.metadata as Record<string, unknown> | undefined) || {};
       const resolveGapId = input.args.resolveGapId ? String(input.args.resolveGapId) : null;
+      const claims = (input.args.claims as Array<{ claim: string, layer: string, scenario: string, confidence: number }> | undefined) || [];
 
       const allowedAgentTypes = ["personality_framework", "health_log", "relationship_note"];
       if (sourceType && !allowedAgentTypes.includes(sourceType)) {
@@ -473,17 +476,38 @@ export async function executeAgentTool(input: {
             updatedAt: now
           });
         }
+
+        // 4. Save high-confidence claims
+        for (const c of claims) {
+          await input.runtime.repositories.createPersonalModelClaim({
+            id: generateId(),
+            ownerTgUserId: input.ownerTgUserId,
+            claim: c.claim,
+            layer: c.layer as PersonalModelLayer,
+            scenario: c.scenario as PersonalModelScenario,
+            confidence: Math.max(0, Math.min(1, c.confidence)) as PersonalModelConfidence,
+            status: "active",
+            usagePolicy: "default_available",
+            sensitivity: "medium",
+            validFrom: null,
+            validUntil: null,
+            lastConfirmedAt: null,
+            metadataJson: null,
+            createdAt: now,
+            updatedAt: now
+          });
+        }
       }
 
       result = {
         responseText: source
-          ? `已成功将采访成果保存为资料，生成 ${chunksCount} 个分块${resolveGapId ? "，且已关闭对应认知缺口" : ""}。`
+          ? `已成功将采访成果保存为资料，生成 ${chunksCount} 个分块${resolveGapId ? "，且已关闭对应认知缺口" : ""}${claims.length > 0 ? `，并成功录入 ${claims.length} 条高置信度结论` : ""}。`
           : "保存资料失败，缺少必要参数。",
         toolName: "save_interview_source",
         riskLevel: "write_low",
-        input: { sourceType, title, content, metadata, resolveGapId },
+        input: { sourceType, title, content, metadata, resolveGapId, claims },
         output: source
-          ? { saved: true, sourceId: source.id, chunkCount: chunksCount, resolveGapId }
+          ? { saved: true, sourceId: source.id, chunkCount: chunksCount, resolveGapId, claimsWritten: claims.length }
           : { saved: false }
       };
     } else {
@@ -680,6 +704,20 @@ const toolDefinitions: Record<BuiltInToolName, LlmToolDefinition> = {
           resolveGapId: {
             type: "string",
             description: "Optional Gap ID to automatically resolve once this source is successfully saved."
+          },
+          claims: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                claim: { type: "string", description: "The high-confidence conclusion or fact." },
+                layer: { type: "string", enum: ["core", "preference", "behavior", "context"], description: "The layer of the claim." },
+                scenario: { type: "string", description: "The applicable scenario (e.g., global, health, relationship)." },
+                confidence: { type: "number", description: "Confidence score (0.0 to 1.0). For confirmed facts, use 1.0." }
+              },
+              required: ["claim", "layer", "scenario", "confidence"]
+            },
+            description: "Optional list of high-confidence claims to directly inject into the personal model alongside the raw source document."
           }
         },
         required: ["sourceType", "title", "content"]
@@ -888,7 +926,12 @@ async function generateAgentExecutionPlan(input: {
   llmClient: LlmClient;
   inputText: string;
   allowedTools: string[];
+  hasInitialGaps: boolean;
 }): Promise<AgentExecutionPlan> {
+  const gapRule = input.hasInitialGaps
+    ? "\n【强主动拦截规则】当前用户存在核心模型初始化Gap。除非用户明确要求执行工具任务，否则你的计划必须是发起访谈(action: ask_user)，强引导用户回答以填补这些未知的性格或偏好Gap。"
+    : "";
+
   const completion = await input.llmClient.createChatCompletion({
     messages: [
       {
@@ -898,7 +941,7 @@ async function generateAgentExecutionPlan(input: {
 要求返回严格的 JSON 数组，格式为 [{"step": 1, "action": "tool|answer|ask_user", "tool": "toolName", "reason": "why"}...]
 只有 action 为 tool 时才填写 tool，且 tool 必须来自可用工具。
 如果你规划了 web_search 或 fetch_url，后续必须紧跟一个 submit_answer 工具调用来提交最终回答。
-如果没有需要调用的工具，可以直接返回空数组。不要包含任何 markdown 标记或其他文本。`
+如果没有需要调用的工具，可以直接返回空数组。不要包含任何 markdown 标记或其他文本。${gapRule}`
       },
       {
         role: "user",
@@ -989,21 +1032,25 @@ export async function executeLlmAgent(
         allowedToolNames.includes(toolName)
       )
     : [];
+  const hasInitialGaps = contextAssembly.trace.selectedGapIds.length > 0;
+  let plan: AgentExecutionPlan = { status: "not_requested", steps: [] };
   const shouldPlan = routeDecision
     ? routeDecision.mode === "plan_guided" && candidateControlledToolNames.length > 0
     : shouldRequestExecutionPlan({
         inputText: input.inputText,
         allowedToolNames
       });
-  const plan = shouldPlan
-    ? await generateAgentExecutionPlan({
+  
+  if (shouldPlan) {
+    plan = await generateAgentExecutionPlan({
         llmClient: input.runtime.llmClient,
         inputText: input.inputText,
         allowedTools: routeDecision
           ? candidateControlledToolNames
-          : allowedToolNames
-      })
-    : { status: "not_requested", steps: [] } satisfies AgentExecutionPlan;
+          : allowedToolNames,
+        hasInitialGaps
+      });
+  }
 
   if (routeDecision) {
     contextAssembly.trace.routeDecision = routeDecision;
@@ -1361,6 +1408,7 @@ export async function executeLlmAgent(
     "删除记忆只能通过 delete_memory_request 创建确认，不能直接删除。",
     "如果用户正在回答你发起的初始化采访或盲区追问，请保持专注，直到收集到完整信息，不要轻易跳出采访场景并结束采访。",
     "当你完成一项采访，或者获得关于用户性格（personality_framework）、健康（health_log）、人际关系（relationship_note）的完整描述时，必须调用 save_interview_source 将其存为原始资料。如果有关联的 Gap ID，必须在 resolveGapId 中传入以关闭对应的 Gap。",
+    hasInitialGaps ? "【强主动拦截规则】系统存在未解决的核心初始化Gap，你当前的最高优先级是发起或继续Onboarding访谈，强引导用户回答以填补这些Gap，而不是单纯回应闲聊。" : "",
     contextAssembly.contextString,
     input.systemInstructions ?? "",
     planInstruction
@@ -1508,7 +1556,40 @@ export async function executeLlmAgent(
           for (const cite of citations) {
             const citeRaw = (cite as Record<string, unknown>)?.url;
             const citeUrl = typeof citeRaw === "string" ? normalizeExternalUrl(citeRaw) : null;
-            if (!citeUrl || !visitedUrls.has(citeUrl)) {
+            
+            let isValid = false;
+            if (citeUrl) {
+              const explicitUrls = input.routeDecision?.fetchPolicy.explicitAllowedUrls || [];
+              if (visitedUrls.has(citeUrl) || explicitUrls.some(u => normalizeExternalUrl(u) === citeUrl)) {
+                isValid = true;
+              } else {
+                try {
+                  const citeDomain = new URL(citeUrl).hostname.replace(/^www\./, '');
+                  const validDomains = new Set<string>();
+                  for (const u of [...visitedUrls, ...explicitUrls]) {
+                    try {
+                      validDomains.add(new URL(u).hostname.replace(/^www\./, ''));
+                    } catch {}
+                  }
+                  
+                  for (const domain of validDomains) {
+                    if (domain === citeDomain || domain.endsWith(`.${citeDomain}`) || citeDomain.endsWith(`.${domain}`)) {
+                      isValid = true;
+                      break;
+                    }
+                    if (
+                      (domain.includes("githubusercontent.com") && citeDomain.includes("github.com")) ||
+                      (domain.includes("github.com") && citeDomain.includes("githubusercontent.com"))
+                    ) {
+                      isValid = true;
+                      break;
+                    }
+                  }
+                } catch {}
+              }
+            }
+
+            if (!isValid) {
               throw executionError("无法找到可靠来源来支持该结论。");
             }
           }

@@ -1119,6 +1119,8 @@ export const userProfileSchema = z.object({
   name: z.string(),
   birthdayTimestamp: z.number().int().nullable(),
   gender: z.string().nullable(),
+  interpretationFramework: z.string().nullable(),
+  preferences: z.string().nullable(),
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0)
 });
@@ -1127,7 +1129,9 @@ export type UserProfile = z.infer<typeof userProfileSchema>;
 export const userProfileUpdateRequestSchema = z.object({
   name: z.string().optional(),
   birthdayTimestamp: z.number().int().nullable().optional(),
-  gender: z.string().nullable().optional()
+  gender: z.string().nullable().optional(),
+  interpretationFramework: z.string().nullable().optional(),
+  preferences: z.string().nullable().optional()
 });
 export type UserProfileUpdateRequest = z.infer<typeof userProfileUpdateRequestSchema>;
 

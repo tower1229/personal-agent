@@ -264,6 +264,8 @@ export function registerAdminSystemRoutes(
         name: "",
         birthdayTimestamp: null,
         gender: null,
+        interpretationFramework: null,
+        preferences: null,
         createdAt: (options.now ?? Date.now)(),
         updatedAt: (options.now ?? Date.now)()
       }));
@@ -292,11 +294,49 @@ export function registerAdminSystemRoutes(
       name: body.data.name !== undefined ? body.data.name : (existing?.name ?? ""),
       birthdayTimestamp: body.data.birthdayTimestamp !== undefined ? body.data.birthdayTimestamp : (existing?.birthdayTimestamp ?? null),
       gender: body.data.gender !== undefined ? body.data.gender : (existing?.gender ?? null),
+      interpretationFramework: body.data.interpretationFramework !== undefined ? body.data.interpretationFramework : (existing?.interpretationFramework ?? null),
+      preferences: body.data.preferences !== undefined ? body.data.preferences : (existing?.preferences ?? null),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now
     };
 
+    const isNewProfile = !existing;
     const updated = await repositories(c.env).upsertUserProfile(input);
+
+    if (isNewProfile) {
+      const rt = runtime(c.env);
+      const seedGaps = [
+        {
+          scenario: "global",
+          gapDescription: "未知的核心价值观与原则"
+        },
+        {
+          scenario: "global",
+          gapDescription: "未知的沟通与交流偏好"
+        },
+        {
+          scenario: "global",
+          gapDescription: "未知的压力反应与安抚需求"
+        },
+        {
+          scenario: "global",
+          gapDescription: "未知的工作与生活边界设定"
+        }
+      ] as const;
+
+      for (const gap of seedGaps) {
+        await rt.repositories.createPersonalModelUnderstandingGap({
+          id: rt.generateId(),
+          ownerTgUserId: authenticatedOwnerId,
+          scenario: gap.scenario,
+          gapDescription: gap.gapDescription,
+          status: "open",
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+    }
+
     return c.json(userProfileSchema.parse(updated));
   });
 

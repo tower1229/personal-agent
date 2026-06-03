@@ -13,6 +13,11 @@ export function ProfilePage() {
   const [name, setName] = useState("");
   const [gender, setGender] = useState("");
   const [birthday, setBirthday] = useState("");
+  const [mbti, setMbti] = useState("");
+  const [enneagram, setEnneagram] = useState("");
+  const [astrologySign, setAstrologySign] = useState("");
+  const [communicationStyle, setCommunicationStyle] = useState("");
+  const [workLifeBoundaries, setWorkLifeBoundaries] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -22,6 +27,25 @@ export function ProfilePage() {
       if (profileData.data.birthdayTimestamp) {
         setBirthday(formatLocalYMD(profileData.data.birthdayTimestamp));
       }
+      if (profileData.data.interpretationFramework) {
+        try {
+          const fw = JSON.parse(profileData.data.interpretationFramework);
+          setMbti(fw?.mbti || "");
+          setEnneagram(fw?.enneagram || "");
+          setAstrologySign(fw?.astrologySign || "");
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
+      if (profileData.data.preferences) {
+        try {
+          const pref = JSON.parse(profileData.data.preferences);
+          setCommunicationStyle(pref?.communicationStyle || "");
+          setWorkLifeBoundaries(pref?.workLifeBoundaries || "");
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
     }
   }, [profileData.data]);
 
@@ -29,10 +53,24 @@ export function ProfilePage() {
     setSaving(true);
     try {
       const birthdayTimestamp = birthday ? parseLocalYMD(birthday) : null;
+      
+      const interpretationFramework = JSON.stringify({
+        mbti,
+        enneagram,
+        astrologySign
+      });
+
+      const preferences = JSON.stringify({
+        communicationStyle,
+        workLifeBoundaries
+      });
+
       const updated = await updateProfile({
         name,
         gender: gender || null,
-        birthdayTimestamp
+        birthdayTimestamp,
+        interpretationFramework,
+        preferences
       });
       toast.success("Profile updated successfully");
       profileData.setData(updated);
@@ -78,13 +116,72 @@ export function ProfilePage() {
               />
             </Field>
           </div>
-          <div className="flex justify-end">
-            <Button onClick={() => void handleSave()} disabled={saving}>
-              {saving ? "Saving..." : "Save Profile"}
-            </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Interpretation Framework</CardTitle>
+          <CardDescription>
+            Core personality frameworks to help the agent understand your traits.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="MBTI">
+              <Input
+                value={mbti}
+                onChange={(e) => setMbti(e.target.value)}
+                placeholder="e.g. INTJ, ENFP"
+              />
+            </Field>
+            <Field label="Enneagram (九型人格)">
+              <Input
+                value={enneagram}
+                onChange={(e) => setEnneagram(e.target.value)}
+                placeholder="e.g. Type 5w4"
+              />
+            </Field>
+            <Field label="Astrology Sign (星座)">
+              <Input
+                value={astrologySign}
+                onChange={(e) => setAstrologySign(e.target.value)}
+                placeholder="e.g. Scorpio"
+              />
+            </Field>
           </div>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Base Preferences</CardTitle>
+          <CardDescription>
+            Your fundamental preferences for communication and boundaries.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Communication Style (沟通风格)">
+              <Input
+                value={communicationStyle}
+                onChange={(e) => setCommunicationStyle(e.target.value)}
+                placeholder="e.g. Direct and concise, Empathetic"
+              />
+            </Field>
+            <Field label="Work/Life Boundaries (工作生活边界)">
+              <Input
+                value={workLifeBoundaries}
+                onChange={(e) => setWorkLifeBoundaries(e.target.value)}
+                placeholder="e.g. No work topics on weekends"
+              />
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+      <div className="flex justify-end">
+        <Button onClick={() => void handleSave()} disabled={saving}>
+          {saving ? "Saving..." : "Save Profile"}
+        </Button>
+      </div>
     </div>
   );
 }
