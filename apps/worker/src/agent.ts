@@ -1284,8 +1284,13 @@ export async function executeLlmAgent(
       (url) => normalizeExternalUrl(url) === normalizedUrl
     );
     const searchCandidate = searchResultFetchCandidates.get(normalizedUrl);
+    const domainAllowed = decision.fetchPolicy.allowedDomains.some((domain) => {
+      return parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`);
+    });
+
     if (
       explicitAllowed ||
+      domainAllowed ||
       (decision.fetchPolicy.allowSearchResultUrls && searchCandidate)
     ) {
       return {
@@ -1293,7 +1298,9 @@ export async function executeLlmAgent(
         args: { ...details.args, url: normalizedUrl },
         reason: explicitAllowed
           ? "url_allowed"
-          : "search_result_url_allowed_for_run"
+          : domainAllowed
+            ? "domain_allowed"
+            : "search_result_url_allowed_for_run"
       };
     }
 

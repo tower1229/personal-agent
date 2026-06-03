@@ -236,7 +236,7 @@ describe("skill routing and execution", () => {
       ]
     });
 
-    await postWebhook(app, ownerCallback(`sc_${pendingRunId}`));
+    await postWebhook(app, ownerCallback(`sc_${pendingRunId}`, (telegramClient.messages[0] as any).messageId));
 
     expect(repositories.skillRuns).toHaveLength(1);
     expect(repositories.skillRuns[0]).toMatchObject({

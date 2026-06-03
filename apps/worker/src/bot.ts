@@ -1044,6 +1044,10 @@ async function executeCommandOrSkillOrLlmFallback(input: {
       id: pendingPlannerClarification.runId
     });
     const originalText = previousRun?.messageText ?? input.text;
+    
+    // Trigger thinking state before starting heavy LLM routing
+    input.onThinking?.({ type: "thinking" }).catch(() => {});
+
     const plannerRoute = await decidePlannerRoute({
       runId: input.runId,
       ownerTgUserId: input.ownerTgUserId,
@@ -1091,6 +1095,9 @@ async function executeCommandOrSkillOrLlmFallback(input: {
   if (commandResult.toolName !== "fallback") {
     return commandResult;
   }
+
+  // Trigger thinking state before starting heavy LLM routing
+  input.onThinking?.({ type: "thinking" }).catch(() => {});
 
   const semanticRoute = await findSemanticSkillMatch({
     ownerTgUserId: input.ownerTgUserId,
