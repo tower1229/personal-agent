@@ -1306,6 +1306,7 @@ export async function executeLlmAgent(
     });
 
     if (
+      decision.privacyRisk === "low" ||
       explicitAllowed ||
       domainAllowed ||
       (decision.fetchPolicy.allowSearchResultUrls && searchCandidate)
@@ -1313,11 +1314,13 @@ export async function executeLlmAgent(
       return {
         action: "allow",
         args: { ...details.args, url: normalizedUrl },
-        reason: explicitAllowed
-          ? "url_allowed"
-          : domainAllowed
-            ? "domain_allowed"
-            : "search_result_url_allowed_for_run"
+        reason: decision.privacyRisk === "low"
+          ? "low_privacy_risk_allowed"
+          : explicitAllowed
+            ? "url_allowed"
+            : domainAllowed
+              ? "domain_allowed"
+              : "search_result_url_allowed_for_run"
       };
     }
 
