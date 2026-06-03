@@ -38,6 +38,8 @@ export interface TelegramMessageResponse {
 export interface TelegramClient {
   sendMessage(input: { chatId: number; text: string; replyMarkup?: unknown }): Promise<TelegramMessageResponse>;
   editMessageText(input: { chatId: number; messageId: number; text: string; replyMarkup?: unknown }): Promise<void>;
+  deleteMessage(input: { chatId: number; messageId: number }): Promise<void>;
+  sendChatAction(input: { chatId: number; action: string }): Promise<void>;
   answerCallbackQuery(input: { callbackQueryId: string; text?: string; showAlert?: boolean }): Promise<void>;
 }
 
@@ -94,6 +96,44 @@ export function createTelegramClient(input: {
 
       if (!response.ok) {
         throw new Error(`Telegram editMessageText returned ${response.status}`);
+      }
+    },
+    async deleteMessage(inputData) {
+      const response = await fetch(
+        `${apiBase}/bot${input.botToken}/deleteMessage`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            chat_id: inputData.chatId,
+            message_id: inputData.messageId
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Telegram deleteMessage returned ${response.status}`);
+      }
+    },
+    async sendChatAction(inputData) {
+      const response = await fetch(
+        `${apiBase}/bot${input.botToken}/sendChatAction`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            chat_id: inputData.chatId,
+            action: inputData.action
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Telegram sendChatAction returned ${response.status}`);
       }
     },
     async answerCallbackQuery(inputData) {

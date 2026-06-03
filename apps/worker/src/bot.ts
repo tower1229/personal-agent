@@ -962,6 +962,7 @@ export async function executeSkill(input: {
   ownerTgUserId: number;
   match: SkillMatch;
   runtime: BotRuntime;
+  onThinking?: (state: { type: "thinking" | "tool"; toolName?: string }) => Promise<void>;
 }): Promise<CommandResult & { skillRunId: string }> {
   const skillRun = await input.runtime.repositories.createSkillRun({
     id: input.runtime.generateId(),
@@ -989,7 +990,8 @@ export async function executeSkill(input: {
         runtime: input.runtime,
         allowedTools,
         systemInstructions: buildSkillInstructions(input.match.runnable),
-        maxToolRounds: input.runtime.maxToolRounds
+        maxToolRounds: input.runtime.maxToolRounds,
+        onThinking: input.onThinking
       })
     );
 
@@ -1023,6 +1025,7 @@ async function executeCommandOrSkillOrLlmFallback(input: {
   ownerTgUserId: number;
   text: string;
   runtime: BotRuntime;
+  onThinking?: (state: { type: "thinking" | "tool"; toolName?: string }) => Promise<void>;
 }): Promise<CommandResult> {
   const pendingPlannerClarification =
     await input.runtime.repositories.getPendingPlannerRouteClarification(
@@ -1072,7 +1075,8 @@ async function executeCommandOrSkillOrLlmFallback(input: {
         inputText: originalText,
         runtime: input.runtime,
         plannerRouteDecision: plannerRoute.decision,
-        maxToolRounds: input.runtime.maxToolRounds
+        maxToolRounds: input.runtime.maxToolRounds,
+        onThinking: input.onThinking
       })
     );
   }
@@ -1184,7 +1188,8 @@ async function executeCommandOrSkillOrLlmFallback(input: {
       inputText: input.text,
       runtime: input.runtime,
       plannerRouteDecision: plannerRoute.decision,
-      maxToolRounds: input.runtime.maxToolRounds
+      maxToolRounds: input.runtime.maxToolRounds,
+      onThinking: input.onThinking
     })
   );
 }
@@ -1507,12 +1512,36 @@ export async function handleOwnerUpdate(
     createdAt: now,
     updatedAt: now
   });
-
+  let thinkingMessageId: number | null = null;
   try {
     const messageText = text ?? "";
     const explicitSkill = parseExplicitSkill(messageText);
     let matchedSkill: SkillMatch | null = null;
     let result: CommandResult & { skillRunId?: string };
+
+    const onThinking = async (state: { type: "thinking" | "tool"; toolName?: string }) => {
+      try {
+        if (state.type === "thinking") {
+          if (!thinkingMessageId) {
+            const resp = await input.runtime.telegramClient.sendMessage({
+              chatId,
+              text: "🤔 正在思考..."
+            });
+            thinkingMessageId = resp.messageId;
+          }
+        } else if (state.type === "tool" && state.toolName) {
+          if (thinkingMessageId) {
+            await input.runtime.telegramClient.editMessageText({
+              chatId,
+              messageId: thinkingMessageId,
+              text: `🔍 正在执行工具: ${state.toolName}...`
+            });
+          }
+        }
+      } catch (e) {
+        // Ignore errors during thinking UI updates
+      }
+    };
 
     if (explicitSkill) {
       matchedSkill = await findExplicitSkillMatch({
@@ -1535,11 +1564,12 @@ export async function handleOwnerUpdate(
 
       result = matchedSkill
         ? await executeSkill({
-          runId: run.id,
-          ownerTgUserId: input.ownerTgUserId,
+            runId: run.id,
+            ownerTgUserId: input.ownerTgUserId,
             match: matchedSkill,
-          runtime: input.runtime
-        })
+            runtime: input.runtime,
+            onThinking
+          })
         : {
             responseText: `没有找到 skill ${explicitSkill.name}`,
             toolName: "skill_not_found",
@@ -1552,8 +1582,9 @@ export async function handleOwnerUpdate(
           await executeCommandOrSkillOrLlmFallback({
             runId: run.id,
             ownerTgUserId: input.ownerTgUserId,
-          text: messageText,
-            runtime: input.runtime
+            text: messageText,
+            runtime: input.runtime,
+            onThinking
           })
         );
     }
@@ -1574,8 +1605,27 @@ export async function handleOwnerUpdate(
     }
 
     try {
+      let showFeedback = false;
+      if (result.toolName === "llm_agent") {
+        showFeedback = true;
+        if (result.contextTraceJson) {
+          try {
+            const trace = JSON.parse(result.contextTraceJson);
+            const trivialTools = new Set(["submit_answer", "llm_chat_completion", "llm_agent"]);
+            const nonSubmitTools = (trace.actualToolCalls || []).filter(
+              (call: any) => !trivialTools.has(call.toolName)
+            );
+            if (nonSubmitTools.length === 0) {
+              showFeedback = false;
+            }
+          } catch {
+            // Keep default
+          }
+        }
+      }
+
       const inlineKeyboard =
-        result.toolName === "llm_agent"
+        showFeedback
           ? {
               inline_keyboard: [
                 [
@@ -1665,6 +1715,13 @@ export async function handleOwnerUpdate(
         text: `执行失败：${error}`
       })
       .catch(() => undefined);
+  } finally {
+    if (thinkingMessageId) {
+      await input.runtime.telegramClient.deleteMessage({
+        chatId,
+        messageId: thinkingMessageId
+      }).catch(() => {});
+    }
   }
 
   return { runId: run.id };

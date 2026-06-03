@@ -76,6 +76,22 @@ _Avoid_: fatal error, automatic silent abort, unrecoverable crash
 A unified record representing a piece of understanding about the owner within the Personal Model. It uses attributes (such as layer, scenario, and an optional expiration date) to handle everything from temporary current states to long-term patterns and values, rather than using distinct data structures for different types of memory.
 _Avoid_: FactRecord, separate scenario models, independent state records
 
+**Direct Model Write**:
+The capability of the Telegram-facing LLM Agent to directly insert or update a Personal Model Entry (including medium or high confidence patterns) during a conversation without requiring an explicit Owner Apply or Typed Draft review in the Admin UI. The owner retains the ability to audit and modify these entries post-creation in the Admin panel.
+_Avoid_: drafted memory, review-gated learning, background model draft
+
+**Metacognition Log**:
+An aggregated, time-ordered view of the mutation metadata (audit trail) attached to Personal Model Entries. It is not an independent data entity, but rather the collection of reasoning (`metacognition_reason`) provided by the LLM Agent each time it performs a Direct Model Write. This ensures every shift in understanding is permanently linked to the specific entry it altered.
+_Avoid_: independent log table, disconnected reasoning record, abstract reflection dump
+
+**Dynamic Context Isolation**:
+The mechanism by which the LLM Agent dynamically infers whether a conversation belongs to a personal or work context, subsequently determining which data namespace to retrieve from. This relies on the agent's contextual understanding rather than hard-coded explicit skill routing or manual commands, allowing fluid transitions between personal and work topics.
+_Avoid_: hard-coded skill boundaries, manual context switching commands, rigid workspace locks
+
+**Untouchable Zone Filter**:
+A strict, database-level hard exclusion mechanism applied to RAG queries and context assembly. When an owner marks information (such as a Personal Model Entry or a source document) as untouchable, it is flagged (e.g., `is_untouchable = true`) and physically excluded from ever entering the LLM's context window. It is not implemented as a soft prompt instruction.
+_Avoid_: prompt-level filtering, soft exclusion, telling the LLM to ignore loaded text
+
 ## Example Dialogue
 
 Developer: Should this generated list of skill routing phrases be created by the LLM Agent?

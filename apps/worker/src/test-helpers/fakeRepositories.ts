@@ -1368,8 +1368,9 @@ export function createFakeRepositories(): AgentRepositories & {
 }
 
 export function createFakeTelegramClient(options: { fail?: boolean } = {}):
-  TelegramClient & { messages: Array<{ chatId: number; text: string }> } {
-  const messages: Array<{ chatId: number; text: string }> = [];
+  TelegramClient & { messages: Array<{ messageId?: number; chatId: number; text: string }> } {
+  const messages: Array<{ messageId?: number; chatId: number; text: string }> = [];
+  let nextMessageId = 1;
 
   return {
     messages,
@@ -1377,12 +1378,25 @@ export function createFakeTelegramClient(options: { fail?: boolean } = {}):
       if (options.fail) {
         throw new Error("send failed");
       }
-      messages.push(input);
-      return { messageId: messages.length };
+      const messageId = nextMessageId++;
+      messages.push({ ...input, messageId });
+      return { messageId };
     },
     async editMessageText(input) {
-      messages.push(input as any);
+      const idx = messages.findIndex((m) => m.messageId === input.messageId);
+      if (idx !== -1) {
+        messages[idx].text = input.text;
+      } else {
+        messages.push(input as any);
+      }
     },
+    async deleteMessage(input) {
+      const idx = messages.findIndex((m) => m.messageId === input.messageId);
+      if (idx !== -1) {
+        messages.splice(idx, 1);
+      }
+    },
+    async sendChatAction() {},
     async answerCallbackQuery() {}
   };
 }

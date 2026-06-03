@@ -55,6 +55,7 @@ export interface LlmAgentInput {
   systemInstructions?: string;
   plannerRouteDecision?: PlannerRouteDecision;
   maxToolRounds: number;
+  onThinking?: (state: { type: "thinking" | "tool"; toolName?: string }) => Promise<void>;
 }
 
 export class AgentExecutionError extends Error {
@@ -1345,6 +1346,7 @@ export async function executeLlmAgent(
   ];
 
   for (let round = 0; round <= input.maxToolRounds; round += 1) {
+    await input.onThinking?.({ type: "thinking" }).catch(() => {});
     const completion = await input.runtime.llmClient.createChatCompletion({
       messages,
       tools: activeTools
@@ -1463,6 +1465,7 @@ export async function executeLlmAgent(
     });
 
     for (const toolCall of completion.toolCalls) {
+      await input.onThinking?.({ type: "tool", toolName: toolCall.function.name }).catch(() => {});
       const toolCallAllowedByPlan = recordActualToolCall(round, toolCall.function.name);
       const toolArgs = safeJson(toolCall.function.arguments);
       

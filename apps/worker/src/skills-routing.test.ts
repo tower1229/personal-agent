@@ -244,8 +244,8 @@ describe("skill routing and execution", () => {
       skillVersionId: "planner-v1",
       status: "succeeded"
     });
-    expect(telegramClient.messages[1]?.text).toBe("确认执行 planner，处理中...");
-    expect(telegramClient.messages[2]?.text).toBe("LLM 回复：规划 今天怎么做");
+    expect(telegramClient.messages[0]?.text).toBe("确认执行 planner，处理中...");
+    expect(telegramClient.messages[1]?.text).toBe("LLM 回复：规划 今天怎么做");
   });
 
   it("blocks tools outside skill allowlists and keeps destructive approval required", async () => {
