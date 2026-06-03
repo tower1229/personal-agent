@@ -1713,14 +1713,21 @@ export function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boole
         throw new Error("fetch failed");
       }
       if (options.tooLarge) {
-        throw new Error("fetch_url exceeded 1 bytes");
+        return {
+          url: input.url,
+          title: "Example",
+          text: (options.text ?? "Example page content").slice(0, 1),
+          bytesRead: 1,
+          isTruncated: true
+        };
       }
       urls.push(input.url);
       return {
         url: input.url,
         title: "Example",
         text: options.text ?? "Example page content",
-        bytesRead: 20
+        bytesRead: 20,
+        isTruncated: false
       };
     }
   };

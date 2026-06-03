@@ -332,12 +332,39 @@ export async function executeAgentTool(input: {
       }
       const url = stringArg(input.args, "url");
       const fetched = await input.runtime.urlFetcher.fetchUrl({ url });
+      
+      let responseText = fetched.text;
+      const MAX_TEXT_LENGTH = 15000;
+      
+      if (responseText.length > MAX_TEXT_LENGTH) {
+        if (input.runtime.llmClient) {
+          try {
+            const summaryResponse = await input.runtime.llmClient.createChatCompletion({
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a helpful assistant. Please summarize the following long web page content. You must retain the core information, main arguments, and specific facts so they can be cited later. If the content seems to be truncated halfway, summarize what is available."
+                },
+                { role: "user", content: responseText.slice(0, 30000) }
+              ]
+            });
+            responseText = summaryResponse.content + "\n\n[System Note: The original page was too long and has been summarized by the system. Some details might be omitted.]";
+          } catch (e) {
+            responseText = responseText.slice(0, MAX_TEXT_LENGTH) + "\n\n[System Note: The web page content exceeded the maximum context limit. The text has been truncated.]";
+          }
+        } else {
+          responseText = responseText.slice(0, MAX_TEXT_LENGTH) + "\n\n[System Note: The web page content exceeded the maximum context limit. The text has been truncated.]";
+        }
+      } else if (fetched.isTruncated) {
+        responseText = responseText + "\n\n[System Note: The web page content was too large to fully download. The text has been truncated.]";
+      }
+
       result = {
-        responseText: fetched.text,
+        responseText,
         toolName: "fetch_url",
         riskLevel: "external_send",
         input: { url },
-        output: fetched
+        output: { ...fetched, text: responseText }
       };
     } else if (input.toolName === "record_understanding_gap") {
       const scenario = stringArg(input.args, "scenario") as PersonalModelScenario | "" || "global";

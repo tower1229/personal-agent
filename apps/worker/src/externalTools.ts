@@ -15,6 +15,7 @@ export interface UrlFetchResult {
   title: string | null;
   text: string;
   bytesRead: number;
+  isTruncated: boolean;
 }
 
 export interface UrlFetcher {
@@ -74,6 +75,8 @@ export function createBraveSearchClient(input: {
   };
 }
 
+import * as cheerio from "cheerio";
+
 function extractTitle(html: string): string | null {
   const match = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
   return match ? decodeHtml(match[1] ?? "").trim() : null;
@@ -90,31 +93,59 @@ function decodeHtml(value: string): string {
 }
 
 function htmlToText(value: string): string {
-  return decodeHtml(
-    value
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-  ).trim();
+  try {
+    const $ = cheerio.load(value);
+    // Remove typical noise tags and classes
+    $('script, style, nav, footer, header, aside, noscript, iframe, svg, form, .sidebar, .nav, .menu, .ads, .comment, #comments').remove();
+    
+    // Attempt to find the main content wrapper
+    let mainContent: any = $('article');
+    if (mainContent.length === 0) {
+      mainContent = $('main');
+    }
+    if (mainContent.length === 0) {
+      mainContent = $('body');
+    }
+    if (mainContent.length === 0) {
+      mainContent = $.root();
+    }
+    
+    // Extract text, condense whitespace
+    return mainContent.text().replace(/\s+/g, " ").trim();
+  } catch {
+    // Fallback to naive regex if cheerio fails
+    return decodeHtml(
+      value
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+    ).trim();
+  }
 }
 
 async function readLimitedText(input: {
   response: Response;
   maxBytes: number;
-}): Promise<{ text: string; bytesRead: number }> {
+}): Promise<{ text: string; bytesRead: number; isTruncated: boolean }> {
   if (!input.response.body) {
     const text = await input.response.text();
     const bytesRead = new TextEncoder().encode(text).byteLength;
     if (bytesRead > input.maxBytes) {
-      throw new Error(`fetch_url exceeded ${input.maxBytes} bytes`);
+      const truncatedBuffer = new TextEncoder().encode(text).slice(0, input.maxBytes);
+      return { 
+        text: new TextDecoder().decode(truncatedBuffer), 
+        bytesRead: input.maxBytes, 
+        isTruncated: true 
+      };
     }
-    return { text, bytesRead };
+    return { text, bytesRead, isTruncated: false };
   }
 
   const reader = input.response.body.getReader();
   const chunks: Uint8Array[] = [];
   let bytesRead = 0;
+  let isTruncated = false;
 
   try {
     while (true) {
@@ -127,8 +158,14 @@ async function readLimitedText(input: {
       }
       bytesRead += value.byteLength;
       if (bytesRead > input.maxBytes) {
+        const allowed = value.byteLength - (bytesRead - input.maxBytes);
+        if (allowed > 0) {
+          chunks.push(value.slice(0, allowed));
+        }
+        bytesRead = input.maxBytes;
+        isTruncated = true;
         await reader.cancel();
-        throw new Error(`fetch_url exceeded ${input.maxBytes} bytes`);
+        break;
       }
       chunks.push(value);
     }
@@ -145,7 +182,8 @@ async function readLimitedText(input: {
 
   return {
     text: new TextDecoder().decode(buffer),
-    bytesRead
+    bytesRead,
+    isTruncated
   };
 }
 
@@ -186,7 +224,7 @@ export function createUrlFetcher(input: {
         throw new Error("fetch_url unsupported content type");
       }
 
-      const { text, bytesRead } = await readLimitedText({
+      const { text, bytesRead, isTruncated } = await readLimitedText({
         response,
         maxBytes
       });
@@ -195,7 +233,8 @@ export function createUrlFetcher(input: {
         url: parsed.toString(),
         title: extractTitle(text),
         text: htmlToText(text).slice(0, maxBytes),
-        bytesRead
+        bytesRead,
+        isTruncated
       };
     }
   };

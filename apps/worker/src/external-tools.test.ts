@@ -37,9 +37,9 @@ describe("external tool constraints", () => {
       fetcher: async () => new Response(body)
     });
 
-    await expect(
-      urlFetcher.fetchUrl({ url: "https://example.com" })
-    ).rejects.toThrow("fetch_url exceeded 1 bytes");
+    const result = await urlFetcher.fetchUrl({ url: "https://example.com" });
+    expect(result.isTruncated).toBe(true);
+    expect(result.bytesRead).toBe(1);
     expect(canceled).toBe(true);
   });
 

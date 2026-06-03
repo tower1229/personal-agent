@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@personal-agent/shared": "*",
+    "cheerio": "^1.2.0",
     "hono": "^4.12.22",
     "yaml": "^2.9.0"
   },

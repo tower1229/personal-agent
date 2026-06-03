@@ -64,6 +64,18 @@ _Avoid_: intent cluster, persistent category, routing taxonomy
 A Skill Routing Example that normalizes to the same text as another example for the same Skill. Near-duplicates may be flagged during review, but only normalized exact duplicates are hard-skipped in the first version.
 _Avoid_: embedding duplicate, automatic merge, cross-skill duplicate ban
 
+**In-Place Progress Message**:
+The single Telegram message used to display the execution progress of a Long Task. This message is edited in-place (`editMessageText`) with new status, steps, and inline keyboards, avoiding spamming the chat with a new message per step.
+_Avoid_: separate progress push, batch status messages, silent background execution
+
+**Recoverable Failure**:
+A Long Task state where a step execution fails but the task is not immediately terminated. The task transitions to a suspended `Paused` state, and an inline keyboard is provided on the In-Place Progress Message allowing the owner to retry the failed step or cancel the task.
+_Avoid_: fatal error, automatic silent abort, unrecoverable crash
+
+**Personal Model Entry**:
+A unified record representing a piece of understanding about the owner within the Personal Model. It uses attributes (such as layer, scenario, and an optional expiration date) to handle everything from temporary current states to long-term patterns and values, rather than using distinct data structures for different types of memory.
+_Avoid_: FactRecord, separate scenario models, independent state records
+
 ## Example Dialogue
 
 Developer: Should this generated list of skill routing phrases be created by the LLM Agent?
@@ -117,3 +129,11 @@ Domain expert: Yes, group them temporarily during review as Routing Example Clus
 Developer: Should near-duplicate routing examples be blocked automatically?
 
 Domain expert: No. Block normalized exact duplicates for the same Skill; show near-duplicates as review warnings.
+
+Developer: Should every step in a long task trigger a new Telegram message to update the user on progress?
+
+Domain expert: No. Use an In-Place Progress Message that updates a single message via `editMessageText` to avoid spamming the user.
+
+Developer: If a step in a long task fails, does the task end immediately?
+
+Domain expert: No. It results in a Recoverable Failure where the task is paused, and the In-Place Progress Message presents an inline keyboard allowing the user to retry the step.
