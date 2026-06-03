@@ -9,7 +9,7 @@
 | T1 | 标准 Agent Skill 协议迁移 | 首版实施中 | P0 | 彻底替换当前 D1 chat skill manifest，迁移到 `agentskills.io` 的 `SKILL.md` 目录协议。 |
 | T2 | 长任务后台执行与 Telegram 进度体验 | 部分完成 | P0 | 已有后台续跑、状态查询、Admin trace；缺少中间进度主动推送。 |
 | T3 | 临期待办与主动提醒 | 待设计 | P0 | 当前 todo 无 due/reminder 字段；Schedule 是独立命令调度，不是 todo 提醒。 |
-| T4 | LLM routing 与结构化工具规划 | 部分完成 | P1 | 当前是规则路由 + 复杂度分类；缺少语义 intent routing 和 confidence 策略。 |
+| T4 | LLM routing 与结构化工具规划 | 基本完成 | P1 | 已实现 Planner Route Decision，支持启发式与大模型融合的隐私与工具路由护栏；`skill_intents` 语义意图管理待进一步扩展。 |
 | T5 | 搜索引用质量 | 部分完成 | P1 | 已有 Brave Search 与 URL 要求；缺少结构化 citation 和最终答案校验。 |
 | T6 | fetch_url 正文抽取与摘要 | 部分完成 | P1 | 已有限制字节和 HTML 去标签；缺少可靠正文抽取、摘要和截断提示。 |
 | T7 | Telegram 长任务进度消息 | 部分完成 | P1 | 与 T2 相关，但可作为独立 UX 专项推进。 |
@@ -105,9 +105,10 @@
 
 ### 当前状态
 
-- 当前路由顺序是 explicit `/skill <name>`、built-in command、name/description semantic skill routing、complexity classifier、LLM fallback/long task。
-- 旧 `intentExamples`、`autoRunThreshold`、`confirmThreshold` 已从标准 skill runtime 中移除。
-- 长任务 planner 已要求结构化 JSON steps 和 tool policy。
+- 启发式规则结合 LLM 分类器的 `Planner Route Decision` 核心逻辑已闭环。
+- `web_search` 和 `fetch_url` 工具的护栏（次数、禁用词、隐私拦截、来源记录）已强制生效。
+- 交互式的 `ask_user` 流程和 Admin Runs 的只读审计记录均已实现。
+- `skill_intents` 相关的高级语义路由仍在扩展中。
 
 ### 目标状态
 

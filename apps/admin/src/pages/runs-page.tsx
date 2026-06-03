@@ -196,6 +196,116 @@ function RunDetailPage(props: { id: string }) {
   );
 }
 
+function PlannerRouteDisplay(props: { decisionText: string }) {
+  const data = parseJsonText(props.decisionText);
+
+  if (!data || typeof data !== "object") {
+    return <CodeBlock value={data} />;
+  }
+
+  const mode = (data as any).mode;
+  const reason = (data as any).reason;
+  const confidence = (data as any).confidence;
+  const requireFreshness = (data as any).requireFreshness;
+  const webSearch = (data as any).webSearchPolicy;
+  const fetchUrl = (data as any).fetchUrlPolicy;
+
+  const getModeColor = (mode: string) => {
+    switch (mode) {
+      case "plan_guided":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+      case "ask_user":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+      case "none":
+        return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      default:
+        return "";
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={getModeColor(mode)} variant="outline">
+          Mode: {mode}
+        </Badge>
+        {confidence && (
+          <Badge variant="secondary">
+            Confidence: {confidence}
+          </Badge>
+        )}
+        {requireFreshness && (
+          <Badge variant="default" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+            Requires Freshness
+          </Badge>
+        )}
+      </div>
+
+      {reason && (
+        <div className="text-sm text-muted-foreground border-l-2 border-primary pl-3 py-1">
+          {reason}
+        </div>
+      )}
+
+      {webSearch && (
+        <Card className="shadow-none border-dashed">
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm flex items-center justify-between">
+              Web Search Policy
+              {webSearch.allow ? (
+                <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-none">Allowed</Badge>
+              ) : (
+                <Badge variant="secondary" className="border-none">Disabled</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          {webSearch.allow && (
+            <CardContent className="py-2 px-4 text-sm grid gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div><span className="text-muted-foreground">Max calls:</span> {webSearch.maxCalls ?? "N/A"}</div>
+                <div><span className="text-muted-foreground">Desensitize:</span> {webSearch.requireDesensitization ? "Yes" : "No"}</div>
+              </div>
+              {webSearch.forbiddenTopics && webSearch.forbiddenTopics.length > 0 && (
+                <div>
+                  <span className="text-muted-foreground block mb-1">Forbidden Topics:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {webSearch.forbiddenTopics.map((topic: string, i: number) => (
+                      <Badge key={i} variant="outline" className="text-xs">{topic}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {fetchUrl && (
+        <Card className="shadow-none border-dashed">
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm flex items-center justify-between">
+              Fetch URL Policy
+              {fetchUrl.allow ? (
+                <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-none">Allowed</Badge>
+              ) : (
+                <Badge variant="secondary" className="border-none">Disabled</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          {fetchUrl.allow && (
+            <CardContent className="py-2 px-4 text-sm grid gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div><span className="text-muted-foreground">Max calls:</span> {fetchUrl.maxCalls ?? "N/A"}</div>
+                <div><span className="text-muted-foreground">Search Provenance:</span> {fetchUrl.requireSearchProvenance ? "Yes" : "No"}</div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function RunTrace(props: { detail: AdminRunDetailResponse }) {
   const detail = props.detail;
 
@@ -249,7 +359,11 @@ function RunTrace(props: { detail: AdminRunDetailResponse }) {
           <CodeBlock value={detail.skillRouteDecision ?? "No route decision"} />
         </TraceSection>
         <TraceSection title="Planner Route">
-          <CodeBlock value={detail.plannerRouteDecision ?? "No planner route decision"} />
+          {detail.plannerRouteDecision ? (
+            <PlannerRouteDisplay decisionText={typeof detail.plannerRouteDecision === 'string' ? detail.plannerRouteDecision : JSON.stringify(detail.plannerRouteDecision)} />
+          ) : (
+            <EmptyState>No planner route decision</EmptyState>
+          )}
         </TraceSection>
         <TraceSection title="Skill Run">
           <CodeBlock value={detail.skillRun ?? "No skill run"} />
