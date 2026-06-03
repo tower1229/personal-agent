@@ -1284,8 +1284,25 @@ export async function executeLlmAgent(
       (url) => normalizeExternalUrl(url) === normalizedUrl
     );
     const searchCandidate = searchResultFetchCandidates.get(normalizedUrl);
+    const DOMAIN_ALIASES: Record<string, string[]> = {
+      "github.com": ["githubusercontent.com"]
+    };
+
     const domainAllowed = decision.fetchPolicy.allowedDomains.some((domain) => {
-      return parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`);
+      if (parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`)) {
+        return true;
+      }
+      
+      // Handle known aliases (e.g. github.com -> githubusercontent.com)
+      for (const [baseDomain, aliases] of Object.entries(DOMAIN_ALIASES)) {
+        if (domain === baseDomain || domain.endsWith(`.${baseDomain}`)) {
+          if (aliases.some(alias => parsed.hostname === alias || parsed.hostname.endsWith(`.${alias}`))) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
     });
 
     if (
