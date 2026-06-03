@@ -307,7 +307,8 @@ export const builtInToolNames = [
   "fetch_url",
   "record_understanding_gap",
   "record_metacognition_log",
-  "save_interview_source"
+  "save_interview_source",
+  "submit_answer"
 ] as const;
 export type BuiltInToolName = (typeof builtInToolNames)[number];
 

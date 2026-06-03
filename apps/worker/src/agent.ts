@@ -655,6 +655,33 @@ const toolDefinitions: Record<BuiltInToolName, LlmToolDefinition> = {
         required: ["sourceType", "title", "content"]
       }
     }
+  },
+  submit_answer: {
+    type: "function",
+    function: {
+      name: "submit_answer",
+      description: "Submit the final answer. You MUST use this tool to provide the final answer if you have used web_search or fetch_url. You MUST provide citations for the facts included in your answer.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "The final answer text in Markdown format." },
+          citations: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                url: { type: "string", description: "The URL of the cited source." },
+                title: { type: "string", description: "The title of the cited source." },
+                snippet_used: { type: "string", description: "The exact snippet or specific fact used from the source." }
+              },
+              required: ["url", "title", "snippet_used"]
+            },
+            description: "List of citations used to support the facts in the answer."
+          }
+        },
+        required: ["text", "citations"]
+      }
+    }
   }
 };
 
@@ -1076,6 +1103,7 @@ export async function executeLlmAgent(
     string,
     { query: string; rank: number; title: string; url: string }
   >();
+  const visitedUrls = new Set<string>();
   let searchQueryCount = 0;
   let fetchUrlCount = 0;
 
@@ -1271,6 +1299,7 @@ export async function executeLlmAgent(
     "不要自称宗教、心理或终极真理权威。",
     "需要联网信息时先使用 web_search；需要读取具体网页时使用 fetch_url。",
     "使用搜索或网页内容回答时，必须包含来源 URL。",
+    "当你使用了 web_search 或 fetch_url 收集到信息后，必须使用 submit_answer 工具提交最终回答，并严格引用来源。否则，你可以直接输出文本回答。",
     "删除记忆只能通过 delete_memory_request 创建确认，不能直接删除。",
     "如果用户正在回答你发起的初始化采访或盲区追问，请保持专注，直到收集到完整信息，不要轻易跳出采访场景并结束采访。",
     "当你完成一项采访，或者获得关于用户性格（personality_framework）、健康（health_log）、人际关系（relationship_note）的完整描述时，必须调用 save_interview_source 将其存为原始资料。如果有关联的 Gap ID，必须在 resolveGapId 中传入以关闭对应的 Gap。",
@@ -1299,6 +1328,9 @@ export async function executeLlmAgent(
     });
 
     if (completion.toolCalls.length === 0) {
+      if (visitedUrls.size > 0) {
+        throw executionError("无法找到可靠来源来支持该结论。");
+      }
       if (plan.status === "generated") {
         for (const remaining of plannedToolSteps.slice(nextPlannedToolIndex)) {
           contextAssembly.trace.planDeviations ??= [];
@@ -1403,6 +1435,50 @@ export async function executeLlmAgent(
     for (const toolCall of completion.toolCalls) {
       const toolCallAllowedByPlan = recordActualToolCall(round, toolCall.function.name);
       const toolArgs = safeJson(toolCall.function.arguments);
+      
+      if (toolCall.function.name === "submit_answer") {
+        const text = stringArg(toolArgs, "text");
+        const citations = Array.isArray(toolArgs.citations) ? toolArgs.citations : [];
+        const hasUsedSearch = visitedUrls.size > 0;
+        
+        if (hasUsedSearch) {
+          if (citations.length === 0) {
+            throw executionError("无法找到可靠来源来支持该结论。");
+          }
+          for (const cite of citations) {
+            const citeRaw = (cite as Record<string, unknown>)?.url;
+            const citeUrl = typeof citeRaw === "string" ? normalizeExternalUrl(citeRaw) : null;
+            if (!citeUrl || !visitedUrls.has(citeUrl)) {
+              throw executionError("无法找到可靠来源来支持该结论。");
+            }
+          }
+        }
+        
+        let responseText = text;
+        if (citations.length > 0) {
+          responseText += "\n\n**参考来源：**\n" + citations.map((c: any, i: number) => `[${i + 1}] [${c.title || c.url}](${c.url})`).join("\n");
+        }
+        
+        const toolResult: AgentToolResult = {
+          responseText,
+          toolName: "submit_answer",
+          riskLevel: "read",
+          input: toolArgs,
+          output: { submitted: true },
+          contextTraceJson: JSON.stringify(contextAssembly.trace)
+        };
+        
+        await recordToolCall({
+          runtime: input.runtime,
+          runId: input.runId,
+          ownerTgUserId: input.ownerTgUserId,
+          result: toolResult,
+          status: "succeeded"
+        });
+        
+        return toolResult;
+      }
+      
       const controlledTool = isControlledToolName(toolCall.function.name);
       const guardrail = controlledTool
         ? validateControlledToolCall({
@@ -1465,6 +1541,7 @@ export async function executeLlmAgent(
             for (const result of results) {
               const normalizedUrl = normalizeExternalUrl(result.url);
               if (normalizedUrl) {
+                visitedUrls.add(normalizedUrl);
                 searchResultFetchCandidates.set(normalizedUrl, {
                   query,
                   rank: result.rank,
@@ -1505,6 +1582,9 @@ export async function executeLlmAgent(
               };
             }
             const normalizedUrl = fetched.url ? normalizeExternalUrl(fetched.url) : null;
+            if (normalizedUrl) {
+              visitedUrls.add(normalizedUrl);
+            }
             const provenance = normalizedUrl
               ? searchResultFetchCandidates.get(normalizedUrl)
               : undefined;
