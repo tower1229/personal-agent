@@ -1,6 +1,9 @@
 import {
   builtInToolNames,
   type BuiltInToolName,
+  controlledToolNames,
+  type ControlledToolName,
+  type PlannerRouteDecision,
   type ToolRiskLevel
 } from "@personal-agent/shared";
 import { type SearchClient, type UrlFetcher } from "./externalTools.js";
@@ -48,6 +51,7 @@ export interface LlmAgentInput {
   runtime: AgentRuntime;
   allowedTools?: Set<string>;
   systemInstructions?: string;
+  plannerRouteDecision?: PlannerRouteDecision;
   maxToolRounds: number;
 }
 
@@ -703,6 +707,56 @@ function shouldRequestExecutionPlan(input: {
   );
 }
 
+function isControlledToolName(toolName: string): toolName is ControlledToolName {
+  return controlledToolNames.includes(toolName as ControlledToolName);
+}
+
+function toolDefinitionsByNames(
+  tools: LlmToolDefinition[],
+  names: Set<string>
+): LlmToolDefinition[] {
+  return tools.filter((tool) => names.has(tool.function.name));
+}
+
+function normalizeExternalUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    url.hostname = url.hostname.toLowerCase();
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isPrivateOrLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "0.0.0.0"
+  ) {
+    return true;
+  }
+
+  const parts = host.split(".").map((part) => Number.parseInt(part, 10));
+  if (parts.length === 4 && parts.every((part) => Number.isInteger(part))) {
+    const [a, b] = parts;
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254)
+    );
+  }
+
+  return host === "::1" || host.startsWith("fc") || host.startsWith("fd");
+}
+
 function normalizeExecutionPlan(
   raw: unknown,
   allowedToolNames: Set<string>
@@ -868,18 +922,34 @@ export async function executeLlmAgent(
 
   const tools = availableToolDefinitions(input.allowedTools);
   const allowedToolNames = tools.map((tool) => tool.function.name);
-  const shouldPlan = shouldRequestExecutionPlan({
-    inputText: input.inputText,
-    allowedToolNames
-  });
+  const nonControlledToolNames = allowedToolNames.filter(
+    (toolName) => !isControlledToolName(toolName)
+  );
+  const routeDecision = input.plannerRouteDecision;
+  const candidateControlledToolNames = routeDecision?.mode === "plan_guided"
+    ? routeDecision.candidateTools.filter((toolName) =>
+        allowedToolNames.includes(toolName)
+      )
+    : [];
+  const shouldPlan = routeDecision
+    ? routeDecision.mode === "plan_guided" && candidateControlledToolNames.length > 0
+    : shouldRequestExecutionPlan({
+        inputText: input.inputText,
+        allowedToolNames
+      });
   const plan = shouldPlan
     ? await generateAgentExecutionPlan({
         llmClient: input.runtime.llmClient,
         inputText: input.inputText,
-        allowedTools: allowedToolNames
+        allowedTools: routeDecision
+          ? candidateControlledToolNames
+          : allowedToolNames
       })
     : { status: "not_requested", steps: [] } satisfies AgentExecutionPlan;
 
+  if (routeDecision) {
+    contextAssembly.trace.routeDecision = routeDecision;
+  }
   contextAssembly.trace.executionPlanStatus = plan.status;
   if (plan.error) {
     contextAssembly.trace.executionPlanError = plan.error;
@@ -893,12 +963,40 @@ export async function executeLlmAgent(
   const plannedToolNames = new Set(
     plannedToolSteps.flatMap((step) => (step.tool ? [step.tool] : []))
   );
-  const activeTools =
-    plan.status === "generated"
-      ? tools.filter((tool) => plannedToolNames.has(tool.function.name))
-      : tools;
+  if (
+    routeDecision?.mode === "plan_guided" &&
+    plan.status === "generated" &&
+    plan.steps.length === 0
+  ) {
+    contextAssembly.trace.planDeviations ??= [];
+    contextAssembly.trace.planDeviations.push({
+      round: 0,
+      toolName: null,
+      expectedTool: null,
+      reason: "route_requested_plan_but_empty_execution_plan"
+    });
+  }
+
+  const activeToolNames = (() => {
+    if (!routeDecision) {
+      return plan.status === "generated"
+        ? plannedToolNames
+        : new Set(allowedToolNames);
+    }
+
+    const names = new Set(nonControlledToolNames);
+    if (routeDecision.mode === "plan_guided" && plan.status === "generated") {
+      for (const toolName of plannedToolNames) {
+        if (isControlledToolName(toolName)) {
+          names.add(toolName);
+        }
+      }
+    }
+    return names;
+  })();
+  const activeTools = toolDefinitionsByNames(tools, activeToolNames);
   const executionAllowedTools =
-    plan.status === "generated"
+    plan.status === "generated" || routeDecision
       ? new Set(activeTools.map((tool) => tool.function.name))
       : input.allowedTools;
 
@@ -974,6 +1072,181 @@ export async function executeLlmAgent(
     return new AgentExecutionError(message, JSON.stringify(contextAssembly.trace));
   }
 
+  const searchResultFetchCandidates = new Map<
+    string,
+    { query: string; rank: number; title: string; url: string }
+  >();
+  let searchQueryCount = 0;
+  let fetchUrlCount = 0;
+
+  function recordGuardrailEvent(input: {
+    toolName: string;
+    action: "allow" | "reject_content" | "throw_exception";
+    reason: string;
+    redactedArguments: Record<string, unknown>;
+  }) {
+    contextAssembly.trace.guardrailEvents ??= [];
+    contextAssembly.trace.guardrailEvents.push(input);
+  }
+
+  async function blockedControlledToolResult(details: {
+    toolName: ControlledToolName;
+    reason: string;
+    redactedArguments: Record<string, unknown>;
+    status: "failed" | "succeeded";
+  }): Promise<AgentToolResult> {
+    const result: AgentToolResult = {
+      responseText: `受控外部工具调用已被拦截：${details.reason}`,
+      toolName: details.toolName,
+      riskLevel: "external_send",
+      input: details.redactedArguments,
+      output: { blocked: true, reason: details.reason }
+    };
+    await recordToolCall({
+      runtime: input.runtime,
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      result,
+      status: details.status,
+      error: details.status === "failed" ? details.reason : null
+    });
+    return result;
+  }
+
+  function validateControlledToolCall(details: {
+    toolName: string;
+    args: Record<string, unknown>;
+  }):
+    | { action: "allow"; args: Record<string, unknown>; reason: string }
+    | {
+        action: "reject_content" | "throw_exception";
+        reason: string;
+        redactedArguments: Record<string, unknown>;
+      } {
+    if (!isControlledToolName(details.toolName)) {
+      return { action: "allow", args: details.args, reason: "non-controlled tool" };
+    }
+
+    const redactedArguments: Record<string, unknown> = { ...details.args };
+    const decision = routeDecision;
+    if (!decision) {
+      return { action: "allow", args: details.args, reason: "legacy route allowed" };
+    }
+    if (decision.mode !== "plan_guided") {
+      return {
+        action: "reject_content",
+        reason: "controlled_tool_not_authorized",
+        redactedArguments
+      };
+    }
+
+    if (!decision.candidateTools.includes(details.toolName)) {
+      return {
+        action: "reject_content",
+        reason: "controlled_tool_not_authorized",
+        redactedArguments
+      };
+    }
+
+    if (details.toolName === "web_search") {
+      const query = stringArg(details.args, "query");
+      redactedArguments.query = decision.searchPolicy.forbiddenTerms.reduce(
+        (value, term) => value.replaceAll(term, "[redacted]"),
+        query
+      );
+      if (searchQueryCount >= decision.searchPolicy.maxQueries) {
+        return {
+          action: "reject_content",
+          reason: "query_not_allowed",
+          redactedArguments
+        };
+      }
+      const leakedTerm = decision.searchPolicy.forbiddenTerms.find((term) =>
+        query.includes(term)
+      );
+      if (leakedTerm) {
+        redactedArguments.query = String(redactedArguments.query).replaceAll(
+          leakedTerm,
+          "[redacted]"
+        );
+        return {
+          action: "throw_exception",
+          reason: "query_not_allowed",
+          redactedArguments
+        };
+      }
+      if (!query.trim()) {
+        return {
+          action: "reject_content",
+          reason: "query_not_allowed",
+          redactedArguments
+        };
+      }
+      return { action: "allow", args: details.args, reason: "query_allowed" };
+    }
+
+    const rawUrl = stringArg(details.args, "url");
+    redactedArguments.url = rawUrl;
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return {
+        action: "throw_exception",
+        reason: "url_not_allowed",
+        redactedArguments
+      };
+    }
+
+    const normalizedUrl = normalizeExternalUrl(rawUrl);
+    if (!normalizedUrl) {
+      return {
+        action: "throw_exception",
+        reason: "url_not_allowed",
+        redactedArguments
+      };
+    }
+    if (isPrivateOrLocalHost(parsed.hostname)) {
+      return {
+        action: "throw_exception",
+        reason: "private_network_url_blocked",
+        redactedArguments
+      };
+    }
+    if (fetchUrlCount >= decision.fetchPolicy.maxUrls) {
+      return {
+        action: "reject_content",
+        reason: "url_not_allowed",
+        redactedArguments
+      };
+    }
+
+    const explicitAllowed = decision.fetchPolicy.explicitAllowedUrls.some(
+      (url) => normalizeExternalUrl(url) === normalizedUrl
+    );
+    const searchCandidate = searchResultFetchCandidates.get(normalizedUrl);
+    if (
+      explicitAllowed ||
+      (decision.fetchPolicy.allowSearchResultUrls && searchCandidate)
+    ) {
+      return {
+        action: "allow",
+        args: { ...details.args, url: normalizedUrl },
+        reason: explicitAllowed
+          ? "url_allowed"
+          : "search_result_url_allowed_for_run"
+      };
+    }
+
+    return {
+      action: "reject_content",
+      reason: decision.fetchPolicy.allowSearchResultUrls
+        ? "search_result_url_not_allowed"
+        : "url_not_allowed",
+      redactedArguments
+    };
+  }
+
   let planInstruction = "";
   if (plan.status === "generated" && plan.steps.length > 0) {
     planInstruction = [
@@ -1026,6 +1299,18 @@ export async function executeLlmAgent(
     });
 
     if (completion.toolCalls.length === 0) {
+      if (plan.status === "generated") {
+        for (const remaining of plannedToolSteps.slice(nextPlannedToolIndex)) {
+          contextAssembly.trace.planDeviations ??= [];
+          contextAssembly.trace.planDeviations.push({
+            round,
+            toolName: null,
+            expectedTool: remaining.tool ?? null,
+            reason: "planned_tool_not_used"
+          });
+        }
+      }
+
       let responseText = completion.content || "我暂时没有生成有效回复。";
 
       // Trigger heuristics for post-response reflection
@@ -1117,19 +1402,125 @@ export async function executeLlmAgent(
 
     for (const toolCall of completion.toolCalls) {
       const toolCallAllowedByPlan = recordActualToolCall(round, toolCall.function.name);
+      const toolArgs = safeJson(toolCall.function.arguments);
+      const controlledTool = isControlledToolName(toolCall.function.name);
+      const guardrail = controlledTool
+        ? validateControlledToolCall({
+            toolName: toolCall.function.name,
+            args: toolArgs
+          })
+        : { action: "allow" as const, args: toolArgs, reason: "non-controlled tool" };
       let toolResult: AgentToolResult;
       try {
-        toolResult = await executeAgentTool({
-          runId: input.runId,
-          ownerTgUserId: input.ownerTgUserId,
-          toolName: toolCall.function.name,
-          args: safeJson(toolCall.function.arguments),
-          runtime: input.runtime,
-          allowedTools:
-            plan.status === "generated" && !toolCallAllowedByPlan
-              ? new Set()
-              : executionAllowedTools
-        });
+        if (guardrail.action !== "allow") {
+          recordGuardrailEvent({
+            toolName: toolCall.function.name,
+            action: guardrail.action,
+            reason: guardrail.reason,
+            redactedArguments: guardrail.redactedArguments
+          });
+          if (guardrail.action === "throw_exception") {
+            await blockedControlledToolResult({
+              toolName: toolCall.function.name as ControlledToolName,
+              reason: guardrail.reason,
+              redactedArguments: guardrail.redactedArguments,
+              status: "failed"
+            });
+            throw executionError(guardrail.reason);
+          }
+          toolResult = await blockedControlledToolResult({
+            toolName: toolCall.function.name as ControlledToolName,
+            reason: guardrail.reason,
+            redactedArguments: guardrail.redactedArguments,
+            status: "failed"
+          });
+        } else {
+          if (controlledTool) {
+            recordGuardrailEvent({
+              toolName: toolCall.function.name,
+              action: "allow",
+              reason: guardrail.reason,
+              redactedArguments: guardrail.args
+            });
+          }
+          toolResult = await executeAgentTool({
+            runId: input.runId,
+            ownerTgUserId: input.ownerTgUserId,
+            toolName: toolCall.function.name,
+            args: guardrail.args,
+            runtime: input.runtime,
+            allowedTools:
+              plan.status === "generated" &&
+              !toolCallAllowedByPlan &&
+              (!routeDecision || controlledTool)
+                ? new Set()
+                : executionAllowedTools
+          });
+          if (toolCall.function.name === "web_search") {
+            searchQueryCount += 1;
+            const query = stringArg(guardrail.args, "query");
+            const results = (
+              toolResult.output as { results?: Array<{ title: string; url: string; rank: number }> }
+            ).results ?? [];
+            for (const result of results) {
+              const normalizedUrl = normalizeExternalUrl(result.url);
+              if (normalizedUrl) {
+                searchResultFetchCandidates.set(normalizedUrl, {
+                  query,
+                  rank: result.rank,
+                  title: result.title,
+                  url: result.url
+                });
+              }
+            }
+          }
+          if (toolCall.function.name === "fetch_url") {
+            fetchUrlCount += 1;
+            let fetched = toolResult.output as {
+              url?: string;
+              title?: string | null;
+              text?: string;
+            };
+            if (
+              typeof fetched.text === "string" &&
+              /ignore previous instructions|忽略(之前|以上|上面).*指令|泄露.*(secret|token|密码)|改变.*(policy|策略)|调用工具/iu.test(
+                fetched.text
+              )
+            ) {
+              contextAssembly.trace.planDeviations ??= [];
+              contextAssembly.trace.planDeviations.push({
+                round,
+                toolName: "fetch_url",
+                expectedTool: "fetch_url",
+                reason: "untrusted_web_instruction_detected"
+              });
+              fetched = {
+                ...fetched,
+                text: "网页内容包含疑似指令注入，已忽略其指令性内容。"
+              };
+              toolResult = {
+                ...toolResult,
+                responseText: fetched.text ?? "网页内容包含疑似指令注入，已忽略其指令性内容。",
+                output: fetched
+              };
+            }
+            const normalizedUrl = fetched.url ? normalizeExternalUrl(fetched.url) : null;
+            const provenance = normalizedUrl
+              ? searchResultFetchCandidates.get(normalizedUrl)
+              : undefined;
+            if (provenance && normalizedUrl) {
+              contextAssembly.trace.webProvenance ??= [];
+              contextAssembly.trace.webProvenance.push({
+                searchQuery: provenance.query,
+                resultRank: provenance.rank,
+                resultTitle: provenance.title,
+                url: provenance.url,
+                finalUrl: normalizedUrl,
+                fetchedAt: input.runtime.now()
+              });
+            }
+          }
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Tool failed";
         throw executionError(message);

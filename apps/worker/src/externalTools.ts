@@ -166,11 +166,24 @@ export function createUrlFetcher(input: {
       const response = await fetcher(parsed.toString(), {
         headers: {
           Accept: "text/html,text/plain,application/xhtml+xml"
-        }
+        },
+        redirect: "manual"
       });
+
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error("fetch_url redirect_url_not_allowed");
+      }
 
       if (!response.ok) {
         throw new Error(`fetch_url returned ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (
+        contentType &&
+        !/text\/html|text\/plain|application\/xhtml\+xml/i.test(contentType)
+      ) {
+        throw new Error("fetch_url unsupported content type");
       }
 
       const { text, bytesRead } = await readLimitedText({

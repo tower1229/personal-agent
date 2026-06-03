@@ -252,6 +252,31 @@ export const toolRiskLevels = [
 ] as const;
 export type ToolRiskLevel = (typeof toolRiskLevels)[number];
 
+export const controlledToolNames = ["web_search", "fetch_url"] as const;
+export type ControlledToolName = (typeof controlledToolNames)[number];
+
+export const plannerRouteModes = ["none", "plan_guided", "ask_user"] as const;
+export type PlannerRouteMode = (typeof plannerRouteModes)[number];
+
+export const plannerToolActionRisks = ["none", "external_read"] as const;
+export type PlannerToolActionRisk =
+  (typeof plannerToolActionRisks)[number];
+
+export const plannerFreshnessRisks = ["low", "medium", "high"] as const;
+export type PlannerFreshnessRisk = (typeof plannerFreshnessRisks)[number];
+
+export const plannerPrivacyRisks = ["low", "medium", "high"] as const;
+export type PlannerPrivacyRisk = (typeof plannerPrivacyRisks)[number];
+
+export const pendingPlannerRouteClarificationOptions = [
+  "allow_web",
+  "no_web",
+  "provide_url",
+  "clarify_target"
+] as const;
+export type PendingPlannerRouteClarificationOption =
+  (typeof pendingPlannerRouteClarificationOptions)[number];
+
 export const skillStatuses = [
   "draft",
   "published",

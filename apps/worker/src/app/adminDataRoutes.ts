@@ -60,6 +60,7 @@ import {
   toAdminApproval,
   toAdminLongTask,
   toAdminMemory,
+  toAdminPlannerRouteDecision,
   toAdminRun,
   toAdminSchedule,
   toAdminScheduleExecution,
@@ -124,6 +125,7 @@ export function registerAdminDataRoutes(
     const [
       toolCalls,
       skillRouteDecision,
+      plannerRouteDecision,
       skillRun,
       longTask,
       scheduleExecution
@@ -133,6 +135,10 @@ export function registerAdminDataRoutes(
         runId: run.id
       }),
       repo.getSkillRouteDecisionForRun({
+        ownerTgUserId: authenticatedOwnerId,
+        runId: run.id
+      }),
+      repo.getPlannerRouteDecisionForRun({
         ownerTgUserId: authenticatedOwnerId,
         runId: run.id
       }),
@@ -156,6 +162,9 @@ export function registerAdminDataRoutes(
         toolCalls: toolCalls.map(toAdminToolCall),
         skillRouteDecision: skillRouteDecision
           ? toAdminSkillRouteDecision(skillRouteDecision)
+          : null,
+        plannerRouteDecision: plannerRouteDecision
+          ? toAdminPlannerRouteDecision(plannerRouteDecision)
           : null,
         skillRun: skillRun ? toAdminSkillRun(skillRun) : null,
         longTask: longTask ? toAdminLongTask(longTask) : null,

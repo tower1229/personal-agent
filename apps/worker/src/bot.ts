@@ -35,6 +35,7 @@ import {
 import { type TelegramWebhookUpdate } from "@personal-agent/shared";
 import { type RunnableSkillRecord } from "./repositories.js";
 import { allowedBuiltInToolsForSkill } from "./skillPackages.js";
+import { decidePlannerRoute } from "./plannerRouteDecision.js";
 
 export interface BotRuntime extends AgentRuntime {
   repositories: AgentRepositories;
@@ -106,6 +107,7 @@ const APPROVAL_PATTERN = /^(确认)\s+([A-Za-z0-9-]+)$|^(取消)\s+(\d{6})$/u;
 const EXPLICIT_SKILL_PATTERN = /^\/skill\s+([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/u;
 
 const APPROVAL_CODE_ATTEMPTS = 3;
+const PLANNER_ROUTE_CLARIFICATION_TTL_MS = 10 * 60 * 1000;
 
 export function normalizeMemoryContent(content: string): string {
   return content.trim().toLocaleLowerCase();
@@ -114,6 +116,19 @@ export function normalizeMemoryContent(content: string): string {
 function trimRequired(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function parsePlannerClarificationReply(
+  text: string
+): "allow_web" | "no_web" | null {
+  const trimmed = text.trim().toLowerCase();
+  if (/^(是|确认|可以|联网|允许|搜索|用网络|allow|yes|y)$/iu.test(trimmed)) {
+    return "allow_web";
+  }
+  if (/^(否|不|不要|不用|不联网|只基于已有|no|n)$/iu.test(trimmed)) {
+    return "no_web";
+  }
+  return null;
 }
 
 function parsePersonalModelClaimInput(input: string): {
@@ -1009,6 +1024,59 @@ async function executeCommandOrSkillOrLlmFallback(input: {
   text: string;
   runtime: BotRuntime;
 }): Promise<CommandResult> {
+  const pendingPlannerClarification =
+    await input.runtime.repositories.getPendingPlannerRouteClarification(
+      input.ownerTgUserId,
+      input.runtime.now()
+    );
+  const plannerClarificationReply = pendingPlannerClarification
+    ? parsePlannerClarificationReply(input.text)
+    : null;
+  if (pendingPlannerClarification && plannerClarificationReply) {
+    await input.runtime.repositories.deletePendingPlannerRouteClarification(
+      pendingPlannerClarification.id
+    );
+    const previousRun = await input.runtime.repositories.getRun({
+      ownerTgUserId: input.ownerTgUserId,
+      id: pendingPlannerClarification.runId
+    });
+    const originalText = previousRun?.messageText ?? input.text;
+    const plannerRoute = await decidePlannerRoute({
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      text: originalText,
+      runtime: input.runtime,
+      confirmedExternalRead: plannerClarificationReply
+    });
+    if (plannerRoute.decision.mode === "ask_user") {
+      return {
+        responseText:
+          plannerRoute.decision.question ?? pendingPlannerClarification.question,
+        toolName: "planner_route_ask_user",
+        riskLevel: "read",
+        input: {
+          mode: plannerRoute.decision.mode,
+          inputTextRedacted: plannerRoute.inputTextRedacted
+        },
+        output: {
+          pending: false,
+          policyVersion: plannerRoute.decision.policyVersion,
+          reason: plannerRoute.decision.reason
+        }
+      };
+    }
+    return agentResultToCommandResult(
+      await executeLlmAgent({
+        runId: input.runId,
+        ownerTgUserId: input.ownerTgUserId,
+        inputText: originalText,
+        runtime: input.runtime,
+        plannerRouteDecision: plannerRoute.decision,
+        maxToolRounds: input.runtime.maxToolRounds
+      })
+    );
+  }
+
   const commandResult = await executeCommand({
     runId: input.runId,
     ownerTgUserId: input.ownerTgUserId,
@@ -1074,12 +1142,48 @@ async function executeCommandOrSkillOrLlmFallback(input: {
     };
   }
 
+  const plannerRoute = await decidePlannerRoute({
+    runId: input.runId,
+    ownerTgUserId: input.ownerTgUserId,
+    text: input.text,
+    runtime: input.runtime
+  });
+  if (plannerRoute.decision.mode === "ask_user") {
+    const question =
+      plannerRoute.decision.question ??
+      "你是希望我联网搜索最新资料，还是只基于已有知识解释？";
+    await input.runtime.repositories.createPendingPlannerRouteClarification({
+      id: input.runtime.generateId(),
+      runId: input.runId,
+      ownerTgUserId: input.ownerTgUserId,
+      question,
+      options: ["allow_web", "no_web", "provide_url", "clarify_target"],
+      expiresAt: input.runtime.now() + PLANNER_ROUTE_CLARIFICATION_TTL_MS,
+      createdAt: input.runtime.now()
+    });
+    return {
+      responseText: question,
+      toolName: "planner_route_ask_user",
+      riskLevel: "read",
+      input: {
+        mode: plannerRoute.decision.mode,
+        inputTextRedacted: plannerRoute.inputTextRedacted
+      },
+      output: {
+        pending: true,
+        policyVersion: plannerRoute.decision.policyVersion,
+        reason: plannerRoute.decision.reason
+      }
+    };
+  }
+
   return agentResultToCommandResult(
     await executeLlmAgent({
       runId: input.runId,
       ownerTgUserId: input.ownerTgUserId,
       inputText: input.text,
       runtime: input.runtime,
+      plannerRouteDecision: plannerRoute.decision,
       maxToolRounds: input.runtime.maxToolRounds
     })
   );

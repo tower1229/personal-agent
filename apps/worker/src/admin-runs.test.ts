@@ -87,6 +87,39 @@ describe("admin data and run traces", () => {
       createdAt: 1015,
       updatedAt: 1016
     });
+    repositories.plannerRouteDecisions.push({
+      id: "planner-route-1",
+      runId,
+      ownerTgUserId: 1229,
+      policyVersion: "planner-route-v1",
+      inputTextRedacted: "Trace 详情",
+      inputHash: "hash",
+      mode: "none",
+      confidence: 0.95,
+      reason: "test planner route",
+      candidateTools: [],
+      toolActionRisk: "none",
+      freshnessRisk: "low",
+      privacyRisk: "low",
+      confirmationRequired: false,
+      searchPolicy: {
+        allowedTopics: [],
+        suggestedQueries: [],
+        forbiddenTerms: [],
+        redactionRequired: false,
+        maxQueries: 0
+      },
+      fetchPolicy: {
+        explicitAllowedUrls: [],
+        allowSearchResultUrls: false,
+        allowedDomains: [],
+        maxUrls: 0
+      },
+      signals: ["test"],
+      classifierUsed: false,
+      question: null,
+      createdAt: 1017
+    });
 
     const response = await app.request(
       `/api/admin/runs/${runId}`,
@@ -115,6 +148,11 @@ describe("admin data and run traces", () => {
       skillRouteDecision: {
         id: "route-1",
         runId
+      },
+      plannerRouteDecision: {
+        id: "planner-route-1",
+        runId,
+        mode: "none"
       },
       skillRun: {
         id: "skill-run-1",

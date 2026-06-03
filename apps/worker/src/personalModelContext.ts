@@ -4,7 +4,10 @@ import {
   type PersonalModelUnderstandingGapRecord,
   type AgentRepositories
 } from "./repositories.js";
-import { type PersonalModelScenario } from "@personal-agent/shared";
+import {
+  type PersonalModelScenario,
+  type PlannerRouteDecision
+} from "@personal-agent/shared";
 import { type WorkerEnv } from "./types.js";
 import { retrieveHybridChunks } from "./personalModelRetrieval.js";
 
@@ -57,6 +60,7 @@ export interface AssembleContextTrace {
   selectedChunkIds: string[];
   selectedGapIds: string[];
   retrievalTrace?: any;
+  routeDecision?: PlannerRouteDecision;
   executionPlanStatus?: "not_requested" | "generated" | "invalid";
   executionPlanError?: string;
   executionPlan?: {
@@ -73,9 +77,23 @@ export interface AssembleContextTrace {
   }[];
   planDeviations?: {
     round: number;
-    toolName: string;
+    toolName: string | null;
     expectedTool: string | null;
     reason: string;
+  }[];
+  guardrailEvents?: {
+    toolName: string;
+    action: "allow" | "reject_content" | "throw_exception";
+    reason: string;
+    redactedArguments: Record<string, unknown>;
+  }[];
+  webProvenance?: {
+    searchQuery: string;
+    resultRank: number;
+    resultTitle: string;
+    url: string;
+    finalUrl: string;
+    fetchedAt: number;
   }[];
 }
 

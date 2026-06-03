@@ -34,6 +34,18 @@ import {
   type RunFeedbackType
 } from "@personal-agent/shared";
 import {
+  plannerFetchPolicySchema,
+  plannerSearchPolicySchema,
+  type ControlledToolName,
+  type PendingPlannerRouteClarificationOption,
+  type PlannerFetchPolicy,
+  type PlannerFreshnessRisk,
+  type PlannerPrivacyRisk,
+  type PlannerRouteMode,
+  type PlannerSearchPolicy,
+  type PlannerToolActionRisk
+} from "@personal-agent/shared";
+import {
   type AgentRepositories,
   type ApprovalRequestRecord,
   type LongTaskEventRecord,
@@ -48,6 +60,8 @@ import {
   type PersonalModelSourceChunkRecord,
   type PersonalModelSourceDocumentRecord,
   type RunnableSkillRecord,
+  type PendingPlannerRouteClarificationRecord,
+  type PlannerRouteDecisionRecord,
   type RunRecord,
   type SkillRecord,
   type SkillRouteDecisionRecord,
@@ -284,11 +298,46 @@ export interface SkillRouteDecisionRow {
   created_at: number;
 }
 
+export interface PlannerRouteDecisionRow {
+  id: string;
+  run_id: string;
+  owner_tg_user_id: number;
+  policy_version: string;
+  input_text_redacted: string;
+  input_hash: string;
+  mode: PlannerRouteMode;
+  confidence: number;
+  reason: string;
+  candidate_tools_json: string;
+  tool_action_risk: PlannerToolActionRisk;
+  freshness_risk: PlannerFreshnessRisk;
+  privacy_risk: PlannerPrivacyRisk;
+  confirmation_required: number;
+  search_policy_json: string;
+  fetch_policy_json: string;
+  signals_json: string;
+  classifier_used: number;
+  question: string | null;
+  created_at: number;
+}
+
+export interface PendingPlannerRouteClarificationRow {
+  id: string;
+  run_id: string;
+  owner_tg_user_id: number;
+  question: string;
+  options_json: string;
+  expires_at: number;
+  created_at: number;
+}
+
 export interface SkillIntentRow {
   id: string;
   owner_tg_user_id: number;
+  skill_id: string | null;
   skill_name: string;
   intent_text: string;
+  status: "active" | "disabled";
   created_at: number;
   updated_at: number;
 }
@@ -600,6 +649,40 @@ function parseSkillValidation(value: string): SkillValidationResult {
   return skillValidationResultSchema.parse(JSON.parse(value));
 }
 
+function parseStringArray(value: string): string[] {
+  const parsed = JSON.parse(value) as unknown;
+  return Array.isArray(parsed)
+    ? parsed.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function parseControlledToolArray(value: string): ControlledToolName[] {
+  return parseStringArray(value).filter(
+    (item): item is ControlledToolName =>
+      item === "web_search" || item === "fetch_url"
+  );
+}
+
+function parsePendingClarificationOptions(
+  value: string
+): PendingPlannerRouteClarificationOption[] {
+  return parseStringArray(value).filter(
+    (item): item is PendingPlannerRouteClarificationOption =>
+      item === "allow_web" ||
+      item === "no_web" ||
+      item === "provide_url" ||
+      item === "clarify_target"
+  );
+}
+
+function parsePlannerSearchPolicy(value: string): PlannerSearchPolicy {
+  return plannerSearchPolicySchema.parse(JSON.parse(value));
+}
+
+function parsePlannerFetchPolicy(value: string): PlannerFetchPolicy {
+  return plannerFetchPolicySchema.parse(JSON.parse(value));
+}
+
 export function toSkill(row: SkillRow): SkillRecord {
   return {
     id: row.id,
@@ -658,12 +741,55 @@ export function toSkillRouteDecision(
   };
 }
 
+export function toPlannerRouteDecision(
+  row: PlannerRouteDecisionRow
+): PlannerRouteDecisionRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    policyVersion: row.policy_version,
+    inputTextRedacted: row.input_text_redacted,
+    inputHash: row.input_hash,
+    mode: row.mode,
+    confidence: row.confidence,
+    reason: row.reason,
+    candidateTools: parseControlledToolArray(row.candidate_tools_json),
+    toolActionRisk: row.tool_action_risk,
+    freshnessRisk: row.freshness_risk,
+    privacyRisk: row.privacy_risk,
+    confirmationRequired: Boolean(row.confirmation_required),
+    searchPolicy: parsePlannerSearchPolicy(row.search_policy_json),
+    fetchPolicy: parsePlannerFetchPolicy(row.fetch_policy_json),
+    signals: parseStringArray(row.signals_json),
+    classifierUsed: Boolean(row.classifier_used),
+    question: row.question,
+    createdAt: row.created_at
+  };
+}
+
+export function toPendingPlannerRouteClarification(
+  row: PendingPlannerRouteClarificationRow
+): PendingPlannerRouteClarificationRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    ownerTgUserId: row.owner_tg_user_id,
+    question: row.question,
+    options: parsePendingClarificationOptions(row.options_json),
+    expiresAt: row.expires_at,
+    createdAt: row.created_at
+  };
+}
+
 export function toSkillIntent(row: SkillIntentRow): SkillIntentRecord {
   return {
     id: row.id,
     ownerTgUserId: row.owner_tg_user_id,
+    skillId: row.skill_id,
     skillName: row.skill_name,
     intentText: row.intent_text,
+    status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

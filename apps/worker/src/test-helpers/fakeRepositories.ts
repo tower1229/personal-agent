@@ -11,6 +11,7 @@ import {
 } from "../llm.js";
 import {
   type AgentRepositories,
+  type AdminAssistRunRecord,
   type ApprovalRequestRecord,
   type LongTaskEventRecord,
   type LongTaskRecord,
@@ -23,6 +24,8 @@ import {
   type PersonalModelUnderstandingGapRecord,
   type PersonalModelSourceChunkRecord,
   type PersonalModelSourceDocumentRecord,
+  type PendingPlannerRouteClarificationRecord,
+  type PlannerRouteDecisionRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
   type ScheduleRecord,
@@ -115,6 +118,8 @@ export function createFakeRepositories(): AgentRepositories & {
   skills: SkillRecord[];
   skillVersions: SkillVersionRecord[];
   skillRouteDecisions: SkillRouteDecisionRecord[];
+  plannerRouteDecisions: PlannerRouteDecisionRecord[];
+  pendingPlannerRouteClarifications: PendingPlannerRouteClarificationRecord[];
   skillRuns: SkillRunRecord[];
   longTasks: LongTaskRecord[];
   longTaskSteps: LongTaskStepRecord[];
@@ -124,6 +129,7 @@ export function createFakeRepositories(): AgentRepositories & {
   userProfiles: UserProfileRecord[];
   runFeedbacks: RunFeedbackRecord[];
   runEvaluations: RunEvaluationRecord[];
+  adminAssistRuns: AdminAssistRunRecord[];
 } {
   const state = {
     runs: [] as RunRecord[],
@@ -142,6 +148,8 @@ export function createFakeRepositories(): AgentRepositories & {
     skillIntents: [] as SkillIntentRecord[],
     skillVersions: [] as SkillVersionRecord[],
     skillRouteDecisions: [] as SkillRouteDecisionRecord[],
+    plannerRouteDecisions: [] as PlannerRouteDecisionRecord[],
+    pendingPlannerRouteClarifications: [] as PendingPlannerRouteClarificationRecord[],
     skillRuns: [] as SkillRunRecord[],
     longTasks: [] as LongTaskRecord[],
     longTaskSteps: [] as LongTaskStepRecord[],
@@ -151,6 +159,7 @@ export function createFakeRepositories(): AgentRepositories & {
     userProfiles: [] as UserProfileRecord[],
     runFeedbacks: [] as RunFeedbackRecord[],
     runEvaluations: [] as RunEvaluationRecord[],
+    adminAssistRuns: [] as AdminAssistRunRecord[],
     nextTodoId: 1,
     nextMemoryId: 1
   };
@@ -204,6 +213,12 @@ export function createFakeRepositories(): AgentRepositories & {
     get skillRouteDecisions() {
       return state.skillRouteDecisions;
     },
+    get plannerRouteDecisions() {
+      return state.plannerRouteDecisions;
+    },
+    get pendingPlannerRouteClarifications() {
+      return state.pendingPlannerRouteClarifications;
+    },
     get skillRuns() {
       return state.skillRuns;
     },
@@ -227,6 +242,9 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     get runEvaluations() {
       return state.runEvaluations;
+    },
+    get adminAssistRuns() {
+      return state.adminAssistRuns;
     },
     async createRun(input) {
       const run: RunRecord = {
@@ -298,6 +316,35 @@ export function createFakeRepositories(): AgentRepositories & {
         .filter((ev) => ev.ownerTgUserId === input.ownerTgUserId)
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(input.offset, input.offset + input.limit);
+    },
+    async createAdminAssistRun(input) {
+      state.adminAssistRuns.push(input);
+      return input;
+    },
+    async updateAdminAssistRun(input) {
+      const run = state.adminAssistRuns.find(
+        (item) => item.id === input.id && item.ownerTgUserId === input.ownerTgUserId
+      );
+      if (!run) {
+        return;
+      }
+      run.status = input.status;
+      if (input.draftJson !== undefined) {
+        run.draftJson = input.draftJson;
+      }
+      if (input.warningsJson !== undefined) {
+        run.warningsJson = input.warningsJson;
+      }
+      if (input.completedAt !== undefined) {
+        run.completedAt = input.completedAt;
+      }
+    },
+    async getAdminAssistRun(input) {
+      return (
+        state.adminAssistRuns.find(
+          (run) => run.id === input.id && run.ownerTgUserId === input.ownerTgUserId
+        ) ?? null
+      );
     },
     async createTodo(input) {
       const todo: TodoRecord = {
@@ -951,6 +998,44 @@ export function createFakeRepositories(): AgentRepositories & {
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
     },
+    async createPlannerRouteDecision(input) {
+      state.plannerRouteDecisions.push(input);
+      return input;
+    },
+    async getPlannerRouteDecisionForRun(input) {
+      return (
+        state.plannerRouteDecisions
+          .filter(
+            (decision) =>
+              decision.ownerTgUserId === input.ownerTgUserId &&
+              decision.runId === input.runId
+          )
+          .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+      );
+    },
+    async createPendingPlannerRouteClarification(input) {
+      state.pendingPlannerRouteClarifications.push(input);
+      return input;
+    },
+    async getPendingPlannerRouteClarification(ownerTgUserId, now) {
+      return (
+        state.pendingPlannerRouteClarifications
+          .filter(
+            (clarification) =>
+              clarification.ownerTgUserId === ownerTgUserId &&
+              clarification.expiresAt > now
+          )
+          .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+      );
+    },
+    async deletePendingPlannerRouteClarification(id) {
+      const index = state.pendingPlannerRouteClarifications.findIndex(
+        (clarification) => clarification.id === id
+      );
+      if (index >= 0) {
+        state.pendingPlannerRouteClarifications.splice(index, 1);
+      }
+    },
     async createSkillRun(input) {
       state.skillRuns.push(input);
       return input;
@@ -968,6 +1053,9 @@ export function createFakeRepositories(): AgentRepositories & {
     async createSkillIntent(input) {
       state.skillIntents.push(input);
       return input;
+    },
+    async createSkillIntentsBatch(inputs) {
+      state.skillIntents.push(...inputs);
     },
     async listSkillIntents() {
       return state.skillIntents;
@@ -1364,7 +1452,7 @@ export function createFakeLlmClient(
           };
         }
         const text = latest?.content ?? "";
-        if (text.includes("搜索网页")) {
+        if (/搜索网页|联网|查一下|查找|搜索/u.test(text)) {
           return {
             content: JSON.stringify([
               {
@@ -1377,7 +1465,7 @@ export function createFakeLlmClient(
             toolCalls: []
           };
         }
-        if (text.includes("读取网页")) {
+        if (/读取|抓取网页/u.test(text)) {
           return {
             content: JSON.stringify([
               {
@@ -1495,7 +1583,7 @@ export function createFakeLlmClient(
           ]
         };
       }
-      if (text.includes("搜索网页")) {
+      if (/搜索网页|联网|查一下|查找|搜索/u.test(text)) {
         return {
           content: "",
           toolCalls: [
@@ -1510,7 +1598,8 @@ export function createFakeLlmClient(
           ]
         };
       }
-      if (text.includes("读取网页")) {
+      if (/读取|抓取网页/u.test(text)) {
+        const url = text.match(/\bhttps?:\/\/[^\s]+/u)?.[0] ?? "https://example.com";
         return {
           content: "",
           toolCalls: [
@@ -1519,7 +1608,7 @@ export function createFakeLlmClient(
               type: "function",
               function: {
                 name: "fetch_url",
-                arguments: JSON.stringify({ url: "https://example.com" })
+                arguments: JSON.stringify({ url })
               }
             }
           ]
@@ -1560,7 +1649,7 @@ export function createFakeSearchClient(options: { fail?: boolean } = {}):
   };
 }
 
-export function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boolean } = {}):
+export function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boolean; text?: string } = {}):
   UrlFetcher & { urls: string[] } {
   const urls: string[] = [];
 
@@ -1577,7 +1666,7 @@ export function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boole
       return {
         url: input.url,
         title: "Example",
-        text: "Example page content",
+        text: options.text ?? "Example page content",
         bytesRead: 20
       };
     }
@@ -1611,6 +1700,7 @@ export function createTestApp(
     plannerContent?: string;
     searchFails?: boolean;
     fetchFails?: boolean;
+    fetchText?: string;
     executionPlanContent?: string;
     semanticConfidence?: number;
   } = {}
@@ -1627,7 +1717,10 @@ export function createTestApp(
     semanticConfidence: options.semanticConfidence
   });
   const searchClient = createFakeSearchClient({ fail: options.searchFails });
-  const urlFetcher = createFakeUrlFetcher({ fail: options.fetchFails });
+  const urlFetcher = createFakeUrlFetcher({
+    fail: options.fetchFails,
+    text: options.fetchText
+  });
   let id = 0;
   const app = createWorkerApp({
     repositories,

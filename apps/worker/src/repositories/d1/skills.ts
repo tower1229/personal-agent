@@ -83,6 +83,7 @@ export function createD1SkillRepositories(
   | "listSkillRouteDecisions"
   | "getSkillRouteDecisionForRun"
   | "createSkillIntent"
+  | "createSkillIntentsBatch"
   | "deleteSkillIntent"
   | "listSkillIntents"
   | "createSkillRun"
@@ -652,15 +653,17 @@ export function createD1SkillRepositories(
       const row = await db
         .prepare(
           `INSERT INTO skill_intents (
-            id, owner_tg_user_id, skill_name, intent_text, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?)
+            id, owner_tg_user_id, skill_id, skill_name, intent_text, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           RETURNING *`
         )
         .bind(
           input.id,
           input.ownerTgUserId,
+          input.skillId,
           input.skillName,
           input.intentText,
+          input.status,
           input.createdAt,
           input.updatedAt
         )
@@ -671,6 +674,28 @@ export function createD1SkillRepositories(
       }
 
       return toSkillIntent(row);
+    },
+
+    async createSkillIntentsBatch(inputs) {
+      if (inputs.length === 0) return;
+      const stmt = db.prepare(
+        `INSERT INTO skill_intents (
+            id, owner_tg_user_id, skill_id, skill_name, intent_text, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      const batch = inputs.map((input) =>
+        stmt.bind(
+          input.id,
+          input.ownerTgUserId,
+          input.skillId,
+          input.skillName,
+          input.intentText,
+          input.status,
+          input.createdAt,
+          input.updatedAt
+        )
+      );
+      await db.batch(batch);
     },
 
     async deleteSkillIntent(input) {

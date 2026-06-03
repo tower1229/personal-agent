@@ -641,3 +641,29 @@ export function createSkillIntent(
 export async function deleteSkillIntent(id: string): Promise<void> {
   await deleteEmpty(`/api/admin/skill-intents/${id}`);
 }
+
+import { type AdminAssistResponse, type AdminSkillRoutingExamplesBatchCreateRequest } from "@personal-agent/shared";
+
+export function generateSkillRoutingExamples(
+  skillId: string,
+  instruction: string
+): Promise<AdminAssistResponse> {
+  return sendJson(
+    `/api/admin/skills/${skillId}/routing-examples/generate`,
+    "POST",
+    { instruction },
+    (input) => input as AdminAssistResponse
+  );
+}
+
+export function batchCreateSkillIntents(
+  skillId: string,
+  request: AdminSkillRoutingExamplesBatchCreateRequest
+): Promise<void> {
+  return sendJson(
+    `/api/admin/skills/${skillId}/routing-examples`,
+    "POST",
+    request,
+    () => undefined
+  );
+}

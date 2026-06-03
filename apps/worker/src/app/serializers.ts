@@ -11,6 +11,7 @@ import {
   type PersonalModelUnderstandingGapRecord,
   type PersonalModelSourceChunkRecord,
   type PersonalModelSourceDocumentRecord,
+  type PlannerRouteDecisionRecord,
   type RunRecord,
   type ScheduleExecutionRecord,
   type ScheduleRecord,
@@ -243,6 +244,32 @@ export function toAdminSkillRouteDecision(decision: SkillRouteDecisionRecord) {
     inputText: decision.inputText,
     reason: decision.reason,
     candidatesJson: decision.candidatesJson,
+    createdAt: decision.createdAt
+  };
+}
+
+export function toAdminPlannerRouteDecision(
+  decision: PlannerRouteDecisionRecord
+) {
+  return {
+    id: decision.id,
+    runId: decision.runId,
+    policyVersion: decision.policyVersion,
+    inputTextRedacted: decision.inputTextRedacted,
+    inputHash: decision.inputHash,
+    mode: decision.mode,
+    confidence: decision.confidence,
+    reason: decision.reason,
+    candidateTools: decision.candidateTools,
+    toolActionRisk: decision.toolActionRisk,
+    freshnessRisk: decision.freshnessRisk,
+    privacyRisk: decision.privacyRisk,
+    confirmationRequired: decision.confirmationRequired,
+    searchPolicy: decision.searchPolicy,
+    fetchPolicy: decision.fetchPolicy,
+    signals: decision.signals,
+    classifierUsed: decision.classifierUsed,
+    question: decision.question,
     createdAt: decision.createdAt
   };
 }

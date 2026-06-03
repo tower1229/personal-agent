@@ -1,5 +1,6 @@
 import {
   type ApprovalRequestStatus,
+  type ControlledToolName,
   type LongTaskStatus,
   type LongTaskStepStatus,
   type LongTaskToolPolicy,
@@ -15,6 +16,13 @@ import {
   type PersonalModelSourceType,
   type PersonalModelStatus,
   type PersonalModelUsagePolicy,
+  type PendingPlannerRouteClarificationOption,
+  type PlannerFetchPolicy,
+  type PlannerFreshnessRisk,
+  type PlannerPrivacyRisk,
+  type PlannerRouteMode,
+  type PlannerSearchPolicy,
+  type PlannerToolActionRisk,
   type RunStatus,
   type ScheduleCadence,
   type ScheduleExecutionStatus,
@@ -259,11 +267,46 @@ export interface SkillRouteDecisionRecord {
   createdAt: number;
 }
 
+export interface PlannerRouteDecisionRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  policyVersion: string;
+  inputTextRedacted: string;
+  inputHash: string;
+  mode: PlannerRouteMode;
+  confidence: number;
+  reason: string;
+  candidateTools: ControlledToolName[];
+  toolActionRisk: PlannerToolActionRisk;
+  freshnessRisk: PlannerFreshnessRisk;
+  privacyRisk: PlannerPrivacyRisk;
+  confirmationRequired: boolean;
+  searchPolicy: PlannerSearchPolicy;
+  fetchPolicy: PlannerFetchPolicy;
+  signals: string[];
+  classifierUsed: boolean;
+  question: string | null;
+  createdAt: number;
+}
+
+export interface PendingPlannerRouteClarificationRecord {
+  id: string;
+  runId: string;
+  ownerTgUserId: number;
+  question: string;
+  options: PendingPlannerRouteClarificationOption[];
+  expiresAt: number;
+  createdAt: number;
+}
+
 export interface SkillIntentRecord {
   id: string;
   ownerTgUserId: number;
+  skillId: string | null;
   skillName: string;
   intentText: string;
+  status: "active" | "disabled";
   createdAt: number;
   updatedAt: number;
 }
@@ -649,6 +692,21 @@ export interface AgentRepositories {
     ownerTgUserId: number;
     runId: string;
   }): Promise<SkillRouteDecisionRecord | null>;
+  createPlannerRouteDecision(
+    input: PlannerRouteDecisionRecord
+  ): Promise<PlannerRouteDecisionRecord>;
+  getPlannerRouteDecisionForRun(input: {
+    ownerTgUserId: number;
+    runId: string;
+  }): Promise<PlannerRouteDecisionRecord | null>;
+  createPendingPlannerRouteClarification(
+    input: PendingPlannerRouteClarificationRecord
+  ): Promise<PendingPlannerRouteClarificationRecord>;
+  getPendingPlannerRouteClarification(
+    ownerTgUserId: number,
+    now: number
+  ): Promise<PendingPlannerRouteClarificationRecord | null>;
+  deletePendingPlannerRouteClarification(id: string): Promise<void>;
   createSkillRun(input: SkillRunRecord): Promise<SkillRunRecord>;
   updateSkillRun(input: {
     id: string;
@@ -663,6 +721,7 @@ export interface AgentRepositories {
     runId: string;
   }): Promise<SkillRunRecord | null>;
   createSkillIntent(input: SkillIntentRecord): Promise<SkillIntentRecord>;
+  createSkillIntentsBatch(inputs: SkillIntentRecord[]): Promise<void>;
   deleteSkillIntent(input: { ownerTgUserId: number; id: string }): Promise<void>;
   listSkillIntents(ownerTgUserId: number): Promise<SkillIntentRecord[]>;
   createLongTask(input: LongTaskRecord): Promise<LongTaskRecord>;
@@ -780,4 +839,31 @@ export interface AgentRepositories {
     limit: number;
     offset: number;
   }): Promise<RunEvaluationRecord[]>;
+
+  createAdminAssistRun(input: AdminAssistRunRecord): Promise<AdminAssistRunRecord>;
+  updateAdminAssistRun(input: {
+    id: string;
+    ownerTgUserId: number;
+    status: "running" | "completed" | "failed" | "unapplied" | "applied" | "rejected";
+    draftJson?: string | null;
+    warningsJson?: string | null;
+    completedAt?: number | null;
+  }): Promise<void>;
+  getAdminAssistRun(input: { id: string; ownerTgUserId: number }): Promise<AdminAssistRunRecord | null>;
+}
+
+export interface AdminAssistRunRecord {
+  id: string;
+  capability: string;
+  targetType: string;
+  targetId: string;
+  status: "running" | "completed" | "failed" | "unapplied" | "applied" | "rejected";
+  model: string;
+  draftJson: string | null;
+  warningsJson: string | null;
+  promptVersion: string;
+  contextSummary: string | null;
+  ownerTgUserId: number;
+  createdAt: number;
+  completedAt: number | null;
 }

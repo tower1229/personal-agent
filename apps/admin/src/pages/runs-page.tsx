@@ -248,6 +248,9 @@ function RunTrace(props: { detail: AdminRunDetailResponse }) {
         <TraceSection title="Skill Route">
           <CodeBlock value={detail.skillRouteDecision ?? "No route decision"} />
         </TraceSection>
+        <TraceSection title="Planner Route">
+          <CodeBlock value={detail.plannerRouteDecision ?? "No planner route decision"} />
+        </TraceSection>
         <TraceSection title="Skill Run">
           <CodeBlock value={detail.skillRun ?? "No skill run"} />
         </TraceSection>

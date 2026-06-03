@@ -43,6 +43,35 @@ describe("external tool constraints", () => {
     expect(canceled).toBe(true);
   });
 
+  it("does not follow redirects for fetch_url", async () => {
+    const urlFetcher = createUrlFetcher({
+      defaultMaxBytes: 1000,
+      fetcher: async () =>
+        new Response(null, {
+          status: 302,
+          headers: { Location: "https://example.com/next" }
+        })
+    });
+
+    await expect(
+      urlFetcher.fetchUrl({ url: "https://example.com" })
+    ).rejects.toThrow("fetch_url redirect_url_not_allowed");
+  });
+
+  it("rejects non-text fetch_url responses", async () => {
+    const urlFetcher = createUrlFetcher({
+      defaultMaxBytes: 1000,
+      fetcher: async () =>
+        new Response("{}", {
+          headers: { "Content-Type": "application/json" }
+        })
+    });
+
+    await expect(
+      urlFetcher.fetchUrl({ url: "https://example.com" })
+    ).rejects.toThrow("fetch_url unsupported content type");
+  });
+
   it("ignores unsupported Telegram updates and records failed tool calls on command errors", async () => {
     const { app, repositories } = createTestApp();
     const ignored = await postWebhook(app, {

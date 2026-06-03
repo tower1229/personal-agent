@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   approvalRequestStatuses,
   builtInToolNames,
+  controlledToolNames,
   documentIndexStatuses,
   documentSourceTypes,
   evalCategories,
@@ -22,6 +23,10 @@ import {
   personalModelSourceTypes,
   personalModelStatuses,
   personalModelUsagePolicies,
+  plannerFreshnessRisks,
+  plannerPrivacyRisks,
+  plannerRouteModes,
+  plannerToolActionRisks,
   runStatuses,
   scheduleCadences,
   scheduleExecutionStatuses,
@@ -36,10 +41,57 @@ import {
 
 export const toolRiskLevelSchema = z.enum(toolRiskLevels);
 export const builtInToolNameSchema = z.enum(builtInToolNames);
+export const controlledToolNameSchema = z.enum(controlledToolNames);
+export const plannerRouteModeSchema = z.enum(plannerRouteModes);
+export const plannerToolActionRiskSchema = z.enum(plannerToolActionRisks);
+export const plannerFreshnessRiskSchema = z.enum(plannerFreshnessRisks);
+export const plannerPrivacyRiskSchema = z.enum(plannerPrivacyRisks);
 export const scheduleCadenceSchema = z.enum(scheduleCadences);
 export const longTaskStatusSchema = z.enum(longTaskStatuses);
 export const longTaskStepStatusSchema = z.enum(longTaskStepStatuses);
 export const longTaskToolPolicySchema = z.enum(longTaskToolPolicies);
+
+export const plannerSearchPolicySchema = z.object({
+  allowedTopics: z.array(z.string().min(1)),
+  suggestedQueries: z.array(z.string().min(1)),
+  forbiddenTerms: z.array(z.string().min(1)),
+  redactionRequired: z.boolean(),
+  maxQueries: z.number().int().min(0)
+});
+
+export type PlannerSearchPolicy = z.infer<
+  typeof plannerSearchPolicySchema
+>;
+
+export const plannerFetchPolicySchema = z.object({
+  explicitAllowedUrls: z.array(z.string().min(1)),
+  allowSearchResultUrls: z.boolean(),
+  allowedDomains: z.array(z.string().min(1)),
+  maxUrls: z.number().int().min(0)
+});
+
+export type PlannerFetchPolicy = z.infer<typeof plannerFetchPolicySchema>;
+
+export const plannerRouteDecisionSchema = z.object({
+  policyVersion: z.string().min(1),
+  mode: plannerRouteModeSchema,
+  confidence: z.number().min(0).max(1),
+  reason: z.string().min(1),
+  candidateTools: z.array(controlledToolNameSchema),
+  toolActionRisk: plannerToolActionRiskSchema,
+  freshnessRisk: plannerFreshnessRiskSchema,
+  privacyRisk: plannerPrivacyRiskSchema,
+  confirmationRequired: z.boolean(),
+  searchPolicy: plannerSearchPolicySchema,
+  fetchPolicy: plannerFetchPolicySchema,
+  signals: z.array(z.string().min(1)),
+  classifierUsed: z.boolean(),
+  question: z.string().min(1).optional()
+});
+
+export type PlannerRouteDecision = z.infer<
+  typeof plannerRouteDecisionSchema
+>;
 
 export const skillPackageNameSchema = z
   .string()
@@ -225,6 +277,32 @@ export const adminSkillRouteDecisionsResponseSchema = z.object({
 
 export type AdminSkillRouteDecisionsResponse = z.infer<
   typeof adminSkillRouteDecisionsResponseSchema
+>;
+
+export const adminPlannerRouteDecisionSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  policyVersion: z.string().min(1),
+  inputTextRedacted: z.string(),
+  inputHash: z.string().min(1),
+  mode: plannerRouteModeSchema,
+  confidence: z.number().min(0).max(1),
+  reason: z.string().min(1),
+  candidateTools: z.array(controlledToolNameSchema),
+  toolActionRisk: plannerToolActionRiskSchema,
+  freshnessRisk: plannerFreshnessRiskSchema,
+  privacyRisk: plannerPrivacyRiskSchema,
+  confirmationRequired: z.boolean(),
+  searchPolicy: plannerSearchPolicySchema,
+  fetchPolicy: plannerFetchPolicySchema,
+  signals: z.array(z.string().min(1)),
+  classifierUsed: z.boolean(),
+  question: z.string().nullable(),
+  createdAt: z.number().int().min(0)
+});
+
+export type AdminPlannerRouteDecision = z.infer<
+  typeof adminPlannerRouteDecisionSchema
 >;
 
 export const adminApiErrorSchema = z.object({
@@ -529,6 +607,7 @@ export const adminRunDetailResponseSchema = z.object({
   run: adminRunSummarySchema,
   toolCalls: z.array(adminToolCallSchema),
   skillRouteDecision: adminSkillRouteDecisionSchema.nullable(),
+  plannerRouteDecision: adminPlannerRouteDecisionSchema.nullable(),
   skillRun: adminSkillRunSummarySchema.nullable(),
   longTask: adminLongTaskSchema.nullable(),
   scheduleExecution: adminScheduleExecutionSchema.nullable()
@@ -1087,8 +1166,10 @@ export type AdminEvaluationsResponse = z.infer<typeof adminEvaluationsResponseSc
 export const skillIntentSchema = z.object({
   id: z.string().min(1),
   ownerTgUserId: z.number().int().min(1),
+  skillId: z.string().min(1).nullable().optional(),
   skillName: z.string().min(1),
   intentText: z.string().min(1),
+  status: z.enum(["active", "disabled"]).default("active"),
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0)
 });
@@ -1107,3 +1188,86 @@ export const adminSkillIntentCreateRequestSchema = z.object({
 });
 
 export type AdminSkillIntentCreateRequest = z.infer<typeof adminSkillIntentCreateRequestSchema>;
+
+export const adminSkillRoutingExamplesBatchCreateRequestSchema = z.object({
+  items: z.array(
+    z.object({
+      exampleText: z.string().min(1)
+    })
+  ),
+  assistRunId: z.string().min(1).optional()
+});
+
+export type AdminSkillRoutingExamplesBatchCreateRequest = z.infer<
+  typeof adminSkillRoutingExamplesBatchCreateRequestSchema
+>;
+
+export const adminAssistRunStatusSchema = z.enum(["running", "completed", "failed", "unapplied", "applied", "rejected"]);
+
+export const adminAssistRunSchema = z.object({
+  id: z.string().min(1),
+  capability: z.string().min(1),
+  targetType: z.string().min(1),
+  targetId: z.string().min(1),
+  status: adminAssistRunStatusSchema,
+  model: z.string().min(1),
+  draftJson: z.string().nullable(),
+  warningsJson: z.string().nullable(),
+  promptVersion: z.string().min(1),
+  contextSummary: z.string().nullable(),
+  ownerTgUserId: z.number().int().min(1),
+  createdAt: z.number().int().min(0),
+  completedAt: z.number().int().min(0).nullable()
+});
+
+export type AdminAssistRun = z.infer<typeof adminAssistRunSchema>;
+
+export const skillRoutingExampleDraftSuggestedExampleSchema = z.object({
+  exampleText: z.string().min(1),
+  language: z.enum(["zh", "en", "mixed"]),
+  source: z.enum(["skill_description", "skill_routing_profile", "route_history", "user_instruction"]),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string().min(1),
+  duplicateOfExampleId: z.string().optional(),
+  conflictSkillId: z.string().optional(),
+  conflictSkillName: z.string().optional()
+});
+
+export const skillRoutingExampleDraftClusterSchema = z.object({
+  label: z.string().min(1),
+  goal: z.string().min(1),
+  suggestedExamples: z.array(skillRoutingExampleDraftSuggestedExampleSchema)
+});
+
+export const skillRoutingExampleDraftRejectedCandidateSchema = z.object({
+  exampleText: z.string().min(1),
+  reason: z.string().min(1)
+});
+
+export const skillRoutingExampleDraftSchema = z.object({
+  clusters: z.array(skillRoutingExampleDraftClusterSchema),
+  rejectedCandidates: z.array(skillRoutingExampleDraftRejectedCandidateSchema),
+  coverageNotes: z.array(z.string()),
+  warnings: z.array(z.string())
+});
+
+export type SkillRoutingExampleDraft = z.infer<typeof skillRoutingExampleDraftSchema>;
+
+export const adminAssistRequestSchema = z.object({
+  instruction: z.string().optional(),
+  options: z.record(z.unknown()).optional()
+});
+
+export type AdminAssistRequest = z.infer<typeof adminAssistRequestSchema>;
+
+export const adminAssistResponseSchema = z.object({
+  assistRun: adminAssistRunSchema,
+  draft: z.unknown().nullable(),
+  warnings: z.array(z.string()),
+  trace: z.object({
+    promptVersion: z.string(),
+    contextSummary: z.string().nullable()
+  })
+});
+
+export type AdminAssistResponse = z.infer<typeof adminAssistResponseSchema>;
