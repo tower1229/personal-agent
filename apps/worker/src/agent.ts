@@ -57,6 +57,7 @@ export interface LlmAgentInput {
   systemInstructions?: string;
   plannerRouteDecision?: PlannerRouteDecision;
   maxToolRounds: number;
+  thinkingTier?: "none" | "high" | "max";
   onThinking?: (state: { type: "thinking" | "tool"; toolName?: string }) => Promise<void>;
 }
 
@@ -349,7 +350,8 @@ export async function executeAgentTool(input: {
                   content: "You are a helpful assistant. Please summarize the following long web page content. You must retain the core information, main arguments, and specific facts so they can be cited later. If the content seems to be truncated halfway, summarize what is available."
                 },
                 { role: "user", content: responseText.slice(0, 30000) }
-              ]
+              ],
+              thinkingTier: "max"
             });
             responseText = summaryResponse.content + "\n\n[System Note: The original page was too long and has been summarized by the system. Some details might be omitted.]";
           } catch (e) {
@@ -416,7 +418,7 @@ export async function executeAgentTool(input: {
       const content = stringArg(input.args, "content");
       const metadata = (input.args.metadata as Record<string, unknown> | undefined) || {};
       const resolveGapId = input.args.resolveGapId ? String(input.args.resolveGapId) : null;
-      const claims = (input.args.claims as Array<{ claim: string, layer: string, scenario: string, confidence: number }> | undefined) || [];
+      const claims = (input.args.claims as Array<{ claim: string, layer: string, scenario: string, confidence: string }> | undefined) || [];
 
       const allowedAgentTypes = ["personality_framework", "health_log", "relationship_note"];
       if (sourceType && !allowedAgentTypes.includes(sourceType)) {
@@ -485,14 +487,14 @@ export async function executeAgentTool(input: {
             claim: c.claim,
             layer: c.layer as PersonalModelLayer,
             scenario: c.scenario as PersonalModelScenario,
-            confidence: Math.max(0, Math.min(1, c.confidence)) as PersonalModelConfidence,
+            confidence: c.confidence as PersonalModelConfidence,
             status: "active",
             usagePolicy: "default_available",
             sensitivity: "medium",
             validFrom: null,
             validUntil: null,
             lastConfirmedAt: null,
-            metadataJson: null,
+            metadataJson: "{}",
             createdAt: now,
             updatedAt: now
           });
@@ -713,7 +715,7 @@ const toolDefinitions: Record<BuiltInToolName, LlmToolDefinition> = {
                 claim: { type: "string", description: "The high-confidence conclusion or fact." },
                 layer: { type: "string", enum: ["core", "preference", "behavior", "context"], description: "The layer of the claim." },
                 scenario: { type: "string", description: "The applicable scenario (e.g., global, health, relationship)." },
-                confidence: { type: "number", description: "Confidence score (0.0 to 1.0). For confirmed facts, use 1.0." }
+                confidence: { type: "string", enum: ["low", "medium", "high"], description: "Confidence score (low, medium, or high). For confirmed facts, use high." }
               },
               required: ["claim", "layer", "scenario", "confidence"]
             },
@@ -947,7 +949,8 @@ async function generateAgentExecutionPlan(input: {
         role: "user",
         content: input.inputText
       }
-    ]
+    ],
+    thinkingTier: "high"
   });
 
   try {
@@ -1424,7 +1427,8 @@ export async function executeLlmAgent(
     await input.onThinking?.({ type: "thinking" }).catch(() => {});
     const completion = await input.runtime.llmClient.createChatCompletion({
       messages,
-      tools: activeTools
+      tools: activeTools,
+      thinkingTier: input.thinkingTier ?? "high"
     });
     await recordLlmCall({
       runtime: input.runtime,
@@ -1559,8 +1563,8 @@ export async function executeLlmAgent(
             
             let isValid = false;
             if (citeUrl) {
-              const explicitUrls = input.routeDecision?.fetchPolicy.explicitAllowedUrls || [];
-              if (visitedUrls.has(citeUrl) || explicitUrls.some(u => normalizeExternalUrl(u) === citeUrl)) {
+              const explicitUrls = input.plannerRouteDecision?.fetchPolicy.explicitAllowedUrls || [];
+              if (visitedUrls.has(citeUrl) || explicitUrls.some((u: string) => normalizeExternalUrl(u) === citeUrl)) {
                 isValid = true;
               } else {
                 try {

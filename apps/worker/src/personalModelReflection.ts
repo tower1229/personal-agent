@@ -76,7 +76,8 @@ Output ONLY the JSON object. Do not include markdown code block syntax (like \`\
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
-      ]
+      ],
+      thinkingTier: "max"
     });
 
     if (!completion.content) {

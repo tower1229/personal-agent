@@ -85,7 +85,8 @@ export class AdminLlmAssistService {
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt + (lastError ? `\n\nFix this JSON error: ${lastError.message}` : "") }
-          ]
+          ],
+          thinkingTier: "max"
         });
 
         rawContent = response.content.replace(/^```json/, "").replace(/```$/, "").trim();

@@ -1124,6 +1124,13 @@ export function createFakeRepositories(): AgentRepositories & {
           .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null
       );
     },
+    async deleteLongTask(input) {
+      state.longTasks = state.longTasks.filter(
+        (t) => !(t.ownerTgUserId === input.ownerTgUserId && t.id === input.id)
+      );
+      state.longTaskSteps = state.longTaskSteps.filter((s) => s.longTaskId !== input.id);
+      state.longTaskEvents = state.longTaskEvents.filter((e) => e.longTaskId !== input.id);
+    },
     async getLongTaskForRun(input) {
       return (
         state.longTasks

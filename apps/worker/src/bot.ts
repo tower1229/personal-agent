@@ -19,7 +19,7 @@ import {
   canCancelLongTask,
   canPauseLongTask,
   canResumeLongTask,
-  classifyTaskComplexityWithLlm,
+  classifyTaskComplexity,
   executeLongTaskForRecord,
   formatCompletedLongTask,
   formatLongTaskStatus,
@@ -35,7 +35,8 @@ import {
 import { type TelegramWebhookUpdate } from "@personal-agent/shared";
 import { type RunnableSkillRecord } from "./repositories.js";
 import { allowedBuiltInToolsForSkill } from "./skillPackages.js";
-import { decidePlannerRoute } from "./plannerRouteDecision.js";
+import { decidePlannerRoute, classifyHeuristically, extractUrls } from "./plannerRouteDecision.js";
+import { executeUnifiedRouting } from "./unifiedRouter.js";
 
 export interface BotRuntime extends AgentRuntime {
   repositories: AgentRepositories;
@@ -768,170 +769,6 @@ async function findExplicitSkillMatch(input: {
   };
 }
 
-function parseSemanticRoutingJson(content: string): {
-  matchedSkillName: string | null;
-  confidence: number;
-  reason: string;
-  candidates: Array<{ name: string; confidence: number; reason?: string }>;
-} | null {
-  const jsonText = /\{[\s\S]*\}/u.exec(content)?.[0] ?? "";
-  if (!jsonText) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(jsonText) as {
-      matchedSkillName?: unknown;
-      confidence?: unknown;
-      reason?: unknown;
-      candidates?: unknown;
-    };
-    return {
-      matchedSkillName:
-        typeof parsed.matchedSkillName === "string"
-          ? parsed.matchedSkillName
-          : null,
-      confidence:
-        typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
-          ? Math.min(Math.max(parsed.confidence, 0), 1)
-          : 0,
-      reason:
-        typeof parsed.reason === "string" ? parsed.reason : "semantic route",
-      candidates: Array.isArray(parsed.candidates)
-        ? parsed.candidates.reduce<
-            Array<{ name: string; confidence: number; reason?: string }>
-          >((items, candidate) => {
-            if (typeof candidate !== "object" || candidate === null) {
-              return items;
-            }
-            const item = candidate as {
-              name?: unknown;
-              confidence?: unknown;
-              reason?: unknown;
-            };
-            if (typeof item.name !== "string") {
-              return items;
-            }
-            const normalized: {
-              name: string;
-              confidence: number;
-              reason?: string;
-            } = {
-              name: item.name,
-              confidence:
-                typeof item.confidence === "number" &&
-                Number.isFinite(item.confidence)
-                  ? Math.min(Math.max(item.confidence, 0), 1)
-                  : 0
-            };
-            if (typeof item.reason === "string") {
-              normalized.reason = item.reason;
-            }
-            items.push(normalized);
-            return items;
-          }, [])
-        : []
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function findSemanticSkillMatch(input: {
-  ownerTgUserId: number;
-  text: string;
-  runtime: BotRuntime;
-}): Promise<{ match: SkillMatch | null; reason: string; candidatesJson: string }> {
-  if (!input.runtime.llmClient) {
-    return {
-      match: null,
-      reason: "semantic skill routing skipped: LLM not configured",
-      candidatesJson: "[]"
-    };
-  }
-
-  const runnableSkills = (
-    await input.runtime.repositories.listRunnableSkills(input.ownerTgUserId)
-  ).filter((runnable) => runnable.version.validation.ok);
-  if (runnableSkills.length === 0) {
-    return {
-      match: null,
-      reason: "no runnable skill packages",
-      candidatesJson: "[]"
-    };
-  }
-
-  const skillIntents = await input.runtime.repositories.listSkillIntents(
-    input.ownerTgUserId
-  );
-  const skillCatalog = runnableSkills.map((runnable) => {
-    const intentsForSkill = skillIntents
-      .filter((intent) => intent.skillName === runnable.version.name)
-      .map((intent) => intent.intentText);
-    return {
-      name: runnable.version.name,
-      description: runnable.version.description,
-      exampleIntents: intentsForSkill.length > 0 ? intentsForSkill : undefined
-    };
-  });
-  const completion = await input.runtime.llmClient.createChatCompletion({
-    messages: [
-      {
-        role: "system",
-        content: `你是 skill 路由器。只根据用户输入和 skill 的 name/description/exampleIntents 判断是否应触发一个 skill。返回严格 JSON：{"matchedSkillName": string|null, "confidence": number, "reason": string, "candidates": [{"name": string, "confidence": number, "reason": string}] }。confidence 低于 ${ROUTING_CONFIDENCE_CONFIRM_THRESHOLD} 时 matchedSkillName 必须为 null。`
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          input: input.text,
-          skills: skillCatalog
-        })
-      }
-    ]
-  });
-  const parsed = parseSemanticRoutingJson(completion.content);
-  if (!parsed) {
-    return {
-      match: null,
-      reason: "semantic skill routing returned invalid JSON",
-      candidatesJson: "[]"
-    };
-  }
-
-  const candidatesJson = JSON.stringify(parsed.candidates);
-  if (!parsed.matchedSkillName || parsed.confidence < ROUTING_CONFIDENCE_CONFIRM_THRESHOLD) {
-    return {
-      match: null,
-      reason: parsed.reason || "semantic skill confidence below threshold",
-      candidatesJson
-    };
-  }
-
-  const runnable = runnableSkills.find(
-    (candidate) => candidate.version.name === parsed.matchedSkillName
-  );
-  if (!runnable) {
-    return {
-      match: null,
-      reason: `semantic skill ${parsed.matchedSkillName} is not runnable`,
-      candidatesJson
-    };
-  }
-
-  return {
-    match: {
-      runnable,
-      inputText: input.text.trim(),
-      triggerType: "semantic",
-      confidence: parsed.confidence,
-      reason: parsed.reason,
-      candidatesJson
-    },
-    reason: parsed.reason,
-    candidatesJson
-  };
-}
-
 async function recordRouteDecision(input: {
   runId: string;
   ownerTgUserId: number;
@@ -1099,49 +936,92 @@ async function executeCommandOrSkillOrLlmFallback(input: {
   // Trigger thinking state before starting heavy LLM routing
   input.onThinking?.({ type: "thinking" }).catch(() => {});
 
-  const semanticRoute = await findSemanticSkillMatch({
-    ownerTgUserId: input.ownerTgUserId,
-    text: input.text,
-    runtime: input.runtime
+  const runnableSkills = (
+    await input.runtime.repositories.listRunnableSkills(input.ownerTgUserId)
+  ).filter((runnable) => runnable.version.validation.ok);
+
+  const skillIntents = await input.runtime.repositories.listSkillIntents(
+    input.ownerTgUserId
+  );
+  const skillCatalog = runnableSkills.map((runnable) => {
+    const intentsForSkill = skillIntents
+      .filter((intent) => intent.skillName === runnable.version.name)
+      .map((intent) => intent.intentText);
+    return {
+      name: runnable.version.name,
+      description: runnable.version.description,
+      exampleIntents: intentsForSkill.length > 0 ? intentsForSkill : undefined
+    };
   });
+
+  const heuristicComplexity = classifyTaskComplexity(input.text);
+  const heuristicPlanner = classifyHeuristically(input.text);
+
+  const unifiedRouting = await executeUnifiedRouting({
+    runtime: input.runtime,
+    text: input.text,
+    ownerTgUserId: input.ownerTgUserId,
+    skillCatalog,
+    extractedUrls: extractUrls(input.text),
+    heuristicSignals: heuristicPlanner.signals
+  });
+
+  let match: SkillMatch | null = null;
+  if (unifiedRouting.semanticSkill?.matchedSkillName) {
+    const runnable = runnableSkills.find(
+      (candidate) => candidate.version.name === unifiedRouting.semanticSkill?.matchedSkillName
+    );
+    if (runnable) {
+      match = {
+        runnable,
+        inputText: input.text.trim(),
+        triggerType: "semantic",
+        confidence: unifiedRouting.semanticSkill.confidence,
+        reason: unifiedRouting.semanticSkill.reason,
+        candidatesJson: unifiedRouting.semanticSkill.candidatesJson
+      };
+    }
+  }
+
   await recordRouteDecision({
     runId: input.runId,
     ownerTgUserId: input.ownerTgUserId,
     text: input.text,
     runtime: input.runtime,
-    match: semanticRoute.match,
-    reason: semanticRoute.reason,
-    candidatesJson: semanticRoute.candidatesJson
+    match,
+    reason: unifiedRouting.semanticSkill?.reason || "no skill matched",
+    candidatesJson: unifiedRouting.semanticSkill?.candidatesJson || "[]"
   });
-  if (semanticRoute.match) {
-    if (semanticRoute.match.confidence >= ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD) {
+
+  if (match) {
+    if (match.confidence >= ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD) {
       return executeSkill({
         runId: input.runId,
         ownerTgUserId: input.ownerTgUserId,
-        match: semanticRoute.match,
+        match,
         runtime: input.runtime
       });
     } else {
       return {
-        responseText: `我猜你可能是想执行技能「${semanticRoute.match.runnable.version.name}」，是否确认？`,
+        responseText: `我猜你可能是想执行技能「${match.runnable.version.name}」，是否确认？`,
         toolName: "skill_confirm",
         riskLevel: "read",
-        input: { name: semanticRoute.match.runnable.version.name },
-        output: { pending: true, skillId: semanticRoute.match.runnable.skill.id }
+        input: { name: match.runnable.version.name },
+        output: { pending: true, skillId: match.runnable.skill.id }
       };
     }
   }
 
-  const decision = await classifyTaskComplexityWithLlm({
-    text: input.text,
-    runtime: input.runtime
-  });
+  const decision = heuristicComplexity.mode === "long_task" 
+    ? heuristicComplexity 
+    : (unifiedRouting.taskComplexity || heuristicComplexity);
+
   if (decision.mode === "long_task") {
     const started = await startLongTask({
       runId: input.runId,
       ownerTgUserId: input.ownerTgUserId,
       text: input.text,
-      decision,
+      decision: decision as any,
       runtime: input.runtime
     });
     return {
@@ -1157,7 +1037,8 @@ async function executeCommandOrSkillOrLlmFallback(input: {
     runId: input.runId,
     ownerTgUserId: input.ownerTgUserId,
     text: input.text,
-    runtime: input.runtime
+    runtime: input.runtime,
+    precomputedClassifierDecision: unifiedRouting.plannerRoute
   });
   if (plannerRoute.decision.mode === "ask_user") {
     const question =
@@ -1215,85 +1096,7 @@ export async function handleOwnerUpdate(
 
   // Handle Feedback Callbacks
   const cbData = input.update.callback_query?.data;
-  if (cbData && cbData.startsWith("fb_")) {
-      const parts = cbData.split("_");
-      if (parts.length >= 3) {
-        const fbRunId = parts[1];
-        const fbValue = parts.slice(2).join("_");
-
-        const feedbackRun = await input.runtime.repositories.getRun({
-          ownerTgUserId: input.ownerTgUserId,
-          id: fbRunId
-        });
-
-        if (feedbackRun) {
-          if (fbValue === "negative") {
-            // Ask for specific reason
-            await input.runtime.telegramClient.sendMessage({
-              chatId,
-              text: "请告诉我这条回答哪里不合适？",
-              replyMarkup: {
-                inline_keyboard: [
-                  [
-                    { text: "情绪误判", callback_data: `fb_${fbRunId}_emotion_misjudgment` },
-                    { text: "旧资料误用", callback_data: `fb_${fbRunId}_old_data_misuse` }
-                  ],
-                  [
-                    { text: "建议不适", callback_data: `fb_${fbRunId}_advice_mismatch` },
-                    { text: "过度挑战", callback_data: `fb_${fbRunId}_over_challenged` }
-                  ],
-                  [
-                    { text: "过度顺从", callback_data: `fb_${fbRunId}_over_compliant` }
-                  ]
-                ]
-              }
-            });
-            return { runId };
-          }
-
-          // Otherwise it's positive or a specific negative reason
-          await input.runtime.repositories.createRunFeedback({
-            id: input.runtime.generateId(),
-            runId: fbRunId,
-            ownerTgUserId: input.ownerTgUserId,
-            feedbackType: fbValue as any,
-            comment: fbValue,
-            createdAt: now
-          });
-
-          // Feedback closure: write a metacognition log if it's a specific negative reason
-          if (fbValue !== "positive" && feedbackRun.contextTraceJson) {
-            const trace = JSON.parse(feedbackRun.contextTraceJson);
-            if (trace?.selectedClaimIds?.length > 0) {
-               const claimId = trace.selectedClaimIds[0];
-               await input.runtime.repositories.createPersonalModelMetacognitionLog({
-                  id: input.runtime.generateId(),
-                  ownerTgUserId: input.ownerTgUserId,
-                  relatedClaimId: claimId,
-                  relatedGapId: null,
-                  reflectionType: "correction",
-                  content: `用户对最近的回复表示不满（${fbValue}），可能需要修正此记忆。`,
-                  createdAt: now
-               });
-               
-               // Update claim status to under_revision
-               await input.runtime.repositories.updatePersonalModelClaim({
-                 ownerTgUserId: input.ownerTgUserId,
-                 id: claimId,
-                 patch: { status: "under_revision" },
-                 updatedAt: now
-               });
-            }
-          }
-
-          await input.runtime.telegramClient.sendMessage({
-            chatId,
-            text: fbValue === "positive" ? "收到反馈，谢谢肯定！" : "收到反馈，我会反思这次的回答并进入修正流程。"
-          });
-        }
-        return { runId };
-    }
-  } else if (cbData && cbData.startsWith("sc_")) {
+  if (cbData && cbData.startsWith("sc_")) {
     const confirmedRunId = cbData.substring(3);
     const routeDecision = await input.runtime.repositories.getSkillRouteDecisionForRun({
       ownerTgUserId: input.ownerTgUserId,
@@ -1519,7 +1322,6 @@ export async function handleOwnerUpdate(
     createdAt: now,
     updatedAt: now
   });
-  let thinkingMessageId: number | null = null;
   try {
     const messageText = text ?? "";
     const explicitSkill = parseExplicitSkill(messageText);
@@ -1528,23 +1330,10 @@ export async function handleOwnerUpdate(
 
     const onThinking = async (state: { type: "thinking" | "tool"; toolName?: string }) => {
       try {
-        if (state.type === "thinking") {
-          if (!thinkingMessageId) {
-            const resp = await input.runtime.telegramClient.sendMessage({
-              chatId,
-              text: "🤔 正在思考..."
-            });
-            thinkingMessageId = resp.messageId;
-          }
-        } else if (state.type === "tool" && state.toolName) {
-          if (thinkingMessageId) {
-            await input.runtime.telegramClient.editMessageText({
-              chatId,
-              messageId: thinkingMessageId,
-              text: `🔍 正在执行工具: ${state.toolName}...`
-            });
-          }
-        }
+        await input.runtime.telegramClient.sendChatAction({
+          chatId,
+          action: "typing"
+        });
       } catch (e) {
         // Ignore errors during thinking UI updates
       }
@@ -1612,36 +1401,8 @@ export async function handleOwnerUpdate(
     }
 
     try {
-      let showFeedback = false;
-      if (result.toolName === "llm_agent") {
-        showFeedback = true;
-        if (result.contextTraceJson) {
-          try {
-            const trace = JSON.parse(result.contextTraceJson);
-            const trivialTools = new Set(["submit_answer", "llm_chat_completion", "llm_agent"]);
-            const nonSubmitTools = (trace.actualToolCalls || []).filter(
-              (call: any) => !trivialTools.has(call.toolName)
-            );
-            if (nonSubmitTools.length === 0) {
-              showFeedback = false;
-            }
-          } catch {
-            // Keep default
-          }
-        }
-      }
-
-      const inlineKeyboard =
-        showFeedback
-          ? {
-              inline_keyboard: [
-                [
-                  { text: "👍 准确", callback_data: `fb_${run.id}_positive` },
-                  { text: "👎 有误", callback_data: `fb_${run.id}_negative` }
-                ]
-              ]
-            }
-          : result.toolName === "skill_confirm"
+      let inlineKeyboard: { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> } | undefined =
+        result.toolName === "skill_confirm"
           ? {
               inline_keyboard: [
                 [
@@ -1652,31 +1413,61 @@ export async function handleOwnerUpdate(
             }
           : undefined;
 
-      const msgResp = await input.runtime.telegramClient.sendMessage({
-        chatId,
-        text: result.responseText,
-        replyMarkup: inlineKeyboard
-      });
-      
+      let currentTask = null;
       if (
         result.toolName === "long_task_start" &&
         typeof result.output === "object" &&
         result.output !== null &&
         "taskId" in result.output
       ) {
-        const currentTask = await input.runtime.repositories.getLongTask({
+        currentTask = await input.runtime.repositories.getLongTask({
           ownerTgUserId: input.ownerTgUserId,
           id: result.output.taskId as string
         });
         if (currentTask) {
-          await input.runtime.repositories.updateLongTask({
-            id: currentTask.id,
-            status: currentTask.status,
-            telegramChatId: chatId,
-            telegramMessageId: msgResp.messageId,
-            updatedAt: input.runtime.now()
-          });
+          if (currentTask.status === "running" || currentTask.status === "planning" || currentTask.status === "paused") {
+            inlineKeyboard = {
+              inline_keyboard: [
+                [{ text: "取消", callback_data: `long_task_action_cancel_${currentTask.id}` }]
+              ]
+            };
+          } else if (currentTask.status === "waiting_for_user") {
+            inlineKeyboard = {
+              inline_keyboard: [
+                [
+                  { text: "✅ 确认", callback_data: `long_task_action_confirm_${currentTask.id}` },
+                  { text: "⏭️ 跳过", callback_data: `long_task_action_skip_${currentTask.id}` },
+                  { text: "❌ 取消", callback_data: `long_task_action_cancel_${currentTask.id}` }
+                ]
+              ]
+            };
+          } else if (currentTask.status === "failed") {
+            inlineKeyboard = {
+              inline_keyboard: [
+                [
+                  { text: "🔄 重试", callback_data: `long_task_action_retry_${currentTask.id}` },
+                  { text: "❌ 取消", callback_data: `long_task_action_cancel_${currentTask.id}` }
+                ]
+              ]
+            };
+          }
         }
+      }
+
+      const msgResp = await input.runtime.telegramClient.sendMessage({
+        chatId,
+        text: result.responseText,
+        replyMarkup: inlineKeyboard
+      });
+      
+      if (currentTask) {
+        await input.runtime.repositories.updateLongTask({
+          id: currentTask.id,
+          status: currentTask.status,
+          telegramChatId: chatId,
+          telegramMessageId: msgResp.messageId,
+          updatedAt: input.runtime.now()
+        });
       }
       await input.runtime.repositories.updateRun(run.id, {
         status: "succeeded",
@@ -1722,13 +1513,6 @@ export async function handleOwnerUpdate(
         text: `执行失败：${error}`
       })
       .catch(() => undefined);
-  } finally {
-    if (thinkingMessageId) {
-      await input.runtime.telegramClient.deleteMessage({
-        chatId,
-        messageId: thinkingMessageId
-      }).catch(() => {});
-    }
   }
 
   return { runId: run.id };

@@ -204,4 +204,24 @@ export function registerAdminLongTaskRoutes(
     });
     return c.json(adminApiSuccessSchema.parse({ ok: true }));
   });
+
+  app.delete("/api/admin/long-tasks/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const repo = repositories(c.env);
+    const task = await repo.getLongTask({
+      ownerTgUserId: authenticatedOwnerId,
+      id: c.req.param("id")
+    });
+    if (!task) {
+      return c.json({ error: "Long task not found" }, 404);
+    }
+    await repo.deleteLongTask({
+      ownerTgUserId: authenticatedOwnerId,
+      id: task.id
+    });
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
+  });
 }

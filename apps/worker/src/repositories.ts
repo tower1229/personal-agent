@@ -744,6 +744,10 @@ export interface AgentRepositories {
     ownerTgUserId: number;
     id: string;
   }): Promise<LongTaskRecord | null>;
+  deleteLongTask(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<void>;
   getLatestActiveLongTask(ownerTgUserId: number): Promise<LongTaskRecord | null>;
   getLongTaskForRun(input: {
     ownerTgUserId: number;

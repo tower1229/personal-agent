@@ -26,6 +26,7 @@ export interface LlmToolCall {
 export interface LlmChatCompletionInput {
   messages: LlmMessage[];
   tools?: LlmToolDefinition[];
+  thinkingTier?: "none" | "high" | "max";
 }
 
 export interface LlmChatCompletionOutput {
@@ -73,19 +74,31 @@ export function createOpenAiCompatibleClient(input: {
 
   return {
     async createChatCompletion(request) {
+      const payload: Record<string, unknown> = {
+        model: input.model,
+        messages: request.messages,
+        tools: request.tools,
+        tool_choice: request.tools?.length ? "auto" : undefined,
+        stream: false
+      };
+
+      if (request.thinkingTier === "none") {
+        payload.thinking = { type: "disabled" };
+      } else if (request.thinkingTier === "high") {
+        payload.thinking = { type: "enabled" };
+        payload.reasoning_effort = "high";
+      } else if (request.thinkingTier === "max") {
+        payload.thinking = { type: "enabled" };
+        payload.reasoning_effort = "max";
+      }
+
       const response = await fetcher(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${input.apiKey}`
         },
-        body: JSON.stringify({
-          model: input.model,
-          messages: request.messages,
-          tools: request.tools,
-          tool_choice: request.tools?.length ? "auto" : undefined,
-          stream: false
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {

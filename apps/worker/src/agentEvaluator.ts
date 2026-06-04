@@ -51,7 +51,8 @@ First, write out your reasoning. Then, provide the final scores as a JSON block 
       messages: [
         { role: "system", content: "You are an AI assistant evaluation system." },
         { role: "user", content: prompt }
-      ]
+      ],
+      thinkingTier: "max"
     });
 
     const content = llmResult.content ?? "";

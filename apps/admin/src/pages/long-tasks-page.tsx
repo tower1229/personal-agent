@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   cancelLongTask,
+  deleteLongTask,
   loadLongTaskDetail,
   loadLongTasks,
   pauseLongTask,
@@ -26,6 +27,11 @@ export function LongTasksPage() {
 
   const tasks = useAsyncData(() => loadLongTasks(), []);
 
+  async function reload() {
+    const data = await loadLongTasks();
+    tasks.setData(data);
+  }
+
   return (
     <>
       <PageHeader
@@ -40,16 +46,26 @@ export function LongTasksPage() {
         <CardContent>
           {tasks.loading ? <Skeleton className="h-64" /> : null}
           {tasks.error ? <p className="text-sm text-destructive">{tasks.error}</p> : null}
-          {tasks.data ? <LongTaskTable items={tasks.data.items} /> : null}
+          {tasks.data ? <LongTaskTable items={tasks.data.items} onRefresh={reload} /> : null}
         </CardContent>
       </Card>
     </>
   );
 }
 
-function LongTaskTable(props: { items: AdminLongTask[] }) {
+function LongTaskTable(props: { items: AdminLongTask[], onRefresh: () => Promise<void> }) {
   if (props.items.length === 0) {
     return <EmptyState>暂无 long task。</EmptyState>;
+  }
+
+  async function act(action: "cancel" | "delete", id: string) {
+    if (action === "cancel") {
+      await cancelLongTask(id);
+    } else {
+      await deleteLongTask(id);
+    }
+    toast.success(`Task ${action} requested`);
+    await props.onRefresh();
   }
 
   return (
@@ -73,9 +89,19 @@ function LongTaskTable(props: { items: AdminLongTask[] }) {
             <TableCell>{truncateText(task.plannerReason, 72)}</TableCell>
             <TableCell>{formatDateTime(task.updatedAt)}</TableCell>
             <TableCell className="text-right">
-              <Button asChild size="sm" variant="outline">
-                <Link to={`/admin/long-tasks/${task.id}`}>Open</Link>
-              </Button>
+              <div className="flex justify-end gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link to={`/admin/long-tasks/${task.id}`}>Open</Link>
+                </Button>
+                {task.status === "running" || task.status === "paused" || task.status === "planning" || task.status === "waiting_for_user" ? (
+                  <Button onClick={() => void act("cancel", task.id)} size="sm" variant="outline">
+                    Cancel
+                  </Button>
+                ) : null}
+                <Button onClick={() => void act("delete", task.id)} size="sm" variant="destructive">
+                  Delete
+                </Button>
+              </div>
             </TableCell>
           </TableRow>
         ))}
@@ -87,13 +113,17 @@ function LongTaskTable(props: { items: AdminLongTask[] }) {
 function LongTaskDetailPage(props: { id: string }) {
   const detail = useAsyncData(() => loadLongTaskDetail(props.id), [props.id]);
 
-  async function act(action: "pause" | "resume" | "cancel") {
+  async function act(action: "pause" | "resume" | "cancel" | "delete") {
     if (action === "pause") {
       await pauseLongTask(props.id);
     } else if (action === "resume") {
       await resumeLongTask(props.id);
-    } else {
+    } else if (action === "cancel") {
       await cancelLongTask(props.id);
+    } else {
+      await deleteLongTask(props.id);
+      window.location.href = "/admin/long-tasks";
+      return;
     }
     toast.success(`Task ${action} requested`);
     detail.setData(await loadLongTaskDetail(props.id));
@@ -110,8 +140,11 @@ function LongTaskDetailPage(props: { id: string }) {
             <Button onClick={() => void act("resume")} size="sm" variant="outline">
               Resume
             </Button>
-            <Button onClick={() => void act("cancel")} size="sm" variant="destructive">
+            <Button onClick={() => void act("cancel")} size="sm" variant="outline">
               Cancel
+            </Button>
+            <Button onClick={() => void act("delete")} size="sm" variant="destructive">
+              Delete
             </Button>
           </div>
         }

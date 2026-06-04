@@ -21,7 +21,7 @@ export interface LongTaskRuntime extends AgentRuntime {
   maxToolRounds: number;
 }
 
-interface ComplexityDecision {
+export interface ComplexityDecision {
   mode: "simple" | "long_task";
   score: number;
   reason: string;
@@ -109,54 +109,6 @@ export function classifyTaskComplexity(text: string): ComplexityDecision {
   };
 }
 
-export async function classifyTaskComplexityWithLlm(input: {
-  text: string;
-  runtime: LongTaskRuntime;
-}): Promise<ComplexityDecision> {
-  const heuristic = classifyTaskComplexity(input.text);
-  if (heuristic.mode === "long_task" || !input.runtime.llmClient) {
-    return heuristic;
-  }
-
-  try {
-    const completion = await input.runtime.llmClient.createChatCompletion({
-      messages: [
-        {
-          role: "system",
-          content: [
-            "你是个人 Agent 的任务复杂度分类器。",
-            "只输出 JSON object，不要 Markdown。",
-            "JSON 字段：mode, score, reason。",
-            "mode 只能是 simple 或 long_task。",
-            "long_task 表示需要规划、多个步骤、调研比较、跨工具执行或后续续跑。"
-          ].join("\n")
-        },
-        {
-          role: "user",
-          content: input.text
-        }
-      ]
-    });
-    const raw = extractJsonObject(completion.content);
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      return heuristic;
-    }
-    const record = raw as Record<string, unknown>;
-    const mode = record.mode === "long_task" ? "long_task" : "simple";
-    const rawScore = typeof record.score === "number" ? record.score : heuristic.score;
-    return {
-      mode,
-      score: Math.min(1, Math.max(0, rawScore)),
-      reason:
-        typeof record.reason === "string" && record.reason.trim()
-          ? `llm classifier: ${record.reason.trim()}`
-          : heuristic.reason,
-      needsUserConfirmation: false
-    };
-  } catch {
-    return heuristic;
-  }
-}
 
 export function canPauseLongTask(task: LongTaskRecord): boolean {
   return pauseableTaskStatuses.includes(
@@ -311,7 +263,8 @@ export async function createLongTaskPlan(input: {
   ];
 
   const completion = await input.runtime.llmClient.createChatCompletion({
-    messages
+    messages,
+    thinkingTier: "max"
   });
   await recordPlanningCall({
     runtime: input.runtime,

@@ -16,7 +16,7 @@ export const PLANNER_ROUTE_POLICY_VERSION = "planner-route-v1";
 const MAX_SEARCH_QUERIES = 3;
 const MAX_FETCH_URLS = 5;
 
-interface RouteDraft extends PlannerRouteDecision {
+export interface RouteDraft extends PlannerRouteDecision {
   source: "heuristic" | "classifier";
 }
 
@@ -167,7 +167,7 @@ function searchPolicyFor(input: {
   };
 }
 
-function classifyHeuristically(text: string): RouteDraft {
+export function classifyHeuristically(text: string): RouteDraft {
   const trimmed = text.trim();
   const urls = extractUrls(trimmed);
   const httpUrls = urls.flatMap((url) => {
@@ -383,6 +383,7 @@ async function classifyWithLlm(input: {
   }
 
   const completion = await input.llmClient.createChatCompletion({
+    thinkingTier: "none",
     messages: [
       {
         role: "system",
@@ -503,17 +504,18 @@ export async function decidePlannerRoute(input: {
   text: string;
   runtime: AgentRuntime;
   confirmedExternalRead?: "allow_web" | "no_web";
+  precomputedClassifierDecision?: any;
 }): Promise<PlannerRouteDecisionResult> {
   const heuristic = classifyHeuristically(input.text);
   const classifier =
     heuristic.confidence >= 0.9
       ? null
-      : await classifyWithLlm({
+      : (input.precomputedClassifierDecision ?? await classifyWithLlm({
           llmClient: input.runtime.llmClient,
           text: input.text,
           extractedUrls: extractUrls(input.text),
           heuristicSignals: heuristic.signals
-        });
+        }));
   const mergedDecision = mergeDecisions({ heuristic, classifier });
   const decision = (() => {
     if (input.confirmedExternalRead === "no_web") {

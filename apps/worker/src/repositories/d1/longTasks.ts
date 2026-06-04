@@ -15,6 +15,7 @@ export function createD1LongTaskRepositories(
   | "createLongTask"
   | "updateLongTask"
   | "getLongTask"
+  | "deleteLongTask"
   | "getLatestActiveLongTask"
   | "getLongTaskForRun"
   | "listLongTasks"
@@ -111,6 +112,14 @@ export function createD1LongTaskRepositories(
         .first<LongTaskRow>();
 
       return row ? toLongTask(row) : null;
+    },
+
+    async deleteLongTask(input) {
+      await db.batch([
+        db.prepare("DELETE FROM long_task_events WHERE long_task_id = ?").bind(input.id),
+        db.prepare("DELETE FROM long_task_steps WHERE long_task_id = ?").bind(input.id),
+        db.prepare("DELETE FROM long_tasks WHERE owner_tg_user_id = ? AND id = ?").bind(input.ownerTgUserId, input.id)
+      ]);
     },
 
     async getLatestActiveLongTask(ownerTgUserId) {

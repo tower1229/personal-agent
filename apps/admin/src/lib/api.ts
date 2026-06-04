@@ -333,6 +333,10 @@ export async function cancelLongTask(id: string): Promise<void> {
   await postEmpty(`/api/admin/long-tasks/${id}/cancel`);
 }
 
+export async function deleteLongTask(id: string): Promise<void> {
+  await deleteEmpty(`/api/admin/long-tasks/${id}`);
+}
+
 export function loadSchedules(): Promise<AdminSchedulesResponse> {
   return fetchJson("/api/admin/schedules", (input) =>
     adminSchedulesResponseSchema.parse(input)
