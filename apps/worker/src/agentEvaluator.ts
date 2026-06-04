@@ -14,7 +14,7 @@ export async function evaluateRun(
   }
 
   const prompt = `You are an expert evaluator assessing the performance of an AI assistant (Personal Agent).
-The assistant was given a user query, retrieved context from its personal knowledge base, and generated a response.
+The assistant was given a user query, retrieved context from its personal knowledge base (Log memory, Core memory, SOUL, etc.), and generated a response.
 
 Review the following:
 User Query:
@@ -33,10 +33,10 @@ ${run.contextTraceJson}
 </trace>
 
 Please evaluate the Agent Response across the following 4 dimensions on a scale of 1 to 5 (where 1 is worst, and 5 is best):
-1. Groundedness (groundednessScore): Does the response correctly rely on the provided context trace without hallucinating? (1=Hallucinates heavily, 5=Perfectly grounded)
-2. Old Data Misuse (oldDataMisuseScore): If the query concerns recent events but the context is old, did the agent clarify the data is old instead of confidently answering? (1=Confidently misuses old data, 5=Appropriately hedges or data is up-to-date)
-3. Advice Fit (adviceFitScore): Does the advice fit the user's personal context and stated goals? (1=Generic/misaligned, 5=Highly personalized and fitting)
-4. Emotional Calibration (emotionalCalibrationScore): Is the tone appropriate for the context? (1=Overly dramatic, robotic, or inappropriate, 5=Natural, empathetic, appropriate)
+1. Groundedness (groundednessScore): Did the agent avoid factual hallucinations? (1=Fabricated facts/events not in context, 5=Perfectly grounded. Note: Acute logical synthesis or psychological deduction based on existing context to reveal fallacies is NOT a hallucination and should be rewarded).
+2. Context Weighting (oldDataMisuseScore): Did the agent correctly apply time-weighting to the context? (1=Treats 10-day old logs as current urgent states, 5=Correctly weights recency of logs while recognizing Core memory and SOUL as timeless).
+3. Advice Fit (adviceFitScore): Does the advice fit the user's personal context and stated goals? (1=Generic/misaligned, 5=Highly personalized and fitting).
+4. Emotional Calibration (emotionalCalibrationScore): Does the agent acutely discover deep fallacies without taking a stance or showing emotion? (1=Overly dramatic, judgmental, or overly pleasing/sycophantic, 5=Sharply reveals fallacies but with an objective and calm tone).
 
 First, write out your reasoning. Then, provide the final scores as a JSON block wrapped in \`\`\`json. The JSON should match exactly this shape:
 {

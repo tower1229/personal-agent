@@ -1080,7 +1080,7 @@ export async function executeLlmAgent(
   }
 
   const recentMemories = await input.runtime.repositories.listMemories(input.ownerTgUserId, 50);
-  const tenDaysAgo = input.runtime.now() - 10 * 24 * 60 * 60;
+  const tenDaysAgo = Date.now() - 10 * 24 * 60 * 60 * 1000;
   const logMemories = recentMemories.filter((m) => m.createdAt >= tenDaysAgo);
   if (logMemories.length > 0) {
     const memoryStrings = logMemories.map((m) => `- ${m.content}`).join("\n");

@@ -623,7 +623,7 @@ describe("worker system and bot commands", () => {
       claimId: repositories.personalModelClaims[0]?.id,
       eventType: "created"
     });
-    expect(telegramClient.messages[0]?.text).toBe("已记录理解 id-2。");
+    expect(telegramClient.messages[0]?.text).toBe("已记录理解 id-3。");
   });
 
   it("records typed personal model claims from Telegram", async () => {
@@ -1202,7 +1202,7 @@ describe("worker system and bot commands", () => {
           id: 1,
           title: "从 Admin 查看",
           status: "open",
-          createdAt: 1001,
+          createdAt: 1002,
           completedAt: null,
           dueAt: null,
           remindedAt: null

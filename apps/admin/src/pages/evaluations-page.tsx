@@ -75,7 +75,7 @@ function EvaluationsTable(props: { items: RunEvaluationDto[] }) {
         <TableRow>
           <TableHead>Run ID</TableHead>
           <TableHead>Groundedness</TableHead>
-          <TableHead>Old Data Misuse</TableHead>
+          <TableHead>Context Weighting</TableHead>
           <TableHead>Advice Fit</TableHead>
           <TableHead>Emotional Cal.</TableHead>
           <TableHead>Created At</TableHead>

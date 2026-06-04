@@ -1443,7 +1443,7 @@ export function createFakeLlmClient(
       calls.push(input.messages);
       const latest = input.messages.at(-1);
       const systemText = input.messages[0]?.content ?? "";
-      if (systemText.includes("skill 路由器")) {
+      if (systemText.includes("skill 路由器") || systemText.includes("统一路由调度器")) {
         const payload = JSON.parse(latest?.content ?? "{}") as {
           input?: string;
           skills?: Array<{ name: string; description: string }>;
@@ -1452,15 +1452,20 @@ export function createFakeLlmClient(
           `${payload.input ?? ""} ${skill.name} ${skill.description}`.includes("规划")
         );
         const confidence = matched ? options.semanticConfidence ?? 0.88 : 0.2;
+        const skillResult = {
+          matchedSkillName: matched?.name ?? null,
+          confidence,
+          reason: matched ? "fake semantic match" : "fake no match",
+          candidates: matched
+            ? [{ name: matched.name, confidence, reason: "fake semantic match" }]
+            : []
+        };
         return {
-          content: JSON.stringify({
-            matchedSkillName: matched?.name ?? null,
-            confidence,
-            reason: matched ? "fake semantic match" : "fake no match",
-            candidates: matched
-              ? [{ name: matched.name, confidence, reason: "fake semantic match" }]
-              : []
-          }),
+          content: JSON.stringify(
+            systemText.includes("统一路由调度器")
+              ? { semanticSkill: skillResult }
+              : skillResult
+          ),
           toolCalls: []
         };
       }
