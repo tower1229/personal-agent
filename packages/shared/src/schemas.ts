@@ -1145,6 +1145,7 @@ export const userProfileSchema = z.object({
   gender: z.string().nullable(),
   interpretationFramework: z.string().nullable(),
   preferences: z.string().nullable(),
+  agentSoul: z.string().nullable(),
   coreMemory: z.string().nullable(),
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0)
@@ -1157,6 +1158,7 @@ export const userProfileUpdateRequestSchema = z.object({
   gender: z.string().nullable().optional(),
   interpretationFramework: z.string().nullable().optional(),
   preferences: z.string().nullable().optional(),
+  agentSoul: z.string().nullable().optional(),
   coreMemory: z.string().nullable().optional()
 });
 export type UserProfileUpdateRequest = z.infer<typeof userProfileUpdateRequestSchema>;

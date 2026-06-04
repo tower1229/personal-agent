@@ -280,6 +280,7 @@ export async function executeAgentTool(input: {
           gender: null,
           interpretationFramework: null,
           preferences: null,
+          agentSoul: null,
           coreMemory: null,
           createdAt: input.runtime.now(),
           updatedAt: input.runtime.now()
@@ -1064,13 +1065,26 @@ export async function executeLlmAgent(
     if (parts.length > 0) {
       basicProfile = `[用户档案: ${parts.join(", ")}]\n`;
     }
+
+    let agentSoul = "";
+    if (profile.agentSoul) {
+      agentSoul = `[Agent SOUL / 行为契约 (最高优先级)]\n${profile.agentSoul}\n`;
+    }
     
     let coreMem = "";
     if (profile.coreMemory) {
       coreMem = `[核心记忆/Core Memory (最高优先级)]\n${profile.coreMemory}\n`;
     }
     
-    profileContext = basicProfile + coreMem;
+    profileContext = basicProfile + agentSoul + coreMem;
+  }
+
+  const recentMemories = await input.runtime.repositories.listMemories(input.ownerTgUserId, 50);
+  const tenDaysAgo = input.runtime.now() - 10 * 24 * 60 * 60;
+  const logMemories = recentMemories.filter((m) => m.createdAt >= tenDaysAgo);
+  if (logMemories.length > 0) {
+    const memoryStrings = logMemories.map((m) => `- ${m.content}`).join("\n");
+    profileContext += `[近期日志记忆 / Log Memory (最近10天)]\n${memoryStrings}\n\n`;
   }
 
   const tools = availableToolDefinitions(input.allowedTools);
@@ -1448,12 +1462,8 @@ export async function executeLlmAgent(
 
   const systemInstructions = [
     "你是一个个人 Telegram agent。用简洁中文回答。",
-    "你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。",
     profileContext,
     "默认隐性使用个人模型，不要频繁显性引用旧资料或展示你有多了解用户。",
-    "当用户情绪或真实需求不确定时，先给轻量判断，再问一个关键校准问题，不要直接定性。",
-    "可以指出逃避、投射、控制欲、自我合理化和分析过度，但语气必须平静，态度必须温和。",
-    "不要自称宗教、心理或终极真理权威。",
     "需要联网信息时先使用 web_search；需要读取具体网页时使用 fetch_url。",
     "使用搜索或网页内容回答时，必须包含来源 URL。",
     "当你使用了 web_search 或 fetch_url 收集到信息后，必须使用 submit_answer 工具提交最终回答，并严格引用来源。否则，你可以直接输出文本回答。",

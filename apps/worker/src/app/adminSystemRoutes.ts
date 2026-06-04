@@ -281,6 +281,7 @@ export function registerAdminSystemRoutes(
         gender: null,
         interpretationFramework: null,
         preferences: null,
+        agentSoul: null,
         coreMemory: null,
         createdAt: (options.now ?? Date.now)(),
         updatedAt: (options.now ?? Date.now)()
@@ -312,6 +313,7 @@ export function registerAdminSystemRoutes(
       gender: body.data.gender !== undefined ? body.data.gender : (existing?.gender ?? null),
       interpretationFramework: body.data.interpretationFramework !== undefined ? body.data.interpretationFramework : (existing?.interpretationFramework ?? null),
       preferences: body.data.preferences !== undefined ? body.data.preferences : (existing?.preferences ?? null),
+      agentSoul: body.data.agentSoul !== undefined ? body.data.agentSoul : (existing?.agentSoul ?? null),
       coreMemory: body.data.coreMemory !== undefined ? body.data.coreMemory : (existing?.coreMemory ?? null),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now

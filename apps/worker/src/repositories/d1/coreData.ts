@@ -383,6 +383,7 @@ export function createD1CoreDataRepositories(
           gender: string | null;
           interpretation_framework: string | null;
           preferences: string | null;
+          agent_soul: string | null;
           core_memory: string | null;
           created_at: number;
           updated_at: number;
@@ -395,6 +396,7 @@ export function createD1CoreDataRepositories(
         gender: row.gender,
         interpretationFramework: row.interpretation_framework,
         preferences: row.preferences,
+        agentSoul: row.agent_soul,
         coreMemory: row.core_memory,
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -404,14 +406,15 @@ export function createD1CoreDataRepositories(
     async upsertUserProfile(input) {
       await db
         .prepare(
-          `INSERT INTO user_profiles (id, name, birthday_timestamp, gender, interpretation_framework, preferences, core_memory, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO user_profiles (id, name, birthday_timestamp, gender, interpretation_framework, preferences, agent_soul, core_memory, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET
              name = excluded.name,
              birthday_timestamp = excluded.birthday_timestamp,
              gender = excluded.gender,
              interpretation_framework = excluded.interpretation_framework,
              preferences = excluded.preferences,
+             agent_soul = excluded.agent_soul,
              core_memory = excluded.core_memory,
              updated_at = excluded.updated_at`
         )
@@ -422,6 +425,7 @@ export function createD1CoreDataRepositories(
           input.gender,
           input.interpretationFramework,
           input.preferences,
+          input.agentSoul,
           input.coreMemory,
           input.createdAt,
           input.updatedAt

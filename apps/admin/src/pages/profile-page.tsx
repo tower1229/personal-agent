@@ -19,6 +19,7 @@ export function ProfilePage() {
   const [astrologySign, setAstrologySign] = useState("");
   const [communicationStyle, setCommunicationStyle] = useState("");
   const [workLifeBoundaries, setWorkLifeBoundaries] = useState("");
+  const [agentSoul, setAgentSoul] = useState("");
   const [coreMemory, setCoreMemory] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -26,6 +27,7 @@ export function ProfilePage() {
     if (profileData.data) {
       setName(profileData.data.name || "");
       setGender(profileData.data.gender || "");
+      setAgentSoul(profileData.data.agentSoul || "");
       setCoreMemory(profileData.data.coreMemory || "");
       if (profileData.data.birthdayTimestamp) {
         setBirthday(formatLocalYMD(profileData.data.birthdayTimestamp));
@@ -74,6 +76,7 @@ export function ProfilePage() {
         birthdayTimestamp,
         interpretationFramework,
         preferences,
+        agentSoul: agentSoul || null,
         coreMemory: coreMemory || null
       });
       toast.success("Profile updated successfully");
@@ -179,6 +182,23 @@ export function ProfilePage() {
               />
             </Field>
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent SOUL</CardTitle>
+          <CardDescription>
+            High-priority behavior contract for the agent (in Markdown format).
+            This information is always injected into the LLM context.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={agentSoul}
+            onChange={(e) => setAgentSoul(e.target.value)}
+            placeholder="Write Agent SOUL in markdown..."
+            className="font-mono min-h-[300px]"
+          />
         </CardContent>
       </Card>
       <Card>

@@ -421,6 +421,7 @@ export interface UserProfileRecord {
   gender: string | null;
   interpretationFramework: string | null;
   preferences: string | null;
+  agentSoul: string | null;
   coreMemory: string | null;
   createdAt: number;
   updatedAt: number;

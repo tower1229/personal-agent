@@ -1130,6 +1130,33 @@ describe("worker system and bot commands", () => {
     expect(systemText).toContain("默认隐性使用个人模型");
   });
 
+  it("injects Agent SOUL from the user profile instead of runtime hardcoding it", async () => {
+    const { app, repositories, llmClient } = createTestApp();
+    await repositories.upsertUserProfile({
+      id: "1229",
+      name: "Owner",
+      birthdayTimestamp: null,
+      gender: null,
+      interpretationFramework: null,
+      preferences: null,
+      agentSoul: "# Agent SOUL\n只使用数据库中的行为契约。",
+      coreMemory: "# Core Memory\n核心记忆也应该注入。",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+
+    await postWebhook(app, ownerUpdate("普通聊天", 1));
+
+    const agentCall = llmClient.calls.find((call) =>
+      call[0]?.content?.includes("你是一个个人 Telegram agent")
+    );
+    const systemText = agentCall?.[0]?.content ?? "";
+    expect(systemText).toContain("[Agent SOUL / 行为契约 (最高优先级)]");
+    expect(systemText).toContain("只使用数据库中的行为契约。");
+    expect(systemText).toContain("核心记忆也应该注入。");
+    expect(systemText).not.toContain("你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。");
+  });
+
   it("marks the run failed when Telegram sendMessage fails without returning 5xx", async () => {
     const { app, repositories } = createTestApp({ telegramFails: true });
     const response = await postWebhook(app, ownerUpdate("新增待办：会写入但回复失败"));
