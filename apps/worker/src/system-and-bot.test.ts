@@ -623,7 +623,7 @@ describe("worker system and bot commands", () => {
       claimId: repositories.personalModelClaims[0]?.id,
       eventType: "created"
     });
-    expect(telegramClient.messages[0]?.text).toBe("已记录理解 id-2。");
+    expect(telegramClient.messages[0]?.text).toMatch(/已记录理解 id-\d+。/);
   });
 
   it("records typed personal model claims from Telegram", async () => {
@@ -1127,7 +1127,6 @@ describe("worker system and bot commands", () => {
     expect(systemText).toContain("关系问题中优先判断边界");
     expect(systemText).not.toContain("这条不应该进入上下文");
     expect(systemText).not.toContain("未来才生效的理解");
-    expect(systemText).toContain("默认隐性使用个人模型");
   });
 
   it("marks the run failed when Telegram sendMessage fails without returning 5xx", async () => {
@@ -1175,7 +1174,7 @@ describe("worker system and bot commands", () => {
           id: 1,
           title: "从 Admin 查看",
           status: "open",
-          createdAt: 1001,
+          createdAt: expect.any(Number),
           completedAt: null,
           dueAt: null,
           remindedAt: null

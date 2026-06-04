@@ -14,8 +14,7 @@ describe("admin profile", () => {
       astrologySign: "Aquarius"
     });
     const preferences = JSON.stringify({
-      communicationStyle: "",
-      workLifeBoundaries: ""
+      soul: ""
     });
 
     const response = await app.request(

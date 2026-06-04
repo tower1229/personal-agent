@@ -25,6 +25,7 @@ import {
 export function toAdminRun(run: RunRecord) {
   return {
     id: run.id,
+    sessionId: run.sessionId ?? null,
     status: run.status,
     messageText: run.messageText,
     responseText: run.responseText,

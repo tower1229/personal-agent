@@ -254,6 +254,7 @@ export function createFakeRepositories(): AgentRepositories & {
     async createRun(input) {
       const run: RunRecord = {
         ...input,
+        sessionId: input.sessionId ?? null,
         status: "running",
         responseText: null,
         error: null,
@@ -1443,38 +1444,52 @@ export function createFakeLlmClient(
       calls.push(input.messages);
       const latest = input.messages.at(-1);
       const systemText = input.messages[0]?.content ?? "";
-      if (systemText.includes("skill 路由器")) {
+      if (systemText.includes("统一路由调度器")) {
         const payload = JSON.parse(latest?.content ?? "{}") as {
-          input?: string;
+          inputText?: string;
           skills?: Array<{ name: string; description: string }>;
         };
+        const text = payload.inputText ?? "";
         const matched = (payload.skills ?? []).find((skill) =>
-          `${payload.input ?? ""} ${skill.name} ${skill.description}`.includes("规划")
+          `${text} ${skill.name} ${skill.description}`.includes("规划")
         );
         const confidence = matched ? options.semanticConfidence ?? 0.88 : 0.2;
-        return {
-          content: JSON.stringify({
-            matchedSkillName: matched?.name ?? null,
-            confidence,
-            reason: matched ? "fake semantic match" : "fake no match",
-            candidates: matched
-              ? [{ name: matched.name, confidence, reason: "fake semantic match" }]
-              : []
-          }),
-          toolCalls: []
-        };
-      }
-      if (systemText.includes("任务复杂度分类器")) {
-        const text = latest?.content ?? "";
         const isLongTask =
           /调研|研究|比较|对比|报告|规划|计划|方案|分析|多步|整理|搜索.*并/u.test(
             text
           ) || text.length >= 120;
+
         return {
           content: JSON.stringify({
-            mode: isLongTask ? "long_task" : "simple",
-            score: isLongTask ? 0.8 : 0.2,
-            reason: isLongTask ? "fake complex request" : "fake simple request"
+            semanticSkill: {
+              matchedSkillName: matched?.name ?? null,
+              confidence,
+              reason: matched ? "fake semantic match" : "fake no match",
+              candidates: matched
+                ? [{ name: matched.name, confidence, reason: "fake semantic match" }]
+                : []
+            },
+            taskComplexity: {
+              mode: isLongTask ? "long_task" : "simple",
+              score: isLongTask ? 0.8 : 0.2,
+              reason: isLongTask ? "fake complex request" : "fake simple request"
+            },
+            plannerRoute: {
+              policyVersion: "planner-route-v1",
+              mode: "none",
+              confidence: 1,
+              reason: "fake planner route",
+              candidateTools: [],
+              toolActionRisk: "none",
+              freshnessRisk: "low",
+              privacyRisk: "low",
+              confirmationRequired: false,
+              searchPolicy: { allowedTopics: [], suggestedQueries: [], forbiddenTerms: [], redactionRequired: false, maxQueries: 0 },
+              fetchPolicy: { explicitAllowedUrls: [], allowSearchResultUrls: false, allowedDomains: [], maxUrls: 0 },
+              signals: [],
+              classifierUsed: true,
+              question: null
+            }
           }),
           toolCalls: []
         };

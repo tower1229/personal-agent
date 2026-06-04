@@ -17,8 +17,7 @@ export function ProfilePage() {
   const [mbti, setMbti] = useState("");
   const [enneagram, setEnneagram] = useState("");
   const [astrologySign, setAstrologySign] = useState("");
-  const [communicationStyle, setCommunicationStyle] = useState("");
-  const [workLifeBoundaries, setWorkLifeBoundaries] = useState("");
+  const [soul, setSoul] = useState("");
   const [coreMemory, setCoreMemory] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -43,8 +42,7 @@ export function ProfilePage() {
       if (profileData.data.preferences) {
         try {
           const pref = JSON.parse(profileData.data.preferences);
-          setCommunicationStyle(pref?.communicationStyle || "");
-          setWorkLifeBoundaries(pref?.workLifeBoundaries || "");
+          setSoul(pref?.soul || "");
         } catch (e) {
           // ignore parsing error
         }
@@ -64,8 +62,7 @@ export function ProfilePage() {
       });
 
       const preferences = JSON.stringify({
-        communicationStyle,
-        workLifeBoundaries
+        soul
       });
 
       const updated = await updateProfile({
@@ -157,28 +154,18 @@ export function ProfilePage() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Base Preferences</CardTitle>
+          <CardTitle>SOUL Configuration</CardTitle>
           <CardDescription>
-            Your fundamental preferences for communication and boundaries.
+            The core personality contract, communication style, and behavioral boundaries of the Agent (Markdown format).
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Communication Style (沟通风格)">
-              <Input
-                value={communicationStyle}
-                onChange={(e) => setCommunicationStyle(e.target.value)}
-                placeholder="e.g. Direct and concise, Empathetic"
-              />
-            </Field>
-            <Field label="Work/Life Boundaries (工作生活边界)">
-              <Input
-                value={workLifeBoundaries}
-                onChange={(e) => setWorkLifeBoundaries(e.target.value)}
-                placeholder="e.g. No work topics on weekends"
-              />
-            </Field>
-          </div>
+        <CardContent>
+          <Textarea
+            value={soul}
+            onChange={(e) => setSoul(e.target.value)}
+            placeholder="Write SOUL configuration in markdown..."
+            className="font-mono min-h-[300px]"
+          />
         </CardContent>
       </Card>
       <Card>

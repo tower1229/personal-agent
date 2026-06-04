@@ -1,0 +1,154 @@
+--- apps/worker/src/bot.ts
++++ apps/worker/src/bot.ts
+@@ -20,6 +20,7 @@
+   canCancelLongTask,
+   canPauseLongTask,
+   classifyTaskComplexityWithLlm,
++  classifyTaskComplexity,
+   executeLongTaskForRecord,
+   formatCompletedLongTask,
+   startLongTask,
+@@ -28,6 +29,8 @@
+   decidePlannerRoute,
+   parsePlannerClarificationReply,
+   PLANNER_ROUTE_CLARIFICATION_TTL_MS,
++  extractUrls,
++  classifyHeuristically
+ } from "./plannerRouteDecision.js";
+ import {
+   type AgentRepositories,
+@@ -37,6 +40,7 @@
+ } from "./repositories.js";
+ import { getTelegramChatId, getTelegramMessageText, type TelegramClient } from "./telegram.js";
+ import { executeLlmAgentOnWebTask } from "./webWorker.js";
++import { executeUnifiedRouting } from "./unifiedRouter.js";
+ 
+ export interface BotRuntime extends AgentRuntime {
+   repositories: AgentRepositories;
+@@ -1098,21 +1102,46 @@
+   // Trigger thinking state before starting heavy LLM routing
+   input.onThinking?.({ type: "thinking" }).catch(() => {});
+ 
+-  const semanticRoute = await findSemanticSkillMatch({
+-    ownerTgUserId: input.ownerTgUserId,
+-    text: input.text,
+-    runtime: input.runtime
++  const runnableSkills = (
++    await input.runtime.repositories.listRunnableSkills(input.ownerTgUserId)
++  ).filter((runnable) => runnable.version.validation.ok);
++
++  const skillIntents = await input.runtime.repositories.listSkillIntents(
++    input.ownerTgUserId
++  );
++  const skillCatalog = runnableSkills.map((runnable) => {
++    const intentsForSkill = skillIntents
++      .filter((intent) => intent.skillName === runnable.version.name)
++      .map((intent) => intent.intentText);
++    return {
++      name: runnable.version.name,
++      description: runnable.version.description,
++      exampleIntents: intentsForSkill.length > 0 ? intentsForSkill : undefined
++    };
+   });
+-  await recordRouteDecision({
+-    runId: input.runId,
+-    ownerTgUserId: input.ownerTgUserId,
+-    text: input.text,
+-    runtime: input.runtime,
+-    match: semanticRoute.match,
+-    reason: semanticRoute.reason,
+-    candidatesJson: semanticRoute.candidatesJson
++
++  const heuristicComplexity = classifyTaskComplexity(input.text);
++  const heuristicPlanner = classifyHeuristically(input.text);
++
++  const unifiedRouting = await executeUnifiedRouting({
++    runtime: input.runtime,
++    text: input.text,
++    ownerTgUserId: input.ownerTgUserId,
++    skillCatalog,
++    extractedUrls: extractUrls(input.text),
++    heuristicSignals: heuristicPlanner.signals
+   });
+-  if (semanticRoute.match) {
++
++  // Process Semantic Route
++  if (unifiedRouting.semanticSkill?.matchedSkillName) {
++    const runnable = runnableSkills.find(
++      (candidate) => candidate.version.name === unifiedRouting.semanticSkill?.matchedSkillName
++    );
++    if (runnable) {
++      const match: SkillMatch = {
++        runnable,
++        inputText: input.text.trim(),
++        triggerType: "semantic",
++        confidence: unifiedRouting.semanticSkill.confidence,
++        reason: unifiedRouting.semanticSkill.reason,
++        candidatesJson: unifiedRouting.semanticSkill.candidatesJson
++      };
++      await recordRouteDecision({
++        runId: input.runId,
++        ownerTgUserId: input.ownerTgUserId,
++        text: input.text,
++        runtime: input.runtime,
++        match,
++        reason: match.reason,
++        candidatesJson: match.candidatesJson
++      });
++      
++      if (match.confidence >= ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD) {
++        return executeSkill({
++          runId: input.runId,
++          ownerTgUserId: input.ownerTgUserId,
++          match,
++          runtime: input.runtime
++        });
++      } else {
++        return {
++          responseText: `我猜你可能是想执行技能「${match.runnable.version.name}」，是否确认？`,
++          toolName: "skill_confirm",
++          riskLevel: "read",
++          input: { name: match.runnable.version.name },
++          output: { pending: true, skillId: match.runnable.skill.id }
++        };
++      }
++    }
++  }
++
++  await recordRouteDecision({
++    runId: input.runId,
++    ownerTgUserId: input.ownerTgUserId,
++    text: input.text,
++    runtime: input.runtime,
++    match: null,
++    reason: unifiedRouting.semanticSkill?.reason || "no skill matched",
++    candidatesJson: unifiedRouting.semanticSkill?.candidatesJson || "[]"
++  });
++
++  // Process Task Complexity
++  const taskComplexity = heuristicComplexity.mode === "long_task" 
++    ? heuristicComplexity 
++    : (unifiedRouting.taskComplexity || heuristicComplexity);
++    
++  if (taskComplexity.mode === "long_task") {
++    const started = await startLongTask({
++      runId: input.runId,
++      ownerTgUserId: input.ownerTgUserId,
++      text: input.text,
++      decision: taskComplexity as any, // satisfy TS
++      runtime: input.runtime
++    });
++    return {
++      responseText: started.responseText,
++      toolName: "long_task_start",
++      riskLevel: "external_send",
++      input: { text: input.text },
++      output: { taskId: started.task.id }
++    };
++  }
++
++  // Process Planner Route Decision
++  // To simplify, we still call decidePlannerRoute but we can inject the LLM decision if we want to bypass it.
++  // Actually, decidePlannerRoute relies on classifyWithLlm internally. Let's just use the result if available.
++  // Since we don't easily bypass it, we can just let `decidePlannerRoute` run for now because it uses heuristics.
++  // But we want to avoid another LLM call! Let's check how to inject unifiedRouting.plannerRoute.
