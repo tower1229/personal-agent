@@ -246,6 +246,11 @@ export function createFakeRepositories(): AgentRepositories & {
     get adminAssistRuns() {
       return state.adminAssistRuns;
     },
+    async createChatSession() { return {} as any; },
+    async getActiveChatSession() { return null; },
+    async closeActiveChatSession() {},
+    async updateChatSession() {},
+    async listRunsForSession() { return []; },
     async createRun(input) {
       const run: RunRecord = {
         ...input,

@@ -1,6 +1,9 @@
 export const runStatuses = ["running", "succeeded", "failed"] as const;
 export type RunStatus = (typeof runStatuses)[number];
 
+export const chatSessionStatuses = ["active", "closed"] as const;
+export type ChatSessionStatus = (typeof chatSessionStatuses)[number];
+
 export const todoStatuses = ["open", "completed"] as const;
 export type TodoStatus = (typeof todoStatuses)[number];
 

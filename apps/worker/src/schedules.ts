@@ -119,8 +119,10 @@ export async function executeScheduleCommand(input: {
   runtime: BotRuntime;
 }): Promise<void> {
   const now = input.runtime.now();
+  const runId = input.runtime.generateId();
   const run = await input.runtime.repositories.createRun({
-    id: input.runtime.generateId(),
+    id: runId,
+    sessionId: runId,
     ownerTgUserId: input.schedule.ownerTgUserId,
     chatId: input.schedule.ownerTgUserId,
     updateId: null,

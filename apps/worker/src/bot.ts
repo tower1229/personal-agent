@@ -822,6 +822,7 @@ export async function executeSkill(input: {
     const result = agentResultToCommandResult(
       await executeLlmAgent({
         runId: input.runId,
+        sessionId: input.runId, // Fallback since skill execution might not have session context
         ownerTgUserId: input.ownerTgUserId,
         inputText: input.match.inputText,
         runtime: input.runtime,
@@ -859,6 +860,7 @@ export async function executeSkill(input: {
 
 async function executeCommandOrSkillOrLlmFallback(input: {
   runId: string;
+  sessionId: string;
   ownerTgUserId: number;
   text: string;
   runtime: BotRuntime;
@@ -912,6 +914,7 @@ async function executeCommandOrSkillOrLlmFallback(input: {
     return agentResultToCommandResult(
       await executeLlmAgent({
         runId: input.runId,
+        sessionId: input.sessionId,
         ownerTgUserId: input.ownerTgUserId,
         inputText: originalText,
         runtime: input.runtime,
@@ -1072,6 +1075,7 @@ async function executeCommandOrSkillOrLlmFallback(input: {
   return agentResultToCommandResult(
     await executeLlmAgent({
       runId: input.runId,
+      sessionId: input.sessionId,
       ownerTgUserId: input.ownerTgUserId,
       inputText: input.text,
       runtime: input.runtime,
@@ -1093,6 +1097,40 @@ export async function handleOwnerUpdate(
   if (!chatId) {
     return { runId };
   }
+
+  const textTrimmed = text?.trim() ?? "";
+  
+  if (textTrimmed === "/new") {
+    await input.runtime.repositories.closeActiveChatSession(input.ownerTgUserId, now);
+    await input.runtime.repositories.createChatSession({
+      id: input.runtime.generateId(),
+      ownerTgUserId: input.ownerTgUserId,
+      status: "active",
+      themeSummary: null,
+      summarizedUpToRunId: null,
+      createdAt: now,
+      updatedAt: now
+    });
+    await input.runtime.telegramClient.sendMessage({
+      chatId,
+      text: "✅ 已开启全新的对话上下文。"
+    });
+    return { runId };
+  }
+
+  let activeSession = await input.runtime.repositories.getActiveChatSession(input.ownerTgUserId);
+  if (!activeSession) {
+    activeSession = await input.runtime.repositories.createChatSession({
+      id: input.runtime.generateId(),
+      ownerTgUserId: input.ownerTgUserId,
+      status: "active",
+      themeSummary: null,
+      summarizedUpToRunId: null,
+      createdAt: now,
+      updatedAt: now
+    });
+  }
+  const sessionId = activeSession.id;
 
   // Handle Feedback Callbacks
   const cbData = input.update.callback_query?.data;
@@ -1118,6 +1156,7 @@ export async function handleOwnerUpdate(
         }
         const run = await input.runtime.repositories.createRun({
           id: runId,
+          sessionId,
           ownerTgUserId: input.ownerTgUserId,
           chatId,
           updateId: input.update.update_id,
@@ -1315,6 +1354,7 @@ export async function handleOwnerUpdate(
 
   const run = await input.runtime.repositories.createRun({
     id: runId,
+    sessionId,
     ownerTgUserId: input.ownerTgUserId,
     chatId,
     updateId: input.update.update_id,
@@ -1377,6 +1417,7 @@ export async function handleOwnerUpdate(
       result = agentResultToCommandResult(
           await executeCommandOrSkillOrLlmFallback({
             runId: run.id,
+            sessionId,
             ownerTgUserId: input.ownerTgUserId,
             text: messageText,
             runtime: input.runtime,

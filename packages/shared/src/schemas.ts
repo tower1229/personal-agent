@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   approvalRequestStatuses,
   builtInToolNames,
+  chatSessionStatuses,
   controlledToolNames,
   documentIndexStatuses,
   documentSourceTypes,
@@ -573,6 +574,7 @@ export type AdminScheduleExecutionsResponse = z.infer<
 
 export const adminRunSummarySchema = z.object({
   id: z.string().min(1),
+  sessionId: z.string().min(1).nullable(),
   status: z.enum(runStatuses),
   messageText: z.string().nullable(),
   responseText: z.string().nullable(),
@@ -582,6 +584,18 @@ export const adminRunSummarySchema = z.object({
 });
 
 export type AdminRunSummary = z.infer<typeof adminRunSummarySchema>;
+
+export const adminChatSessionSchema = z.object({
+  id: z.string().min(1),
+  ownerTgUserId: z.number().int(),
+  status: z.enum(chatSessionStatuses),
+  themeSummary: z.string().nullable(),
+  summarizedUpToRunId: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0)
+});
+
+export type AdminChatSession = z.infer<typeof adminChatSessionSchema>;
 
 export const adminRunsResponseSchema = z.object({
   items: z.array(adminRunSummarySchema)

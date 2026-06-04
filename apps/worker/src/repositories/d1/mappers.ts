@@ -20,9 +20,10 @@ import {
   type RunStatus,
   type ScheduleCadence,
   type ScheduleExecutionStatus,
+  skillValidationResultSchema,
   skillPackageFileInventoryItemSchema,
   skillPackageMetadataSchema,
-  skillValidationResultSchema,
+  type ChatSessionStatus,
   type SkillPackageFileInventoryItem,
   type SkillPackageMetadata,
   type SkillRouteTriggerType,
@@ -73,11 +74,13 @@ import {
   type TodoRecord,
   type ToolCallRecord,
   type RunFeedbackRecord,
-  type RunEvaluationRecord
+  type RunEvaluationRecord,
+  type ChatSessionRecord
 } from "../../repositories.js";
 
 export interface RunRow {
   id: string;
+  session_id: string | null;
   owner_tg_user_id: number;
   chat_id: number;
   update_id: number | null;
@@ -86,6 +89,16 @@ export interface RunRow {
   response_text: string | null;
   error: string | null;
   context_trace_json: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ChatSessionRow {
+  id: string;
+  owner_tg_user_id: number;
+  status: ChatSessionStatus;
+  theme_summary: string | null;
+  summarized_up_to_run_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -436,6 +449,7 @@ export interface LongTaskEventRow {
 export function toRun(row: RunRow): RunRecord {
   return {
     id: row.id,
+    sessionId: row.session_id,
     ownerTgUserId: row.owner_tg_user_id,
     chatId: row.chat_id,
     updateId: row.update_id,
@@ -444,6 +458,18 @@ export function toRun(row: RunRow): RunRecord {
     responseText: row.response_text,
     error: row.error,
     contextTraceJson: row.context_trace_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function toChatSession(row: ChatSessionRow): ChatSessionRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    status: row.status,
+    themeSummary: row.theme_summary,
+    summarizedUpToRunId: row.summarized_up_to_run_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

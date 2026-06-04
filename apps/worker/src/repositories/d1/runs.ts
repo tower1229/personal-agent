@@ -36,6 +36,7 @@ export function createD1RunRepositories(
   | "createRun"
   | "updateRun"
   | "listRuns"
+  | "listRunsForSession"
   | "getRun"
   | "recordToolCall"
   | "listToolCallsForRun"
@@ -49,13 +50,14 @@ export function createD1RunRepositories(
       const row = await db
         .prepare(
           `INSERT INTO runs (
-            id, owner_tg_user_id, chat_id, update_id, message_text,
+            id, session_id, owner_tg_user_id, chat_id, update_id, message_text,
             status, response_text, error, context_trace_json, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, 'running', NULL, NULL, NULL, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, 'running', NULL, NULL, NULL, ?, ?)
           RETURNING *`
         )
         .bind(
           input.id,
+          input.sessionId,
           input.ownerTgUserId,
           input.chatId,
           input.updateId,
@@ -113,6 +115,19 @@ export function createD1RunRepositories(
           LIMIT ?`
         )
         .bind(ownerTgUserId, limit)
+        .all<RunRow>();
+
+      return (results ?? []).map(toRun);
+    },
+
+    async listRunsForSession(ownerTgUserId, sessionId) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM runs
+          WHERE owner_tg_user_id = ? AND session_id = ?
+          ORDER BY created_at ASC`
+        )
+        .bind(ownerTgUserId, sessionId)
         .all<RunRow>();
 
       return (results ?? []).map(toRun);

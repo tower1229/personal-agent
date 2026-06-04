@@ -1,4 +1,5 @@
 import {
+  type ChatSessionStatus,
   type ApprovalRequestStatus,
   type ControlledToolName,
   type LongTaskStatus,
@@ -41,6 +42,7 @@ import {
 
 export interface RunRecord {
   id: string;
+  sessionId: string | null;
   ownerTgUserId: number;
   chatId: number;
   updateId: number | null;
@@ -49,6 +51,16 @@ export interface RunRecord {
   responseText: string | null;
   error: string | null;
   contextTraceJson: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChatSessionRecord {
+  id: string;
+  ownerTgUserId: number;
+  status: ChatSessionStatus;
+  themeSummary: string | null;
+  summarizedUpToRunId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -414,6 +426,11 @@ export interface UserProfileRecord {
 }
 
 export interface AgentRepositories {
+  createChatSession(input: Omit<ChatSessionRecord, "status" | "themeSummary" | "summarizedUpToRunId"> & { status: ChatSessionStatus; themeSummary: string | null; summarizedUpToRunId: string | null }): Promise<ChatSessionRecord>;
+  getActiveChatSession(ownerTgUserId: number): Promise<ChatSessionRecord | null>;
+  closeActiveChatSession(ownerTgUserId: number, updatedAt: number): Promise<void>;
+  updateChatSession(id: string, patch: { themeSummary?: string | null; summarizedUpToRunId?: string | null; updatedAt: number }): Promise<void>;
+
   createRun(input: Omit<RunRecord, "status" | "responseText" | "error" | "contextTraceJson">): Promise<RunRecord>;
   updateRun(
     id: string,
@@ -426,6 +443,7 @@ export interface AgentRepositories {
     }
   ): Promise<void>;
   listRuns(ownerTgUserId: number, limit: number): Promise<RunRecord[]>;
+  listRunsForSession(ownerTgUserId: number, sessionId: string): Promise<RunRecord[]>;
   getRun(input: {
     ownerTgUserId: number;
     id: string;

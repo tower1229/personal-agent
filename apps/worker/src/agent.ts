@@ -50,6 +50,7 @@ export interface AgentToolResult {
 
 export interface LlmAgentInput {
   runId: string;
+  sessionId: string;
   ownerTgUserId: number;
   inputText: string;
   runtime: AgentRuntime;
@@ -1418,8 +1419,59 @@ export async function executeLlmAgent(
   ]
     .filter(Boolean)
     .join("\n");
+
+  const recentRuns = await input.runtime.repositories.listRunsForSession(input.ownerTgUserId, input.sessionId);
+  const activeSession = await input.runtime.repositories.getActiveChatSession(input.ownerTgUserId);
+
+  let themeSummary = activeSession?.themeSummary || null;
+  let unsummarizedRuns = recentRuns.filter(r => r.status === "succeeded" && r.messageText && r.responseText && r.id !== input.runId);
+
+  if (activeSession?.summarizedUpToRunId) {
+    const summarizedIndex = unsummarizedRuns.findIndex(r => r.id === activeSession.summarizedUpToRunId);
+    if (summarizedIndex !== -1) {
+      unsummarizedRuns = unsummarizedRuns.slice(summarizedIndex + 1);
+    }
+  }
+
+  const MAX_UNSUMMARIZED_RUNS = 20;
+  if (unsummarizedRuns.length > MAX_UNSUMMARIZED_RUNS) {
+    const runsToCompress = unsummarizedRuns.slice(0, 10);
+    const newSummarizedUpTo = runsToCompress[runsToCompress.length - 1].id;
+    const oldSummaryText = themeSummary ? `【当前主题摘要】\n${themeSummary}\n` : "";
+    const newInteractionsText = runsToCompress.map(r => `User: ${r.messageText}\nAgent: ${r.responseText}`).join("\n");
+    const compressionPrompt = `你是一个长记忆压缩器。请将【旧摘要】与【新增对话片段】合并成一段最新的全局摘要，必须保留用户的核心需求和上下文设定。只返回压缩后的纯文本，不要包含任何前缀。
+${oldSummaryText}
+【新增对话片段】
+${newInteractionsText}`;
+
+    const compressionResult = await input.runtime.llmClient.createChatCompletion({
+      messages: [{ role: "user", content: compressionPrompt }],
+      tools: [],
+      thinkingTier: "none"
+    });
+    
+    themeSummary = compressionResult.content;
+    await input.runtime.repositories.updateChatSession(input.sessionId, {
+      themeSummary,
+      summarizedUpToRunId: newSummarizedUpTo,
+      updatedAt: input.runtime.now()
+    });
+    
+    unsummarizedRuns = unsummarizedRuns.slice(10);
+  }
+
+  const historyMessages = unsummarizedRuns.flatMap(run => [
+    { role: "user" as const, content: run.messageText! },
+    { role: "assistant" as const, content: run.responseText! }
+  ]);
+
+  const finalSystemInstructions = themeSummary 
+    ? `${systemInstructions}\n\n【本轮对话主题与摘要（长期上下文）】\n${themeSummary}`
+    : systemInstructions;
+
   const messages: LlmMessage[] = [
-    { role: "system", content: systemInstructions },
+    { role: "system", content: finalSystemInstructions },
+    ...historyMessages,
     { role: "user", content: input.inputText }
   ];
 

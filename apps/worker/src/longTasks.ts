@@ -674,6 +674,7 @@ export async function executeLongTaskForRecord(input: {
     try {
       const result = await executeLlmAgent({
         runId: task.runId,
+        sessionId: task.runId,
         ownerTgUserId: task.ownerTgUserId,
         inputText: stepPrompt(task, step),
         runtime: input.runtime,

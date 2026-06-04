@@ -148,8 +148,22 @@ export function registerAdminSystemRoutes(
 
     const rt = runtime(c.env);
     const now = rt.now();
+    let activeSession = await rt.repositories.getActiveChatSession(authenticatedOwnerId);
+    if (!activeSession) {
+      activeSession = await rt.repositories.createChatSession({
+        id: rt.generateId(),
+        ownerTgUserId: authenticatedOwnerId,
+        status: "active",
+        themeSummary: null,
+        summarizedUpToRunId: null,
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+
     const run = await rt.repositories.createRun({
       id: rt.generateId(),
+      sessionId: activeSession.id,
       ownerTgUserId: authenticatedOwnerId,
       chatId: authenticatedOwnerId,
       updateId: null,
@@ -161,6 +175,7 @@ export function registerAdminSystemRoutes(
     try {
       const result = await executeLlmAgent({
         runId: run.id,
+        sessionId: activeSession.id,
         ownerTgUserId: authenticatedOwnerId,
         inputText: body.data.prompt,
         runtime: rt,

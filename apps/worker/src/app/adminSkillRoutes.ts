@@ -308,6 +308,7 @@ export function registerAdminSkillRoutes(
     const now = rt.now();
     const run = await rt.repositories.createRun({
       id: rt.generateId(),
+      sessionId: rt.generateId(),
       ownerTgUserId: authenticatedOwnerId,
       chatId: authenticatedOwnerId,
       updateId: null,
