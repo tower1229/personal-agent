@@ -129,7 +129,7 @@ export function App() {
             <Route element={<SchedulesPage />} path="/admin/schedules/:id" />
             <Route element={<Navigate replace to="/admin/todos" />} path="/admin/data/todos" />
             <Route element={<TodosPage />} path="/admin/todos" />
-            <Route element={<DataPage />} path="/admin/data/memories" />
+            <Route element={<DataPage />} path="/admin/data" />
             <Route
               element={<PersonalModelPage />}
               path="/admin/personal-model"

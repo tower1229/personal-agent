@@ -60,7 +60,7 @@ const primaryNav: NavItem[] = [
 
 const secondaryNav: NavItem[] = [
   { label: "Profile", to: "/admin/profile", icon: UserCircleIcon },
-  { label: "Memories", to: "/admin/data/memories", icon: DatabaseIcon },
+  { label: "Agent Memory", to: "/admin/data", icon: DatabaseIcon },
   { label: "Personal Model", to: "/admin/personal-model", icon: BrainIcon },
   { label: "Gaps", to: "/admin/personal-model/gaps", icon: HelpCircleIcon },
   { label: "Metacognition", to: "/admin/personal-model/metacognition", icon: EyeIcon },
@@ -70,7 +70,7 @@ const secondaryNav: NavItem[] = [
 function SidebarLink(props: { item: NavItem }) {
   const location = useLocation();
   const activePrefix =
-    props.item.to === "/admin/data/memories" ? "/admin/data" : props.item.to;
+    props.item.to === "/admin/data" ? "/admin/data" : props.item.to;
   const isActive =
     props.item.to === "/admin"
       ? location.pathname === props.item.to

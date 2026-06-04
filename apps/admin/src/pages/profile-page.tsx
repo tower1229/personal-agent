@@ -31,15 +31,12 @@ export function ProfilePage() {
   const [mbti, setMbti] = useState("");
   const [enneagram, setEnneagram] = useState("");
   const [astrologySign, setAstrologySign] = useState("");
-  const [soul, setSoul] = useState("");
-  const [coreMemory, setCoreMemory] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (profileData.data) {
       setName(profileData.data.name || "");
       setGender(profileData.data.gender || "");
-      setCoreMemory(profileData.data.coreMemory || "");
       if (profileData.data.birthdayTimestamp) {
         setBirthday(formatLocalYMD(profileData.data.birthdayTimestamp));
       }
@@ -52,16 +49,6 @@ export function ProfilePage() {
         } catch (e) {
           // ignore parsing error
         }
-      }
-      if (profileData.data.preferences) {
-        try {
-          const pref = JSON.parse(profileData.data.preferences);
-          setSoul(pref?.soul || DEFAULT_SOUL);
-        } catch (e) {
-          setSoul(DEFAULT_SOUL);
-        }
-      } else {
-        setSoul(DEFAULT_SOUL);
       }
     }
   }, [profileData.data]);
@@ -77,17 +64,11 @@ export function ProfilePage() {
         astrologySign
       });
 
-      const preferences = JSON.stringify({
-        soul
-      });
-
       const updated = await updateProfile({
         name,
         gender: gender || null,
         birthdayTimestamp,
-        interpretationFramework,
-        preferences,
-        coreMemory: coreMemory || null
+        interpretationFramework
       });
       toast.success("Profile updated successfully");
       profileData.setData(updated);
@@ -166,39 +147,6 @@ export function ProfilePage() {
               />
             </Field>
           </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>SOUL Configuration</CardTitle>
-          <CardDescription>
-            The core personality contract, communication style, and behavioral boundaries of the Agent (Markdown format).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={soul}
-            onChange={(e) => setSoul(e.target.value)}
-            placeholder="Write SOUL configuration in markdown..."
-            className="font-mono min-h-[300px]"
-          />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Core Memory</CardTitle>
-          <CardDescription>
-            High-priority core memory (in Markdown format). 
-            This information is always injected into the LLM context.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={coreMemory}
-            onChange={(e) => setCoreMemory(e.target.value)}
-            placeholder="Write core memory in markdown..."
-            className="font-mono min-h-[300px]"
-          />
         </CardContent>
       </Card>
       <div className="flex justify-end">
