@@ -9,6 +9,9 @@ import {
   adminLongTasksResponseSchema,
   adminMeResponseSchema,
   adminMemoriesResponseSchema,
+  adminMemorySchema,
+  adminMemoryCreateRequestSchema,
+  adminMemoryUpdateRequestSchema,
   adminEvaluationsResponseSchema,
   adminFeedbacksResponseSchema,
   adminPersonalModelClaimCreateRequestSchema,
@@ -60,6 +63,9 @@ import {
   type AdminLongTasksResponse,
   type AdminMeResponse,
   type AdminMemoriesResponse,
+  type AdminMemory,
+  type AdminMemoryCreateRequest,
+  type AdminMemoryUpdateRequest,
   type AdminEvaluationsResponse,
   type AdminFeedbacksResponse,
   type AdminPersonalModelClaim,
@@ -422,6 +428,33 @@ export function loadMemories(): Promise<AdminMemoriesResponse> {
   return fetchJson("/api/admin/memories", (input) =>
     adminMemoriesResponseSchema.parse(input)
   );
+}
+
+export function createMemory(
+  content: string
+): Promise<AdminMemory> {
+  return sendJson(
+    "/api/admin/memories",
+    "POST",
+    adminMemoryCreateRequestSchema.parse({ content }),
+    (body) => adminMemorySchema.parse(body)
+  );
+}
+
+export function updateMemory(
+  id: number,
+  content: string
+): Promise<AdminMemory> {
+  return sendJson(
+    `/api/admin/memories/${id}`,
+    "PUT",
+    adminMemoryUpdateRequestSchema.parse({ content }),
+    (body) => adminMemorySchema.parse(body)
+  );
+}
+
+export async function deleteMemory(id: number): Promise<void> {
+  await deleteEmpty(`/api/admin/memories/${id}`);
 }
 
 export function loadPersonalModelClaims(): Promise<AdminPersonalModelClaimsResponse> {

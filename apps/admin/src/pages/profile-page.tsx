@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Field, useAsyncData } from "./resource-common";
 import { loadProfile, updateProfile } from "@/lib/api";
@@ -18,12 +19,14 @@ export function ProfilePage() {
   const [astrologySign, setAstrologySign] = useState("");
   const [communicationStyle, setCommunicationStyle] = useState("");
   const [workLifeBoundaries, setWorkLifeBoundaries] = useState("");
+  const [coreMemory, setCoreMemory] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (profileData.data) {
       setName(profileData.data.name || "");
       setGender(profileData.data.gender || "");
+      setCoreMemory(profileData.data.coreMemory || "");
       if (profileData.data.birthdayTimestamp) {
         setBirthday(formatLocalYMD(profileData.data.birthdayTimestamp));
       }
@@ -70,7 +73,8 @@ export function ProfilePage() {
         gender: gender || null,
         birthdayTimestamp,
         interpretationFramework,
-        preferences
+        preferences,
+        coreMemory: coreMemory || null
       });
       toast.success("Profile updated successfully");
       profileData.setData(updated);
@@ -175,6 +179,23 @@ export function ProfilePage() {
               />
             </Field>
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Core Memory</CardTitle>
+          <CardDescription>
+            High-priority core memory (in Markdown format). 
+            This information is always injected into the LLM context.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={coreMemory}
+            onChange={(e) => setCoreMemory(e.target.value)}
+            placeholder="Write core memory in markdown..."
+            className="font-mono min-h-[300px]"
+          />
         </CardContent>
       </Card>
       <div className="flex justify-end">

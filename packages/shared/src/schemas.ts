@@ -674,6 +674,16 @@ export const adminMemorySchema = z.object({
 
 export type AdminMemory = z.infer<typeof adminMemorySchema>;
 
+export const adminMemoryCreateRequestSchema = z.object({
+  content: z.string().min(1)
+});
+export type AdminMemoryCreateRequest = z.infer<typeof adminMemoryCreateRequestSchema>;
+
+export const adminMemoryUpdateRequestSchema = z.object({
+  content: z.string().min(1)
+});
+export type AdminMemoryUpdateRequest = z.infer<typeof adminMemoryUpdateRequestSchema>;
+
 export const adminMemoriesResponseSchema = z.object({
   items: z.array(adminMemorySchema)
 });
@@ -1135,6 +1145,7 @@ export const userProfileSchema = z.object({
   gender: z.string().nullable(),
   interpretationFramework: z.string().nullable(),
   preferences: z.string().nullable(),
+  coreMemory: z.string().nullable(),
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0)
 });
@@ -1145,7 +1156,8 @@ export const userProfileUpdateRequestSchema = z.object({
   birthdayTimestamp: z.number().int().nullable().optional(),
   gender: z.string().nullable().optional(),
   interpretationFramework: z.string().nullable().optional(),
-  preferences: z.string().nullable().optional()
+  preferences: z.string().nullable().optional(),
+  coreMemory: z.string().nullable().optional()
 });
 export type UserProfileUpdateRequest = z.infer<typeof userProfileUpdateRequestSchema>;
 

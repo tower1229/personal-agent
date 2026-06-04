@@ -269,6 +269,33 @@ export async function executeAgentTool(input: {
         input: { content },
         output: memory ? { id: memory.id } : { saved: false }
       };
+    } else if (input.toolName === "update_core_memory") {
+      const content = stringArg(input.args, "content") ?? "";
+      let userProfile = await input.runtime.repositories.getUserProfile(input.ownerTgUserId.toString());
+      if (!userProfile) {
+        userProfile = {
+          id: input.ownerTgUserId.toString(),
+          name: "Owner",
+          birthdayTimestamp: null,
+          gender: null,
+          interpretationFramework: null,
+          preferences: null,
+          coreMemory: null,
+          createdAt: input.runtime.now(),
+          updatedAt: input.runtime.now()
+        };
+      }
+      userProfile.coreMemory = content;
+      userProfile.updatedAt = input.runtime.now();
+      await input.runtime.repositories.upsertUserProfile(userProfile);
+      
+      result = {
+        responseText: `已更新核心记忆。`,
+        toolName: "update_core_memory",
+        riskLevel: "write_low",
+        input: { content },
+        output: { updated: true }
+      };
     } else if (input.toolName === "search_memory") {
       const keyword = stringArg(input.args, "keyword");
       const memories = await input.runtime.repositories.searchMemories({
@@ -594,10 +621,22 @@ const toolDefinitions: Record<BuiltInToolName, LlmToolDefinition> = {
     type: "function",
     function: {
       name: "save_memory",
-      description: "Save a memory for the owner.",
+      description: "Save a log memory or an event for the owner.",
       parameters: {
         type: "object",
         properties: { content: { type: "string" } },
+        required: ["content"]
+      }
+    }
+  },
+  update_core_memory: {
+    type: "function",
+    function: {
+      name: "update_core_memory",
+      description: "Update the core memory markdown document of the user. Overwrites the existing core memory.",
+      parameters: {
+        type: "object",
+        properties: { content: { type: "string", description: "The full markdown content for the core memory." } },
         required: ["content"]
       }
     }
@@ -789,9 +828,10 @@ function shouldRequestExecutionPlan(input: {
   const toolHints: Array<[string, RegExp]> = [
     ["create_todo", /新增待办|添加待办|创建待办|记个待办|todo/u],
     ["list_todos", /列出待办|查看待办|待办列表|未完成待办/u],
-    ["complete_todo", /完成待办|标记.*待办/u],
-    ["save_memory", /记住|保存记忆|记下来/u],
-    ["search_memory", /搜索记忆|查.*记忆|回忆/u],
+    ["complete_todo", /完成待办|划掉待办/u],
+    ["save_memory", /记住|保存日志|记作事件/u],
+    ["update_core_memory", /更新核心记忆|修改核心记忆/u],
+    ["search_memory", /搜索记忆|查询记忆|回忆/u],
     ["delete_memory_request", /删除记忆/u],
     ["web_search", /搜索网页|联网|查一下|查找|搜索/u],
     ["fetch_url", /读取网页|抓取网页|https?:\/\//u],
@@ -1020,9 +1060,17 @@ export async function executeLlmAgent(
       const age = new Date(input.runtime.now() - profile.birthdayTimestamp).getUTCFullYear() - 1970;
       parts.push(`真实年龄: ${age}岁`);
     }
+    let basicProfile = "";
     if (parts.length > 0) {
-      profileContext = `[用户档案: ${parts.join(", ")}]`;
+      basicProfile = `[用户档案: ${parts.join(", ")}]\n`;
     }
+    
+    let coreMem = "";
+    if (profile.coreMemory) {
+      coreMem = `[核心记忆/Core Memory (最高优先级)]\n${profile.coreMemory}\n`;
+    }
+    
+    profileContext = basicProfile + coreMem;
   }
 
   const tools = availableToolDefinitions(input.allowedTools);

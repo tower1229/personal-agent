@@ -421,6 +421,7 @@ export interface UserProfileRecord {
   gender: string | null;
   interpretationFramework: string | null;
   preferences: string | null;
+  coreMemory: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -496,6 +497,12 @@ export interface AgentRepositories {
     id: number;
   }): Promise<MemoryRecord | null>;
   listMemories(ownerTgUserId: number, limit: number): Promise<MemoryRecord[]>;
+  updateMemory(input: {
+    ownerTgUserId: number;
+    id: number;
+    content: string;
+    normalizedContent: string;
+  }): Promise<MemoryRecord | null>;
   markMemoryDeleted(input: {
     ownerTgUserId: number;
     id: number;

@@ -41,6 +41,7 @@ export function createD1CoreDataRepositories(
   | "searchMemories"
   | "getActiveMemory"
   | "listMemories"
+  | "updateMemory"
   | "markMemoryDeleted"
   | "recordMemoryEvent"
   | "createApproval"
@@ -261,6 +262,20 @@ export function createD1CoreDataRepositories(
       return (results ?? []).map(toMemory);
     },
 
+    async updateMemory(input) {
+      const row = await db
+        .prepare(
+          `UPDATE memories
+          SET content = ?, normalized_content = ?
+          WHERE owner_tg_user_id = ? AND id = ? AND status = 'active'
+          RETURNING *`
+        )
+        .bind(input.content, input.normalizedContent, input.ownerTgUserId, input.id)
+        .first<MemoryRow>();
+
+      return row ? toMemory(row) : null;
+    },
+
     async markMemoryDeleted(input) {
       const row = await db
         .prepare(
@@ -368,6 +383,7 @@ export function createD1CoreDataRepositories(
           gender: string | null;
           interpretation_framework: string | null;
           preferences: string | null;
+          core_memory: string | null;
           created_at: number;
           updated_at: number;
         }>();
@@ -379,6 +395,7 @@ export function createD1CoreDataRepositories(
         gender: row.gender,
         interpretationFramework: row.interpretation_framework,
         preferences: row.preferences,
+        coreMemory: row.core_memory,
         createdAt: row.created_at,
         updatedAt: row.updated_at
       };
@@ -387,14 +404,15 @@ export function createD1CoreDataRepositories(
     async upsertUserProfile(input) {
       await db
         .prepare(
-          `INSERT INTO user_profiles (id, name, birthday_timestamp, gender, interpretation_framework, preferences, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO user_profiles (id, name, birthday_timestamp, gender, interpretation_framework, preferences, core_memory, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET
              name = excluded.name,
              birthday_timestamp = excluded.birthday_timestamp,
              gender = excluded.gender,
              interpretation_framework = excluded.interpretation_framework,
              preferences = excluded.preferences,
+             core_memory = excluded.core_memory,
              updated_at = excluded.updated_at`
         )
         .bind(
@@ -404,6 +422,7 @@ export function createD1CoreDataRepositories(
           input.gender,
           input.interpretationFramework,
           input.preferences,
+          input.coreMemory,
           input.createdAt,
           input.updatedAt
         )

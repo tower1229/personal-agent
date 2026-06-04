@@ -9,6 +9,9 @@ import {
   adminAuthConfigResponseSchema,
   adminHealthResponseSchema,
   adminMemoriesResponseSchema,
+  adminMemorySchema,
+  adminMemoryCreateRequestSchema,
+  adminMemoryUpdateRequestSchema,
   adminMeResponseSchema,
   adminApiSuccessSchema,
   adminRunDetailResponseSchema,
@@ -42,7 +45,7 @@ import {
   verifySession,
   verifyTelegramLogin
 } from "../auth.js";
-import { executeSkill, handleOwnerUpdate, type BotRuntime } from "../bot.js";
+import { executeSkill, handleOwnerUpdate, normalizeMemoryContent, type BotRuntime } from "../bot.js";
 import { executeLlmAgent } from "../agent.js";
 import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
 import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
@@ -291,6 +294,85 @@ export function registerAdminDataRoutes(
         items: items.map(toAdminMemory)
       })
     );
+  });
+
+  app.post("/api/admin/memories", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = adminMemoryCreateRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid request data" }, 400);
+    }
+
+    const memory = await repositories(c.env).createMemory({
+      ownerTgUserId: authenticatedOwnerId,
+      content: body.data.content,
+      normalizedContent: normalizeMemoryContent(body.data.content),
+      createdAt: (options.now ?? Date.now)()
+    });
+
+    return c.json(adminMemorySchema.parse(toAdminMemory(memory)));
+  });
+
+  app.put("/api/admin/memories/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = parseInt(c.req.param("id"), 10);
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid id" }, 400);
+    }
+
+    const body = adminMemoryUpdateRequestSchema.safeParse(
+      await c.req.json().catch(() => null)
+    );
+    if (!body.success) {
+      return c.json({ error: "Invalid request data" }, 400);
+    }
+
+    const memory = await repositories(c.env).updateMemory({
+      ownerTgUserId: authenticatedOwnerId,
+      id,
+      content: body.data.content,
+      normalizedContent: normalizeMemoryContent(body.data.content)
+    });
+
+    if (!memory) {
+      return c.json({ error: "Memory not found" }, 404);
+    }
+
+    return c.json(adminMemorySchema.parse(toAdminMemory(memory)));
+  });
+
+  app.delete("/api/admin/memories/:id", async (c) => {
+    const authenticatedOwnerId = await adminOwnerId(c);
+    if (!authenticatedOwnerId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = parseInt(c.req.param("id"), 10);
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid id" }, 400);
+    }
+
+    const deleted = await repositories(c.env).markMemoryDeleted({
+      ownerTgUserId: authenticatedOwnerId,
+      id,
+      deletedAt: (options.now ?? Date.now)()
+    });
+
+    if (!deleted) {
+      return c.json({ error: "Memory not found" }, 404);
+    }
+
+    return c.json(adminApiSuccessSchema.parse({ ok: true }));
   });
 
   app.get("/api/admin/approvals", async (c) => {

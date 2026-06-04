@@ -304,6 +304,7 @@ export const builtInToolNames = [
   "list_todos",
   "complete_todo",
   "save_memory",
+  "update_core_memory",
   "search_memory",
   "delete_memory_request",
   "web_search",

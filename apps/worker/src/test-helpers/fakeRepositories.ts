@@ -499,6 +499,15 @@ export function createFakeRepositories(): AgentRepositories & {
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
     },
+    async updateMemory(input) {
+      const memory = state.memories.find(
+        (m) => m.id === input.id && m.ownerTgUserId === input.ownerTgUserId
+      );
+      if (!memory) return null;
+      memory.content = input.content;
+      memory.normalizedContent = input.normalizedContent;
+      return memory;
+    },
     async markMemoryDeleted(input) {
       const memory = state.memories.find(
         (item) =>
@@ -1368,9 +1377,9 @@ export function createFakeRepositories(): AgentRepositories & {
       return state.userProfiles.find((p) => p.id === id) ?? null;
     },
     async upsertUserProfile(input) {
-      const existingIndex = state.userProfiles.findIndex((p) => p.id === input.id);
-      if (existingIndex !== -1) {
-        state.userProfiles[existingIndex] = input;
+      const existing = state.userProfiles.find((p) => p.id === input.id);
+      if (existing) {
+        Object.assign(existing, input);
       } else {
         state.userProfiles.push(input);
       }
