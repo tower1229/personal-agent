@@ -42,6 +42,7 @@ import { executeLlmAgent } from "../agent.js";
 import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
 import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
 import { evaluateRun } from "../agentEvaluator.js";
+import { extractDailyMemories } from "../memoryExtractor.js";
 import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
 import { type AgentRepositories } from "../repositories.js";
 import { type WorkerEnv } from "../types.js";
@@ -131,6 +132,12 @@ export function registerTelegramRoutes(
         }
       } catch (error) {
         console.error("evaluateRun background task failed", error);
+      }
+
+      try {
+        await extractDailyMemories(botRuntime, userId);
+      } catch (error) {
+        console.error("extractDailyMemories background task failed", error);
       }
     })();
 

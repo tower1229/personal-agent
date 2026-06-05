@@ -37,6 +37,7 @@ export function createD1RunRepositories(
   | "updateRun"
   | "listRuns"
   | "listRunsForSession"
+  | "listUnextractedRuns"
   | "getRun"
   | "recordToolCall"
   | "listToolCallsForRun"
@@ -128,6 +129,22 @@ export function createD1RunRepositories(
           ORDER BY created_at ASC`
         )
         .bind(ownerTgUserId, sessionId)
+        .all<RunRow>();
+
+      return (results ?? []).map(toRun);
+    },
+
+    async listUnextractedRuns(input) {
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM runs
+          WHERE owner_tg_user_id = ? 
+            AND created_at > ? 
+            AND created_at <= ?
+          ORDER BY created_at ASC
+          LIMIT ?`
+        )
+        .bind(input.ownerTgUserId, input.cursorMs, input.endMs, input.limit)
         .all<RunRow>();
 
       return (results ?? []).map(toRun);

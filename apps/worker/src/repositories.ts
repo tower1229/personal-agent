@@ -446,6 +446,12 @@ export interface AgentRepositories {
   ): Promise<void>;
   listRuns(ownerTgUserId: number, limit: number): Promise<RunRecord[]>;
   listRunsForSession(ownerTgUserId: number, sessionId: string): Promise<RunRecord[]>;
+  listUnextractedRuns(input: {
+    ownerTgUserId: number;
+    cursorMs: number;
+    endMs: number;
+    limit: number;
+  }): Promise<RunRecord[]>;
   getRun(input: {
     ownerTgUserId: number;
     id: string;

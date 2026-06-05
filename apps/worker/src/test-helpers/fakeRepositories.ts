@@ -290,6 +290,17 @@ export function createFakeRepositories(): AgentRepositories & {
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, limit);
     },
+    async listUnextractedRuns(input) {
+      return state.runs
+        .filter((run) => 
+          run.ownerTgUserId === input.ownerTgUserId && 
+          run.createdAt > input.cursorMs && 
+          run.createdAt <= input.endMs
+        )
+        .slice()
+        .sort((left, right) => left.createdAt - right.createdAt)
+        .slice(0, input.limit);
+    },
     async getRun(input) {
       return (
         state.runs.find(
