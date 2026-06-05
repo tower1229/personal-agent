@@ -1,6 +1,6 @@
 # Personal Model Implementation Plan
 
-本文档说明如何在当前 Cloudflare Worker + D1 + React Admin 架构内实现个人理解模型。它基于 [personal-model-design.md](./personal-model-design.md) 的产品约束，重点回答实现路径、数据模型、对话链路、Admin 能力和阶段验收。
+本文档说明如何在当前 Cloudflare Worker + D1 + React Admin 架构内实现个人理解模型。它基于 [personal-model-design.md](../architecture/personal-model-design.md) 的产品约束，重点回答实现路径、数据模型、对话链路、Admin 能力和阶段验收。
 
 ## Current Baseline
 

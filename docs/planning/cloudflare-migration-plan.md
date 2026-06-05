@@ -19,7 +19,7 @@
    - D1 readiness 覆盖当前真实必需表。
 
 2. 增加自动长任务能力
-   - 以 `docs/long-task-planning.md` 为准。
+   - 以 `docs/planning/long-task-planning.md` 为准。
    - 先用 D1 持久化 long task / step / event。
    - 用 Cron 或后续 Queues 恢复执行。
    - 不恢复旧 workflow skill 编辑器。

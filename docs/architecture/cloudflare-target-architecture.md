@@ -120,4 +120,4 @@ Current V1 behavior:
 - support pause/resume/cancel/status
 - expose trace in Admin
 
-Detailed plan: `docs/long-task-planning.md`.
+Detailed plan: `docs/planning/long-task-planning.md`.

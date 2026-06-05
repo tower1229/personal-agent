@@ -39,7 +39,7 @@ cd apps/worker
 npx wrangler d1 create personal-agent-db
 ```
 
-把命令输出里的 `database_id` 写入 [apps/worker/wrangler.toml](../apps/worker/wrangler.toml)：
+把命令输出里的 `database_id` 写入 [apps/worker/wrangler.toml](../../apps/worker/wrangler.toml)：
 
 ```toml
 [[d1_databases]]
@@ -70,7 +70,7 @@ npm run d1:migrate:worker:remote
 
 ## 3. 配置 Worker vars
 
-非密钥配置在 [apps/worker/wrangler.toml](../apps/worker/wrangler.toml) 的 `[vars]` 中维护：
+非密钥配置在 [apps/worker/wrangler.toml](../../apps/worker/wrangler.toml) 的 `[vars]` 中维护：
 
 ```toml
 TELEGRAM_BOT_USERNAME = "your_bot_username_bot"

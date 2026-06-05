@@ -9,7 +9,7 @@ Skill Routing Examples 已经以 `skill_intents` 表落地为语义路由的 few
 - `apps/worker/src/bot.ts`：语义路由读取 `skill_intents` 并作为 `exampleIntents` 输入。
 - `apps/worker/src/app/adminSkillIntentsRoutes.ts`：当前只有 list/create/delete。
 - `apps/admin/src/pages/skills-page.tsx`：当前 Intents 是 Skill 详情页底部 tabs 之一，只有单条输入框和 Add/Delete。
-- `docs/agent-capability-task-tracker.md`：T4 已明确目标是全局 routing example 管理、低置信确认、轻量 Planner。
+- `docs/planning/agent-capability-task-tracker.md`：T4 已明确目标是全局 routing example 管理、低置信确认、轻量 Planner。
 
 因此，Skill Routing Example 自动生成不应该设计成一个孤立按钮；它应该成为 Admin LLM 能力的第一个具体场景。
 
