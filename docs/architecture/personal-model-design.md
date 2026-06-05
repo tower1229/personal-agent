@@ -75,6 +75,8 @@ agent 默认在对话内保持较强主动性，但不在对话外主动打扰�
 
 这些框架不能覆盖事实证据，但可以用于一致性校验和辅助理解。
 
+Profile 中的 MBTI、九型人格、星座等字段是用户低摩擦披露入口，不是运行时直接使用的静态画像。它们应被后台同步为 `personality_framework` source 与 `interpretation_framework` claim，再由 Personal Model 的证据、置信度、使用策略和场景检索机制治理。详细设计见 `docs/architecture/profile-interpretation-framework-design.md`。
+
 ## Current State Vs Long-Term Model
 
 agent 每次判断用户时，都应区分：
@@ -330,4 +332,3 @@ agent 应维护元认知日志，记录它如何理解用户、如何更新判�
 - 情绪判断保留不确定性，使用轻量判断和单问题校准。
 - 旧资料默认隐性使用；显性引用必须带时间、来源和限定。
 - 建议生成前进行适配检查，包括当前精力、长期偏好、价值观、历史有效反馈、现实资源和行动颗粒度。
-
