@@ -31,6 +31,7 @@ import {
   skillRouteTriggerTypes,
   skillRunStatuses,
   todoStatuses,
+  taskStatuses,
   toolCallStatuses,
   toolRiskLevels,
   understandingGapStatuses,
@@ -45,6 +46,7 @@ export const plannerToolActionRiskSchema = z.enum(plannerToolActionRisks);
 export const plannerFreshnessRiskSchema = z.enum(plannerFreshnessRisks);
 export const plannerPrivacyRiskSchema = z.enum(plannerPrivacyRisks);
 export const scheduleCadenceSchema = z.enum(scheduleCadences);
+export const taskStatusSchema = z.enum(taskStatuses);
 
 export const plannerSearchPolicySchema = z.object({
   allowedTopics: z.array(z.string().min(1)),
@@ -425,6 +427,29 @@ export type AdminAgentTestSearchResponse = z.infer<
   typeof adminAgentTestSearchResponseSchema
 >;
 
+export const adminTaskSchema = z.object({
+  id: z.string().min(1),
+  ownerTgUserId: z.number().int(),
+  type: z.string().min(1),
+  status: taskStatusSchema,
+  title: z.string().min(1),
+  command: z.string().min(1),
+  contextJson: z.string().nullable(),
+  resultJson: z.string().nullable(),
+  error: z.string().nullable(),
+  runId: z.string().nullable(),
+  createdAt: z.number().int().min(0),
+  updatedAt: z.number().int().min(0),
+  completedAt: z.number().int().min(0).nullable()
+});
+
+export type AdminTask = z.infer<typeof adminTaskSchema>;
+
+export const adminTasksResponseSchema = z.object({
+  items: z.array(adminTaskSchema)
+});
+
+export type AdminTasksResponse = z.infer<typeof adminTasksResponseSchema>;
 
 export const adminScheduleSchema = z.object({
   id: z.string().min(1),

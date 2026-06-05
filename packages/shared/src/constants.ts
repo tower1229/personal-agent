@@ -198,6 +198,15 @@ export const scheduleExecutionStatuses = [
 export type ScheduleExecutionStatus =
   (typeof scheduleExecutionStatuses)[number];
 
+export const taskStatuses = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out"
+] as const;
+export type TaskStatus = (typeof taskStatuses)[number];
 
 export const evalCategories = [
   "casual_chat",

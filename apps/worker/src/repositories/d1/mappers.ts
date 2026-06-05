@@ -40,6 +40,7 @@ import {
   type TodoStatus,
   type ToolCallStatus,
   type ToolRiskLevel,
+  type TaskStatus,
   type UnderstandingGapStatus
 } from "@personal-agent/shared";
 import {
@@ -67,6 +68,7 @@ import {
   type SkillRunRecord,
   type SkillVersionRecord,
   type TodoRecord,
+  type TaskRecord,
   type ToolCallRecord
 } from "../../repositories.js";
 
@@ -138,6 +140,22 @@ export interface TodoRow {
   completed_at: number | null;
   due_at: number | null;
   reminded_at: number | null;
+}
+
+export interface TaskRow {
+  id: string;
+  owner_tg_user_id: number;
+  type: string;
+  status: TaskStatus;
+  title: string;
+  command: string;
+  context_json: string | null;
+  result_json: string | null;
+  error: string | null;
+  run_id: string | null;
+  created_at: number;
+  updated_at: number;
+  completed_at: number | null;
 }
 
 export interface MemoryRow {
@@ -446,6 +464,42 @@ export function toTodo(row: TodoRow): TodoRecord {
     completedAt: row.completed_at,
     dueAt: row.due_at,
     remindedAt: row.reminded_at
+  };
+}
+
+export function mapTaskRowToRecord(row: TaskRow): TaskRecord {
+  return {
+    id: row.id,
+    ownerTgUserId: row.owner_tg_user_id,
+    type: row.type,
+    status: row.status,
+    title: row.title,
+    command: row.command,
+    contextJson: row.context_json,
+    resultJson: row.result_json,
+    error: row.error,
+    runId: row.run_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at
+  };
+}
+
+export function mapTaskRecordToRow(record: TaskRecord): TaskRow {
+  return {
+    id: record.id,
+    owner_tg_user_id: record.ownerTgUserId,
+    type: record.type,
+    status: record.status,
+    title: record.title,
+    command: record.command,
+    context_json: record.contextJson,
+    result_json: record.resultJson,
+    error: record.error,
+    run_id: record.runId,
+    created_at: record.createdAt,
+    updated_at: record.updatedAt,
+    completed_at: record.completedAt
   };
 }
 

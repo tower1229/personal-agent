@@ -34,6 +34,7 @@ import {
   type UserProfileRecord,
   type RunFeedbackRecord,
   type RunEvaluationRecord,
+  type TaskRecord,
 } from "../repositories.js";
 import { type TelegramClient } from "../telegram.js";
 import { type WorkerEnv } from "../types.js";
@@ -101,6 +102,7 @@ export function createFakeRepositories(): AgentRepositories & {
   runs: RunRecord[];
   toolCalls: ToolCallRecord[];
   todos: TodoRecord[];
+  tasks: TaskRecord[];
   memories: MemoryRecord[];
   personalModelClaims: PersonalModelClaimRecord[];
   personalModelEvents: PersonalModelEventRecord[];
@@ -128,6 +130,7 @@ export function createFakeRepositories(): AgentRepositories & {
     runs: [] as RunRecord[],
     toolCalls: [] as ToolCallRecord[],
     todos: [] as TodoRecord[],
+    tasks: [] as TaskRecord[],
     memories: [] as MemoryRecord[],
     personalModelClaims: [] as PersonalModelClaimRecord[],
     personalModelEvents: [] as PersonalModelEventRecord[],
@@ -168,6 +171,9 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     get todos() {
       return state.todos;
+    },
+    get tasks() {
+      return state.tasks;
     },
     get memories() {
       return state.memories;
@@ -465,6 +471,42 @@ export function createFakeRepositories(): AgentRepositories & {
         return false;
       }
       state.todos.splice(idx, 1);
+      return true;
+    },
+    async createTask(input) {
+      const task: TaskRecord = {
+        ...input,
+        completedAt: null,
+      };
+      state.tasks.push(task);
+      return task;
+    },
+    async updateTask(input) {
+      const task = state.tasks.find(
+        (item) => item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+      );
+      if (!task) return null;
+      Object.assign(task, input.patch);
+      task.updatedAt = input.updatedAt;
+      return task;
+    },
+    async getTask(input) {
+      return state.tasks.find(
+        (item) => item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+      ) ?? null;
+    },
+    async listTasks(input) {
+      return state.tasks
+        .filter((task) => task.ownerTgUserId === input.ownerTgUserId && (!input.status || task.status === input.status))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, input.limit);
+    },
+    async deleteTask(input) {
+      const idx = state.tasks.findIndex(
+        (item) => item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+      );
+      if (idx === -1) return false;
+      state.tasks.splice(idx, 1);
       return true;
     },
     async createMemory(input) {

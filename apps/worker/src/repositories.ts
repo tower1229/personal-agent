@@ -31,6 +31,7 @@ import {
   type SkillRunStatus,
   type SkillValidationResult,
   type TodoStatus,
+  type TaskStatus,
   type ToolCallStatus,
   type ToolRiskLevel,
   type MetacognitionReflectionType,
@@ -106,6 +107,22 @@ export interface TodoRecord {
   completedAt: number | null;
   dueAt: number | null;
   remindedAt: number | null;
+}
+
+export interface TaskRecord {
+  id: string;
+  ownerTgUserId: number;
+  type: string;
+  status: TaskStatus;
+  title: string;
+  command: string;
+  contextJson: string | null;
+  resultJson: string | null;
+  error: string | null;
+  runId: string | null;
+  createdAt: number;
+  updatedAt: number;
+  completedAt: number | null;
 }
 
 export interface MemoryRecord {
@@ -440,6 +457,28 @@ export interface AgentRepositories {
     ownerTgUserId: number;
     id: number;
   }): Promise<boolean>;
+
+  createTask(input: Omit<TaskRecord, "status" | "createdAt" | "updatedAt" | "completedAt"> & { status: TaskStatus; createdAt: number; updatedAt: number }): Promise<TaskRecord>;
+  updateTask(input: {
+    ownerTgUserId: number;
+    id: string;
+    patch: Partial<Pick<TaskRecord, "status" | "resultJson" | "error" | "runId" | "completedAt">>;
+    updatedAt: number;
+  }): Promise<TaskRecord | null>;
+  getTask(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<TaskRecord | null>;
+  listTasks(input: {
+    ownerTgUserId: number;
+    limit: number;
+    status?: TaskStatus;
+  }): Promise<TaskRecord[]>;
+  deleteTask(input: {
+    ownerTgUserId: number;
+    id: string;
+  }): Promise<boolean>;
+
   createMemory(input: {
     ownerTgUserId: number;
     content: string;
