@@ -586,10 +586,7 @@ describe("worker system and bot commands", () => {
     await postWebhook(app, ownerUpdate("删除记忆 1", 3));
     await postWebhook(app, ownerUpdate("确认 123456", 4));
 
-    expect(repositories.memories[0]).toMatchObject({
-      id: 1,
-      status: "deleted"
-    });
+    expect(repositories.memories).toHaveLength(0);
     expect(repositories.approvals[0]).toMatchObject({
       action: "delete_memory",
       status: "executed",
