@@ -53,6 +53,7 @@ export interface CommandResult {
   input: unknown;
   output: unknown;
   contextTraceJson?: string;
+  backgroundTasks?: Promise<void>[];
 }
 
 function agentResultToCommandResult(result: AgentToolResult): CommandResult {
@@ -87,6 +88,7 @@ const DELETE_MEMORY_PATTERN = /^删除记忆\s+(\d+)$/u;
 const APPROVAL_PATTERN = /^(确认)\s+([A-Za-z0-9-]+)$|^(取消)\s+(\d{6})$/u;
 const EXPLICIT_SKILL_PATTERN = /^\/skill\s+([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/u;
 
+const START_TASK_PATTERN = /^\/start\s+task(?:\s+(.+))?$/u;
 const LIST_TASKS_PATTERN = /^\/list\s+tasks$/u;
 const SHOW_TASK_PATTERN = /^\/show\s+task\s+([A-Za-z0-9_-]+)$/u;
 const CANCEL_TASK_PATTERN = /^\/cancel\s+task\s+([A-Za-z0-9_-]+)$/u;
@@ -681,6 +683,39 @@ export async function executeCommand(
       riskLevel: "destructive",
       input: { code, decision, memoryId: memoryId! },
       output: { status: "executed" }
+    };
+  }
+
+  const startTask = START_TASK_PATTERN.exec(text);
+  if (startTask) {
+    const title = startTask[1] || "未命名任务";
+    const { TaskRuntime } = await import("./TaskRuntime.js");
+    const taskRuntime = new TaskRuntime(context.runtime, context.ownerTgUserId);
+    
+    const { taskId, bgPromise } = await taskRuntime.spawnTask({
+      title,
+      command: text,
+      type: "dummy_task",
+      contextJson: {},
+      executionLogic: async (id, updateProgress) => {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        await updateProgress("第一阶段：正在准备数据...");
+        
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await updateProgress("第二阶段：执行核心逻辑...");
+        
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        return { message: "任务成功完成，这是一个测试任务！" };
+      }
+    });
+
+    return {
+      responseText: `已派发后台测试任务 #${taskId}。`,
+      toolName: "start_task",
+      riskLevel: "write_low",
+      input: { title },
+      output: { taskId },
+      backgroundTasks: [bgPromise]
     };
   }
 
@@ -1293,11 +1328,11 @@ export async function handleOwnerUpdate(
     createdAt: now,
     updatedAt: now
   });
+  let result: CommandResult & { skillRunId?: string } | undefined;
   try {
     const messageText = text ?? "";
     const explicitSkill = parseExplicitSkill(messageText);
     let matchedSkill: SkillMatch | null = null;
-    let result: CommandResult & { skillRunId?: string };
 
     const onThinking = async (_state: { type: "thinking" | "tool"; toolName?: string }) => {
       try {
@@ -1435,5 +1470,5 @@ export async function handleOwnerUpdate(
       .catch(() => undefined);
   }
 
-  return { runId: run.id };
+  return { runId: run.id, backgroundTasks: result?.backgroundTasks };
 }
