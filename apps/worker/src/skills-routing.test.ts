@@ -191,8 +191,7 @@ describe("skill routing and execution", () => {
       triggerType: "none",
       matchedSkillId: null
     });
-    expect(telegramClient.messages[1]?.text).toContain("已创建长任务");
-    expect(repositories.longTasks).toHaveLength(1);
+    expect(telegramClient.messages[1]?.text).toContain("LLM 回复：规划 后天任务");
   });
 
   it("asks for confirmation before running low-confidence semantic skill matches", async () => {

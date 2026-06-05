@@ -87,6 +87,10 @@ const DELETE_MEMORY_PATTERN = /^删除记忆\s+(\d+)$/u;
 const APPROVAL_PATTERN = /^(确认)\s+([A-Za-z0-9-]+)$|^(取消)\s+(\d{6})$/u;
 const EXPLICIT_SKILL_PATTERN = /^\/skill\s+([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/u;
 
+const LIST_TASKS_PATTERN = /^\/list\s+tasks$/u;
+const SHOW_TASK_PATTERN = /^\/show\s+task\s+([A-Za-z0-9_-]+)$/u;
+const CANCEL_TASK_PATTERN = /^\/cancel\s+task\s+([A-Za-z0-9_-]+)$/u;
+
 const APPROVAL_CODE_ATTEMPTS = 3;
 const PLANNER_ROUTE_CLARIFICATION_TTL_MS = 10 * 60 * 1000;
 
@@ -677,6 +681,116 @@ export async function executeCommand(
       riskLevel: "destructive",
       input: { code, decision, memoryId: memoryId! },
       output: { status: "executed" }
+    };
+  }
+
+  const listTasks = LIST_TASKS_PATTERN.exec(text);
+  if (listTasks) {
+    const tasks = await repositories.listTasks({
+      ownerTgUserId: context.ownerTgUserId,
+      limit: 10
+    });
+    
+    if (tasks.length === 0) {
+      return {
+        responseText: "当前没有任务记录。",
+        toolName: "list_tasks",
+        riskLevel: "read",
+        input: { text },
+        output: { count: 0 }
+      };
+    }
+
+    const lines = tasks.map((t) => `#${t.id} [${t.status}] ${t.title}`);
+    return {
+      responseText: `最近的任务：\n${lines.join("\n")}`,
+      toolName: "list_tasks",
+      riskLevel: "read",
+      input: { text },
+      output: { count: tasks.length }
+    };
+  }
+
+  const showTask = SHOW_TASK_PATTERN.exec(text);
+  if (showTask) {
+    const id = showTask[1] ?? "";
+    const task = await repositories.getTask({
+      ownerTgUserId: context.ownerTgUserId,
+      id
+    });
+    
+    if (!task) {
+      return {
+        responseText: `没有找到任务 #${id}。`,
+        toolName: "show_task",
+        riskLevel: "read",
+        input: { id },
+        output: { found: false }
+      };
+    }
+
+    const details = [
+      `ID: ${task.id}`,
+      `标题: ${task.title}`,
+      `状态: ${task.status}`,
+      `类型: ${task.type}`,
+      `创建时间: ${new Date(task.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+    ];
+    if (task.error) details.push(`错误: ${task.error}`);
+    if (task.completedAt) details.push(`完成时间: ${new Date(task.completedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`);
+    
+    return {
+      responseText: `任务详情：\n${details.join("\n")}`,
+      toolName: "show_task",
+      riskLevel: "read",
+      input: { id },
+      output: { found: true }
+    };
+  }
+
+  const cancelTask = CANCEL_TASK_PATTERN.exec(text);
+  if (cancelTask) {
+    const id = cancelTask[1] ?? "";
+    const task = await repositories.getTask({
+      ownerTgUserId: context.ownerTgUserId,
+      id
+    });
+    
+    if (!task) {
+      return {
+        responseText: `没有找到任务 #${id}。`,
+        toolName: "cancel_task",
+        riskLevel: "read",
+        input: { id },
+        output: { cancelled: false }
+      };
+    }
+    
+    if (task.status === "queued" || task.status === "running") {
+      await repositories.updateTask({
+        ownerTgUserId: context.ownerTgUserId,
+        id,
+        patch: {
+          status: "cancelled",
+          completedAt: context.runtime.now()
+        },
+        updatedAt: context.runtime.now()
+      });
+      return {
+        responseText: `已标记任务 #${id} 为取消状态。`,
+        toolName: "cancel_task",
+        riskLevel: "write_low",
+        input: { id },
+        output: { cancelled: true }
+      };
+    }
+
+    return {
+      responseText: `任务 #${id} 已经是 ${task.status} 状态，无法取消。`,
+      toolName: "cancel_task",
+      riskLevel: "read",
+      input: { id },
+      output: { cancelled: false }
     };
   }
 
