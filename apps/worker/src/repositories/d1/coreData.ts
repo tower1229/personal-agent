@@ -1,29 +1,13 @@
+import { type AgentRepositories } from "../../repositories.js";
 import {
   escapeLike,
   toApproval,
   toMemory,
-  toRun,
-  toSchedule,
-  toScheduleExecution,
-  toSkill,
-  toSkillRouteDecision,
-  toSkillRun,
-  toSkillVersion,
   toTodo,
-  toToolCall,
   type ApprovalRequestRow,
   type MemoryRow,
-  type RunRow,
-  type ScheduleExecutionRow,
-  type ScheduleRow,
-  type SkillRouteDecisionRow,
-  type SkillRow,
-  type SkillRunRow,
-  type SkillVersionRow,
-  type TodoRow,
-  type ToolCallRow
+  type TodoRow
 } from "./mappers.js";
-import { type AgentRepositories, type RunnableSkillRecord } from "../../repositories.js";
 
 export function createD1CoreDataRepositories(
   db: D1Database

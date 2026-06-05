@@ -1,71 +1,27 @@
-import { type Hono } from "hono";
 import {
   adminAgentConfigResponseSchema,
   adminAgentTestLlmRequestSchema,
   adminAgentTestLlmResponseSchema,
   adminAgentTestSearchRequestSchema,
   adminAgentTestSearchResponseSchema,
-  adminApprovalsResponseSchema,
+  adminApiSuccessSchema,
   adminAuthConfigResponseSchema,
   adminHealthResponseSchema,
-  adminMemoriesResponseSchema,
   adminMeResponseSchema,
-  adminApiSuccessSchema,
-  adminRunDetailResponseSchema,
-  adminSkillDetailResponseSchema,
-  adminSkillPublishResponseSchema,
-  adminSkillRouteDecisionsResponseSchema,
-  adminSkillRunsResponseSchema,
-  adminSkillsResponseSchema,
-  adminSkillTestRunRequestSchema,
-  adminSkillTestRunResponseSchema,
-  adminSkillUpsertRequestSchema,
-  adminScheduleExecutionsResponseSchema,
-  adminScheduleSchema,
-  adminScheduleUpsertRequestSchema,
-  adminSchedulesResponseSchema,
-  adminRunsResponseSchema,
-  adminTodosResponseSchema,
-  telegramWebhookResponseSchema,
   userProfileSchema,
   userProfileUpdateRequestSchema
 } from "@personal-agent/shared";
+import { type Hono } from "hono";
+import { executeLlmAgent } from "../agent.js";
 import {
   buildExpiredSessionCookie,
-  buildSessionCookie,
   getCookieValue,
   getSessionCookieName,
-  signSession,
-  verifySession,
-  verifyTelegramLogin
+  verifySession
 } from "../auth.js";
-import { executeSkill, handleOwnerUpdate, type BotRuntime } from "../bot.js";
-import { executeLlmAgent } from "../agent.js";
 import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
-import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
-import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
-import { type AgentRepositories } from "../repositories.js";
 import { type WorkerEnv } from "../types.js";
-import {
-  checkD1Readiness,
-  defaultGenerateId,
-  limitParam,
-  ownerId,
-  telegramBotUsername
-} from "./helpers.js";
-import {
-  toAdminApproval,
-  toAdminMemory,
-  toAdminRun,
-  toAdminSchedule,
-  toAdminScheduleExecution,
-  toAdminSkill,
-  toAdminSkillDetail,
-  toAdminSkillRouteDecision,
-  toAdminSkillRun,
-  toAdminTodo,
-  toAdminToolCall
-} from "./serializers.js";
+import { checkD1Readiness, telegramBotUsername } from "./helpers.js";
 
 import { type WorkerRouteContext } from "./routeContext.js";
 
@@ -73,15 +29,8 @@ export function registerAdminSystemRoutes(
   app: Hono<{ Bindings: WorkerEnv }>,
   context: WorkerRouteContext
 ) {
-  const {
-    options,
-    repositories,
-    fetchUrlMaxBytes,
-    llmClient,
-    searchClient,
-    runtime,
-    adminOwnerId
-  } = context;
+  const { options, repositories, fetchUrlMaxBytes, runtime, adminOwnerId } =
+    context;
 
   app.get("/api/admin/health", (c) =>
     c.json(

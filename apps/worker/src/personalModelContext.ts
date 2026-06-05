@@ -1,15 +1,11 @@
-import {
-  type PersonalModelClaimRecord,
-  type PersonalModelSourceChunkRecord,
-  type PersonalModelUnderstandingGapRecord,
-  type AgentRepositories
-} from "./repositories.js";
-import {
-  type PersonalModelScenario,
-  type PlannerRouteDecision
-} from "@personal-agent/shared";
-import { type WorkerEnv } from "./types.js";
+import { type PersonalModelScenario, type PlannerRouteDecision } from "@personal-agent/shared";
 import { retrieveHybridChunks } from "./personalModelRetrieval.js";
+import {
+  type AgentRepositories,
+  type PersonalModelClaimRecord,
+  type PersonalModelSourceChunkRecord
+} from "./repositories.js";
+import { type WorkerEnv } from "./types.js";
 
 const scenarioKeywords: Record<PersonalModelScenario, string[]> = {
   writing: ["写作", "写", "文章", "博客", "文字", "修改", "润色"],
@@ -43,14 +39,6 @@ export function classifyScenario(inputText: string): PersonalModelScenario {
   }
 
   return bestScenario;
-}
-
-function extractSearchKeyword(inputText: string): string | null {
-  if (inputText.length < 20) {
-    return inputText;
-  }
-  // Try to find a meaningful keyword, or just use the first 10 chars
-  return inputText.slice(0, 10);
 }
 
 export interface AssembleContextTrace {

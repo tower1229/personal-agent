@@ -1,41 +1,26 @@
 import {
   personalModelLayers,
   personalModelScenarios,
+  ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD,
   type PersonalModelLayer,
   type PersonalModelScenario,
   type SkillRouteTriggerType,
-  type ToolRiskLevel,
-  ROUTING_CONFIDENCE_AUTO_RUN_THRESHOLD,
-  ROUTING_CONFIDENCE_CONFIRM_THRESHOLD
+  type TelegramWebhookUpdate,
+  type ToolRiskLevel
 } from "@personal-agent/shared";
-import {
-  executeLlmAgent,
-  type AgentRuntime,
-  type AgentToolResult
-} from "./agent.js";
+import { executeLlmAgent, type AgentRuntime, type AgentToolResult } from "./agent.js";
 import { type SearchClient, type UrlFetcher } from "./externalTools.js";
 import { type LlmClient } from "./llm.js";
 import {
-  canCancelLongTask,
-  canPauseLongTask,
-  canResumeLongTask,
   classifyTaskComplexity,
   executeLongTaskForRecord,
-  formatCompletedLongTask,
-  formatLongTaskStatus,
   startLongTask,
   syncLongTaskMessage
 } from "./longTasks.js";
-import { type AgentRepositories } from "./repositories.js";
-import {
-  getTelegramChatId,
-  getTelegramMessageText,
-  type TelegramClient
-} from "./telegram.js";
-import { type TelegramWebhookUpdate } from "@personal-agent/shared";
-import { type RunnableSkillRecord } from "./repositories.js";
+import { classifyHeuristically, decidePlannerRoute, extractUrls } from "./plannerRouteDecision.js";
+import { type AgentRepositories, type RunnableSkillRecord } from "./repositories.js";
 import { allowedBuiltInToolsForSkill } from "./skillPackages.js";
-import { decidePlannerRoute, classifyHeuristically, extractUrls } from "./plannerRouteDecision.js";
+import { getTelegramChatId, getTelegramMessageText, type TelegramClient } from "./telegram.js";
 import { executeUnifiedRouting } from "./unifiedRouter.js";
 
 export interface BotRuntime extends AgentRuntime {
@@ -203,15 +188,6 @@ function blockedToolResult(toolName: string): CommandResult {
     input: { requestedTool: toolName },
     output: { blocked: true }
   };
-}
-
-async function resolveLongTask(context: CommandContext, id?: string) {
-  return id
-    ? context.runtime.repositories.getLongTask({
-        ownerTgUserId: context.ownerTgUserId,
-        id
-      })
-    : context.runtime.repositories.getLatestActiveLongTask(context.ownerTgUserId);
 }
 
 async function recordToolCall(
@@ -1367,7 +1343,7 @@ export async function handleOwnerUpdate(
     let matchedSkill: SkillMatch | null = null;
     let result: CommandResult & { skillRunId?: string };
 
-    const onThinking = async (state: { type: "thinking" | "tool"; toolName?: string }) => {
+    const onThinking = async (_state: { type: "thinking" | "tool"; toolName?: string }) => {
       try {
         await input.runtime.telegramClient.sendChatAction({
           chatId,

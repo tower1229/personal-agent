@@ -1,26 +1,75 @@
 import { describe, expect, it } from "vitest";
-import { buildSessionCookie, signSession } from "./auth.js";
-import { createWorkerApp, runScheduled } from "./app.js";
-import { executeAgentTool } from "./agent.js";
-import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./externalTools.js";
-import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
-import { type TelegramClient } from "./telegram.js";
 import {
-  skillPackageFiles,
-  createFakeD1Database,
-  createFakeLlmClient,
-  createFakeRepositories,
-  createFakeSearchClient,
-  createFakeTelegramClient,
-  createFakeUrlFetcher,
   createTestApp,
   env,
   ownerCookie,
-  ownerUpdate,
-  postWebhook
+  skillPackageFiles
 } from "./test-helpers/fakeRepositories.js";
 
 describe("skills lifecycle", () => {
+  it("requires an admin session for skill routing example endpoints", async () => {
+    const { app, repositories } = createTestApp();
+
+    const list = await app.request("/api/admin/skill-intents", {}, env);
+    const create = await app.request(
+      "/api/admin/skill-intents",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          skillName: "coach",
+          intentText: "帮我复盘"
+        })
+      },
+      env
+    );
+    const remove = await app.request(
+      "/api/admin/skill-intents/intent-1",
+      {
+        method: "DELETE"
+      },
+      env
+    );
+    const generate = await app.request(
+      "/api/admin/skills/skill-1/routing-examples/generate",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          instruction: "生成中文路由样例"
+        })
+      },
+      env
+    );
+    const apply = await app.request(
+      "/api/admin/skills/skill-1/routing-examples",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          items: [{ exampleText: "帮我复盘这件事" }]
+        })
+      },
+      env
+    );
+
+    expect([
+      list.status,
+      create.status,
+      remove.status,
+      generate.status,
+      apply.status
+    ]).toEqual([401, 401, 401, 401, 401]);
+    await expect(repositories.listSkillIntents(1229)).resolves.toHaveLength(0);
+    expect(repositories.adminAssistRuns).toHaveLength(0);
+  });
+
   it("saves skill package drafts with warnings for unknown allowed tools", async () => {
     const { app } = createTestApp();
     const cookie = await ownerCookie();

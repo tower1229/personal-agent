@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-Personal Agent currently has a useful skill system, but it is not compatible with the open Agent Skills format. The current system stores a D1-backed chat skill manifest, routes by explicit id or trigger phrase, and executes the manifest instructions through the LLM agent. This works for simple in-product skills, but it is now the wrong abstraction and should be replaced, not preserved as a parallel implementation. It blocks three future needs:
+Personal Agent originally had a useful skill system, but it was not compatible with the open Agent Skills format. The legacy system stored a D1-backed chat skill manifest, routed by explicit id or trigger phrase, and executed manifest instructions through the LLM agent. That worked for simple in-product skills, but it became the wrong abstraction and was replaced instead of preserved as a parallel implementation. The migration was motivated by three product needs:
 
 - Reusing skills from the broader Agent Skills ecosystem.
 - Authoring skills as portable, version-controlled packages.
@@ -141,14 +141,11 @@ Migration compatibility is allowed only as a bounded data-conversion step. The t
   - `scripts/`, `references/`, and `assets/` are optional.
   - Progressive disclosure is central: metadata at startup, body on activation, resources on demand.
 - Current implementation evidence:
-  - Personal Agent currently stores skill drafts and versions as JSON manifests in D1.
-  - Current legacy routing is explicit id or trigger phrase, then command/LLM fallback.
-  - Current skill execution uses manifest instructions as LLM system instructions.
-- Recommended migration shape:
-  1. Add parser and validator with unit tests.
-  2. Replace the legacy manifest model with package model and D1 persistence.
-  3. Add Admin import/validation/publish.
-  4. Add runtime activation for standard packages.
-  5. Convert existing legacy skill rows to standard package records.
-  6. Remove legacy chat skill schema, API, Admin form, and runtime branches.
-  7. Later, revisit script execution with a real sandbox policy.
+  - Skill drafts and published versions are stored as standard package file maps with parsed metadata, validation output, file inventory, and content hashes in D1.
+  - Runtime routing uses standard skill package names/descriptions plus routing examples; internal database ids and legacy trigger phrases are not Telegram trigger identifiers.
+  - Skill execution loads published package instructions and maps supported `allowed-tools` tokens into the existing built-in tool allowlist.
+  - `0012_agent_skill_packages.sql` is the bounded legacy-data conversion point. Legacy chat skill records are converted there and the old tables are dropped in that migration.
+- Migration follow-up boundary:
+  1. Do not reintroduce a runtime `chat` skill kind or trigger-phrase branch.
+  2. Keep any legacy conversion helper out of runtime activation paths.
+  3. Later, revisit script execution with a real sandbox policy.

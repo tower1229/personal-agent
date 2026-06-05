@@ -1,71 +1,11 @@
+import { telegramWebhookResponseSchema } from "@personal-agent/shared";
 import { type Hono } from "hono";
-import {
-  adminAgentConfigResponseSchema,
-  adminAgentTestLlmRequestSchema,
-  adminAgentTestLlmResponseSchema,
-  adminAgentTestSearchRequestSchema,
-  adminAgentTestSearchResponseSchema,
-  adminApprovalsResponseSchema,
-  adminAuthConfigResponseSchema,
-  adminHealthResponseSchema,
-  adminMemoriesResponseSchema,
-  adminMeResponseSchema,
-  adminApiSuccessSchema,
-  adminRunDetailResponseSchema,
-  adminSkillDetailResponseSchema,
-  adminSkillPublishResponseSchema,
-  adminSkillRouteDecisionsResponseSchema,
-  adminSkillRunsResponseSchema,
-  adminSkillsResponseSchema,
-  adminSkillTestRunRequestSchema,
-  adminSkillTestRunResponseSchema,
-  adminSkillUpsertRequestSchema,
-  adminScheduleExecutionsResponseSchema,
-  adminScheduleSchema,
-  adminScheduleUpsertRequestSchema,
-  adminSchedulesResponseSchema,
-  adminRunsResponseSchema,
-  adminTodosResponseSchema,
-  telegramWebhookResponseSchema
-} from "@personal-agent/shared";
-import {
-  buildExpiredSessionCookie,
-  buildSessionCookie,
-  getCookieValue,
-  getSessionCookieName,
-  signSession,
-  verifySession,
-  verifyTelegramLogin
-} from "../auth.js";
-import { executeSkill, handleOwnerUpdate, type BotRuntime } from "../bot.js";
-import { executeLlmAgent } from "../agent.js";
-import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
-import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
 import { evaluateRun } from "../agentEvaluator.js";
+import { handleOwnerUpdate } from "../bot.js";
 import { extractDailyMemories } from "../memoryExtractor.js";
-import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
-import { type AgentRepositories } from "../repositories.js";
+import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
 import { type WorkerEnv } from "../types.js";
-import {
-  checkD1Readiness,
-  defaultGenerateId,
-  limitParam,
-  ownerId,
-  telegramBotUsername
-} from "./helpers.js";
-import {
-  toAdminApproval,
-  toAdminMemory,
-  toAdminRun,
-  toAdminSchedule,
-  toAdminScheduleExecution,
-  toAdminSkill,
-  toAdminSkillDetail,
-  toAdminSkillRouteDecision,
-  toAdminSkillRun,
-  toAdminTodo,
-  toAdminToolCall
-} from "./serializers.js";
+import { ownerId } from "./helpers.js";
 
 import { type WorkerRouteContext } from "./routeContext.js";
 
@@ -73,15 +13,7 @@ export function registerTelegramRoutes(
   app: Hono<{ Bindings: WorkerEnv }>,
   context: WorkerRouteContext
 ) {
-  const {
-    options,
-    repositories,
-    fetchUrlMaxBytes,
-    llmClient,
-    searchClient,
-    runtime,
-    adminOwnerId
-  } = context;
+  const { runtime } = context;
 
   app.post("/telegram/webhook", async (c) => {
     const webhookSecret = c.env.TELEGRAM_WEBHOOK_SECRET;

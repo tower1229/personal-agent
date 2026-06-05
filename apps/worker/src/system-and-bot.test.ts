@@ -1,18 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildSessionCookie, signSession } from "./auth.js";
-import { createWorkerApp, runScheduled } from "./app.js";
-import { executeAgentTool } from "./agent.js";
-import { createUrlFetcher, type SearchClient, type UrlFetcher } from "./externalTools.js";
-import { type LlmChatCompletionOutput, type LlmClient, type LlmMessage } from "./llm.js";
-import { type TelegramClient } from "./telegram.js";
 import {
-  skillPackageFiles,
   createFakeD1Database,
-  createFakeLlmClient,
-  createFakeRepositories,
-  createFakeSearchClient,
-  createFakeTelegramClient,
-  createFakeUrlFetcher,
   createTestApp,
   env,
   ownerCookie,
@@ -1134,7 +1123,9 @@ describe("worker system and bot commands", () => {
       birthdayTimestamp: null,
       gender: null,
       interpretationFramework: null,
-      preferences: null,
+      preferences: JSON.stringify({
+        soul: "# Legacy SOUL\n这段旧 preferences.soul 不应注入。"
+      }),
       agentSoul: "# Agent SOUL\n只使用数据库中的行为契约。",
       coreMemory: "# Core Memory\n核心记忆也应该注入。",
       createdAt: 1000,
@@ -1150,6 +1141,7 @@ describe("worker system and bot commands", () => {
     expect(systemText).toContain("[Agent SOUL / 行为契约 (最高优先级)]");
     expect(systemText).toContain("只使用数据库中的行为契约。");
     expect(systemText).toContain("核心记忆也应该注入。");
+    expect(systemText).not.toContain("这段旧 preferences.soul 不应注入。");
     expect(systemText).not.toContain("你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。");
   });
 

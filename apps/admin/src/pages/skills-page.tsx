@@ -1,31 +1,61 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/app-shell";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
+} from "@/components/ui/tabs";
+import { isCreateRoutePath } from "@/lib/admin-routes";
+import {
+  createSkillIntent,
   deleteSkill,
+  deleteSkillIntent,
   loadSkillDetail,
+  loadSkillIntents,
   loadSkillRouteDecisions,
   loadSkillRuns,
   loadSkills,
   publishSkill,
   saveSkillDraft,
-  setSkillEnabled,
-  testSkill,
-  loadSkillIntents,
-  createSkillIntent,
-  deleteSkillIntent
+  testSkill
 } from "@/lib/api";
-import { isCreateRoutePath } from "@/lib/admin-routes";
-import { filterText, emptySkillForm, formFromSkill, skillRequestFromForm, skillStatus, useAsyncData, type SkillFormState } from "./resource-common";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState } from "./resource-common";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams
+} from "react-router-dom";
+import { toast } from "sonner";
+import {
+  emptySkillForm,
+  EmptyState,
+  filterText,
+  formFromSkill,
+  skillRequestFromForm,
+  skillStatus,
+  useAsyncData,
+  type SkillFormState
+} from "./resource-common";
 
 import { SkillDetailHeader } from "@/components/skill/skill-detail-header";
 import { SkillPackageEditor } from "@/components/skill/skill-package-editor";
@@ -110,13 +140,6 @@ export function SkillsPage() {
       setInlineError(message);
       toast.error(message);
     }
-  }
-
-  async function setEnabled(enabled: boolean) {
-    if (!params.id || isNew) return;
-    await setSkillEnabled(params.id, enabled);
-    toast.success(enabled ? "Skill enabled" : "Skill disabled");
-    navigate(0);
   }
 
   async function remove() {

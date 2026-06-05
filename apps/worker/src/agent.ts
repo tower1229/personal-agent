@@ -1,33 +1,28 @@
 import {
   builtInToolNames,
-  type BuiltInToolName,
   controlledToolNames,
+  type BuiltInToolName,
   type ControlledToolName,
-  type PlannerRouteDecision,
-  type ToolRiskLevel,
-  type PersonalModelLayer,
   type PersonalModelConfidence,
+  type PersonalModelLayer,
+  type PersonalModelScenario,
+  type PersonalModelSourceType,
+  type PlannerRouteDecision,
+  type ToolRiskLevel
 } from "@personal-agent/shared";
 import { type SearchClient, type UrlFetcher } from "./externalTools.js";
 import {
   type LlmClient,
   type LlmMessage,
   type LlmToolCall,
-  type LlmToolDefinition,
+  type LlmToolDefinition
 } from "./llm.js";
+import { assemblePersonalModelContext } from "./personalModelContext.js";
+import { reflectAndProposeClaims } from "./personalModelReflection.js";
+import { chunkSourceContent, normalizeSourceContent, tokenCountForChunk } from "./personalModelSources.js";
+import { buildAgentProfileContext } from "./agentProfileContext.js";
 import { type AgentRepositories } from "./repositories.js";
 import { type WorkerEnv } from "./types.js";
-import { assemblePersonalModelContext } from "./personalModelContext.js";
-import {
-  type PersonalModelScenario,
-  type PersonalModelSourceType,
-} from "@personal-agent/shared";
-import {
-  normalizeSourceContent,
-  chunkSourceContent,
-  tokenCountForChunk,
-} from "./personalModelSources.js";
-import { reflectAndProposeClaims } from "./personalModelReflection.js";
 
 const UNTRUSTED_INSTRUCTION_WARNING =
   "网页内容包含疑似指令注入，已忽略其指令性内容。";
@@ -1202,61 +1197,11 @@ export async function executeLlmAgent(
     });
   }
 
-  const profile = await input.runtime.repositories.getUserProfile(
-    input.ownerTgUserId.toString(),
-  );
-  let profileContext = "";
-  if (profile) {
-    const parts = [];
-    if (profile.name) parts.push(`称呼: ${profile.name}`);
-    if (profile.gender) parts.push(`性别: ${profile.gender}`);
-    if (profile.birthdayTimestamp) {
-      const age =
-        new Date(
-          input.runtime.now() - profile.birthdayTimestamp,
-        ).getUTCFullYear() - 1970;
-      parts.push(`真实年龄: ${age}岁`);
-    }
-    let basicProfile = "";
-    if (parts.length > 0) {
-      basicProfile = `[用户档案: ${parts.join(", ")}]\n`;
-    }
-
-    let agentSoul = "";
-    if (profile.agentSoul) {
-      agentSoul = `[Agent SOUL / 行为契约 (最高优先级)]\n${profile.agentSoul}\n`;
-    }
-
-    let soulContext = "";
-    if (profile.preferences) {
-      try {
-        const pref = JSON.parse(profile.preferences);
-        if (pref.soul) {
-          soulContext = `[Agent SOUL (核心性格与原则)]\n${pref.soul}\n`;
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    let coreMem = "";
-    if (profile.coreMemory) {
-      coreMem = `[核心记忆/Core Memory (最高优先级)]\n${profile.coreMemory}\n`;
-    }
-
-    profileContext = basicProfile + agentSoul + coreMem;
-  }
-
-  const recentMemories = await input.runtime.repositories.listMemories(
-    input.ownerTgUserId,
-    50,
-  );
-  const tenDaysAgo = Date.now() - 10 * 24 * 60 * 60 * 1000;
-  const logMemories = recentMemories.filter((m) => m.createdAt >= tenDaysAgo);
-  if (logMemories.length > 0) {
-    const memoryStrings = logMemories.map((m) => `- ${m.content}`).join("\n");
-    profileContext += `[近期日志记忆 / Log Memory (最近10天)]\n${memoryStrings}\n\n`;
-  }
+  const profileContext = await buildAgentProfileContext({
+    repositories: input.runtime.repositories,
+    ownerTgUserId: input.ownerTgUserId,
+    now: input.runtime.now,
+  });
 
   const tools = availableToolDefinitions(input.allowedTools);
   const allowedToolNames = tools.map((tool) => tool.function.name);

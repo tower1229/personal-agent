@@ -1,17 +1,17 @@
-import { type Hono } from "hono";
 import {
   adminApiSuccessSchema,
-  adminSkillIntentCreateRequestSchema,
-  adminSkillIntentsResponseSchema,
   adminAssistRequestSchema,
   adminAssistResponseSchema,
+  adminSkillIntentCreateRequestSchema,
+  adminSkillIntentsResponseSchema,
   adminSkillRoutingExamplesBatchCreateRequestSchema
 } from "@personal-agent/shared";
-import { type WorkerEnv } from "../types.js";
-import { ownerId, defaultGenerateId } from "./helpers.js";
-import { type WorkerRouteContext } from "./routeContext.js";
+import { type Hono } from "hono";
 import { AdminLlmAssistService } from "../adminLlmAssist.js";
 import { skillRoutingExamplesGenerateCapability } from "../adminLlmCapabilities/skillRoutingExamplesGenerate.js";
+import { type WorkerEnv } from "../types.js";
+import { defaultGenerateId } from "./helpers.js";
+import { type WorkerRouteContext } from "./routeContext.js";
 
 const assistService = new AdminLlmAssistService();
 assistService.register(skillRoutingExamplesGenerateCapability);
@@ -21,10 +21,10 @@ export function registerAdminSkillIntentsRoutes(
   app: Hono<{ Bindings: WorkerEnv }>,
   context: WorkerRouteContext
 ) {
-  const { options, repositories } = context;
+  const { options, repositories, adminOwnerId } = context;
 
   app.get("/api/admin/skill-intents", async (c) => {
-    const authenticatedOwnerId = ownerId(c.env);
+    const authenticatedOwnerId = await adminOwnerId(c);
     if (!authenticatedOwnerId) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -41,7 +41,7 @@ export function registerAdminSkillIntentsRoutes(
   });
 
   app.post("/api/admin/skill-intents", async (c) => {
-    const authenticatedOwnerId = ownerId(c.env);
+    const authenticatedOwnerId = await adminOwnerId(c);
     if (!authenticatedOwnerId) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -69,7 +69,7 @@ export function registerAdminSkillIntentsRoutes(
   });
 
   app.delete("/api/admin/skill-intents/:id", async (c) => {
-    const authenticatedOwnerId = ownerId(c.env);
+    const authenticatedOwnerId = await adminOwnerId(c);
     if (!authenticatedOwnerId) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -83,7 +83,7 @@ export function registerAdminSkillIntentsRoutes(
   });
 
   app.post("/api/admin/skills/:id/routing-examples/generate", async (c) => {
-    const authenticatedOwnerId = ownerId(c.env);
+    const authenticatedOwnerId = await adminOwnerId(c);
     if (!authenticatedOwnerId) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -131,7 +131,7 @@ export function registerAdminSkillIntentsRoutes(
   });
 
   app.post("/api/admin/skills/:id/routing-examples", async (c) => {
-    const authenticatedOwnerId = ownerId(c.env);
+    const authenticatedOwnerId = await adminOwnerId(c);
     if (!authenticatedOwnerId) {
       return c.json({ error: "Unauthorized" }, 401);
     }

@@ -1,74 +1,30 @@
-import { type Hono } from "hono";
 import {
-  adminAgentConfigResponseSchema,
-  adminAgentTestLlmRequestSchema,
-  adminAgentTestLlmResponseSchema,
-  adminAgentTestSearchRequestSchema,
-  adminAgentTestSearchResponseSchema,
-  adminApprovalsResponseSchema,
-  adminAuthConfigResponseSchema,
-  adminHealthResponseSchema,
-  adminMemoriesResponseSchema,
-  adminMemorySchema,
-  adminMemoryCreateRequestSchema,
-  adminMemoryUpdateRequestSchema,
-  adminMeResponseSchema,
   adminApiSuccessSchema,
-  adminRunDetailResponseSchema,
-  adminSkillDetailResponseSchema,
-  adminSkillPublishResponseSchema,
-  adminSkillRouteDecisionsResponseSchema,
-  adminSkillRunsResponseSchema,
-  adminSkillsResponseSchema,
-  adminSkillTestRunRequestSchema,
-  adminSkillTestRunResponseSchema,
-  adminSkillUpsertRequestSchema,
-  adminScheduleExecutionsResponseSchema,
-  adminScheduleSchema,
-  adminScheduleUpsertRequestSchema,
-  adminSchedulesResponseSchema,
-  adminRunsResponseSchema,
-  adminTodoSchema,
-  adminTodoCreateRequestSchema,
-  adminTodoUpdateRequestSchema,
-  adminTodosResponseSchema,
-  telegramWebhookResponseSchema,
+  adminApprovalsResponseSchema,
+  adminEvaluationsResponseSchema,
   adminFeedbacksResponseSchema,
-  adminEvaluationsResponseSchema
+  adminMemoriesResponseSchema,
+  adminMemoryCreateRequestSchema,
+  adminMemorySchema,
+  adminMemoryUpdateRequestSchema,
+  adminRunDetailResponseSchema,
+  adminRunsResponseSchema,
+  adminTodoCreateRequestSchema,
+  adminTodoSchema,
+  adminTodosResponseSchema,
+  adminTodoUpdateRequestSchema
 } from "@personal-agent/shared";
-import {
-  buildExpiredSessionCookie,
-  buildSessionCookie,
-  getCookieValue,
-  getSessionCookieName,
-  signSession,
-  verifySession,
-  verifyTelegramLogin
-} from "../auth.js";
-import { executeSkill, handleOwnerUpdate, normalizeMemoryContent, type BotRuntime } from "../bot.js";
-import { executeLlmAgent } from "../agent.js";
-import { normalizeLlmBaseUrl, parseMaxToolRounds } from "../llm.js";
-import { getTelegramUpdateUserId, parseTelegramUpdate } from "../telegram.js";
-import { executeScheduleCommand, nextScheduleRunAt, normalizeScheduleRequest } from "../schedules.js";
-import { type AgentRepositories } from "../repositories.js";
+import { type Hono } from "hono";
+import { normalizeMemoryContent } from "../bot.js";
 import { type WorkerEnv } from "../types.js";
-import {
-  checkD1Readiness,
-  defaultGenerateId,
-  limitParam,
-  ownerId,
-  telegramBotUsername
-} from "./helpers.js";
+import { limitParam } from "./helpers.js";
 import {
   toAdminApproval,
   toAdminLongTask,
   toAdminMemory,
   toAdminPlannerRouteDecision,
   toAdminRun,
-  toAdminSchedule,
   toAdminScheduleExecution,
-  toAdminSkill,
-  toAdminSkillDetail,
   toAdminSkillRouteDecision,
   toAdminSkillRun,
   toAdminTodo,
@@ -81,15 +37,7 @@ export function registerAdminDataRoutes(
   app: Hono<{ Bindings: WorkerEnv }>,
   context: WorkerRouteContext
 ) {
-  const {
-    options,
-    repositories,
-    fetchUrlMaxBytes,
-    llmClient,
-    searchClient,
-    runtime,
-    adminOwnerId
-  } = context;
+  const { options, repositories, adminOwnerId } = context;
 
   app.get("/api/admin/runs", async (c) => {
     const authenticatedOwnerId = await adminOwnerId(c);

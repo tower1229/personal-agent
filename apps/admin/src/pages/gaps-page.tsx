@@ -1,21 +1,39 @@
-import { useState, useMemo } from "react";
-import { 
-  type PersonalModelUnderstandingGapDto, 
-  personalModelScenarios,
-  understandingGapStatuses,
-  type PersonalModelScenario,
-  type UnderstandingGapStatus
-} from "@personal-agent/shared";
-import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/app-shell";
-import { StatusBadge } from "@/components/status-badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { loadPersonalModelUnderstandingGaps, updatePersonalModelUnderstandingGapStatus } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import {
+  personalModelScenarios,
+  understandingGapStatuses,
+  type PersonalModelUnderstandingGapDto,
+  type UnderstandingGapStatus
+} from "@personal-agent/shared";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { EmptyState, filterText, useAsyncData } from "./resource-common";
 
 export function GapsPage() {

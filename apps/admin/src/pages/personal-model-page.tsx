@@ -1,11 +1,60 @@
-import { useMemo, useState } from "react";
+import { PageHeader } from "@/components/layout/app-shell";
+import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  createPersonalModelEvidence,
+  createPersonalModelSource,
+  deletePersonalModelSource,
+  loadPersonalModelClaimDetail,
+  loadPersonalModelClaims,
+  loadPersonalModelSourceDetail,
+  loadPersonalModelSources,
+  loadRetrievalDiagnostics,
+  updatePersonalModelClaim,
+  updatePersonalModelSource
+} from "@/lib/api";
+import { formatDateTime, parseLocalYMD, truncateText } from "@/lib/format";
 import {
   personalModelConfidences,
   personalModelEvidenceTypes,
   personalModelEvidenceWeights,
   personalModelLayers,
   personalModelScenarios,
-  personalModelSensitivities,
   personalModelSourceStatuses,
   personalModelSourceTypes,
   personalModelStatuses,
@@ -20,27 +69,19 @@ import {
   type PersonalModelEvidenceWeight,
   type PersonalModelLayer,
   type PersonalModelScenario,
-  type PersonalModelSensitivity,
   type PersonalModelSourceStatus,
   type PersonalModelSourceType,
   type PersonalModelStatus,
   type PersonalModelUsagePolicy
 } from "@personal-agent/shared";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/layout/app-shell";
-import { StatusBadge } from "@/components/status-badge";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import { createPersonalModelClaim, createPersonalModelEvidence, createPersonalModelSource, deletePersonalModelSource, loadPersonalModelClaimDetail, loadPersonalModelClaims, loadPersonalModelSourceDetail, loadPersonalModelSources, updatePersonalModelClaim, updatePersonalModelSource, loadRetrievalDiagnostics } from "@/lib/api";
-import { formatDateTime, parseLocalYMD, truncateText } from "@/lib/format";
-import { EmptyState, Field, filterText, useAsyncData } from "./resource-common";
+import {
+  EmptyState,
+  Field,
+  filterText,
+  useAsyncData
+} from "./resource-common";
 
 interface ClaimFormState {
   claim: string;

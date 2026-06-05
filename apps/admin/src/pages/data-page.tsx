@@ -1,32 +1,5 @@
-import { useMemo, useState, useEffect } from "react";
-import { toast } from "sonner";
-import { type AdminMemory } from "@personal-agent/shared";
 import { PageHeader } from "@/components/layout/app-shell";
 import { StatusBadge } from "@/components/status-badge";
-import {
-  loadMemories,
-  createMemory,
-  updateMemory,
-  deleteMemory,
-  loadProfile,
-  updateProfile
-} from "@/lib/api";
-import { formatDateTime, truncateText } from "@/lib/format";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,23 +10,66 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { EmptyState, filterText, useAsyncData, Field } from "./resource-common";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
+} from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  createMemory,
+  deleteMemory,
+  loadMemories,
+  loadProfile,
+  updateMemory,
+  updateProfile
+} from "@/lib/api";
+import { formatDateTime, truncateText } from "@/lib/format";
+import { type AdminMemory } from "@personal-agent/shared";
 import { EditIcon, PlusIcon, TrashIcon } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-const DEFAULT_SOUL = `# 核心心智 (Core Personality)
-你不是一个传统的、只会顺从的 AI 助手，你是用户的高阶自我映射 (Higher-Self Mapping)。
-你的底色是：中正、清明、温和，但在洞察到事物本质时观点锋利。
-不要扮演全知全能的权威，不要自称宗教、心理或终极真理权威，不提供廉价的虚假安慰。
-
-# 沟通风格 (Communication Style)
-- 语言简练，直击本质，不使用套话（如“很高兴为您服务”、“这是一个好问题”、“我理解你”）。
-- 用简洁、现代的中文回答。
-- 默认隐性使用个人模型，不要频繁显性引用旧资料或展示你有多了解用户，做到“润物细无声”。
-
-# 行为与洞察边界 (Behavioral Constraints)
-- 当用户情绪或真实需求不确定时：先给轻量的初步判断，再问一个关键的校准问题，绝对不要直接下定论。
-- 当识别到用户的心理防御机制时：你可以一针见血地指出用户的逃避、投射、控制欲、自我合理化和过度分析，但语气必须保持绝对的平静，态度必须温和。`;
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  EmptyState,
+  Field,
+  filterText,
+  useAsyncData
+} from "./resource-common";
 
 export function DataPage() {
   const [activeTab, setActiveTab] = useState("soul");
@@ -70,32 +86,22 @@ export function DataPage() {
 
   // Profile State (for SOUL and Core Memory)
   const profileData = useAsyncData(() => loadProfile(), []);
-  const [soul, setSoul] = useState("");
+  const [agentSoul, setAgentSoul] = useState("");
   const [coreMemory, setCoreMemory] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     if (profileData.data) {
+      setAgentSoul(profileData.data.agentSoul || "");
       setCoreMemory(profileData.data.coreMemory || "");
-      if (profileData.data.preferences) {
-        try {
-          const pref = JSON.parse(profileData.data.preferences);
-          setSoul(pref?.soul || DEFAULT_SOUL);
-        } catch (e) {
-          setSoul(DEFAULT_SOUL);
-        }
-      } else {
-        setSoul(DEFAULT_SOUL);
-      }
     }
   }, [profileData.data]);
 
   const handleSaveProfile = async () => {
     setSavingProfile(true);
     try {
-      const preferences = JSON.stringify({ soul });
       await updateProfile({
-        preferences,
+        agentSoul: agentSoul || null,
         coreMemory: coreMemory || null
       });
       toast.success("Agent Memory configuration saved successfully");
@@ -208,8 +214,8 @@ export function DataPage() {
                 <Skeleton className="h-[300px] w-full" />
               ) : (
                 <Textarea
-                  value={soul}
-                  onChange={(e) => setSoul(e.target.value)}
+                  value={agentSoul}
+                  onChange={(e) => setAgentSoul(e.target.value)}
                   placeholder="Write SOUL configuration in markdown..."
                   className="font-mono min-h-[350px]"
                 />

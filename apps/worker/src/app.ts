@@ -1,44 +1,6 @@
 import { Hono } from "hono";
-import {
-  adminAgentConfigResponseSchema,
-  adminAgentTestLlmRequestSchema,
-  adminAgentTestLlmResponseSchema,
-  adminAgentTestSearchRequestSchema,
-  adminAgentTestSearchResponseSchema,
-  adminApprovalsResponseSchema,
-  adminAuthConfigResponseSchema,
-  adminD1ReadinessResponseSchema,
-  adminHealthResponseSchema,
-  adminMemoriesResponseSchema,
-  adminMeResponseSchema,
-  adminApiSuccessSchema,
-  adminRunDetailResponseSchema,
-  adminSkillDetailResponseSchema,
-  adminSkillPublishResponseSchema,
-  adminSkillRouteDecisionsResponseSchema,
-  adminSkillRunsResponseSchema,
-  adminSkillsResponseSchema,
-  adminSkillTestRunRequestSchema,
-  adminSkillTestRunResponseSchema,
-  adminSkillUpsertRequestSchema,
-  adminScheduleExecutionsResponseSchema,
-  adminScheduleSchema,
-  adminScheduleUpsertRequestSchema,
-  adminSchedulesResponseSchema,
-  adminRunsResponseSchema,
-  adminTodosResponseSchema,
-  telegramWebhookResponseSchema
-} from "@personal-agent/shared";
-import {
-  buildExpiredSessionCookie,
-  buildSessionCookie,
-  getCookieValue,
-  getSessionCookieName,
-  signSession,
-  verifySession,
-  verifyTelegramLogin
-} from "./auth.js";
-import { executeSkill, handleOwnerUpdate, type BotRuntime } from "./bot.js";
+import { getCookieValue, getSessionCookieName, verifySession } from "./auth.js";
+import { type BotRuntime } from "./bot.js";
 import { createD1Repositories } from "./d1Repositories.js";
 import {
   createBraveSearchClient,
@@ -52,57 +14,15 @@ import {
   parseMaxToolRounds,
   type LlmClient
 } from "./llm.js";
-import { executeLlmAgent } from "./agent.js";
 import { resumeDueLongTasks } from "./longTasks.js";
-import {
-  createTelegramClient,
-  getTelegramUpdateUserId,
-  parseTelegramUpdate
-} from "./telegram.js";
-import { type WorkerEnv } from "./types.js";
-import {
-  executeScheduleCommand,
-  nextScheduleRunAt,
-  normalizeScheduleRequest,
-  pollDueSchedules
-} from "./schedules.js";
+import { type AgentRepositories } from "./repositories.js";
+import { pollDueSchedules } from "./schedules.js";
+import { createTelegramClient } from "./telegram.js";
 import { checkDueTodos } from "./todos-cron.js";
-import {
-  type AgentRepositories,
-  type ApprovalRequestRecord,
-  type MemoryRecord,
-  type RunRecord,
-  type ScheduleExecutionRecord,
-  type ScheduleRecord,
-  type SkillRecord,
-  type SkillRouteDecisionRecord,
-  type SkillRunRecord,
-  type TodoRecord,
-  type ToolCallRecord
-} from "./repositories.js";
+import { type WorkerEnv } from "./types.js";
 
+import { defaultGenerateApprovalCode, defaultGenerateId, ownerId } from "./app/helpers.js";
 import { registerWorkerRoutes } from "./app/routes.js";
-import {
-  checkD1Readiness,
-  defaultGenerateApprovalCode,
-  defaultGenerateId,
-  limitParam,
-  ownerId,
-  telegramBotUsername
-} from "./app/helpers.js";
-import {
-  toAdminApproval,
-  toAdminMemory,
-  toAdminRun,
-  toAdminSchedule,
-  toAdminScheduleExecution,
-  toAdminSkill,
-  toAdminSkillDetail,
-  toAdminSkillRouteDecision,
-  toAdminSkillRun,
-  toAdminTodo,
-  toAdminToolCall
-} from "./app/serializers.js";
 
 interface WorkerAppOptions {
   repositories?: AgentRepositories;
