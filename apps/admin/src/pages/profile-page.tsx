@@ -24,19 +24,25 @@ const DEFAULT_SOUL = `# 核心心智 (Core Personality)
 
 export function ProfilePage() {
   const profileData = useAsyncData(() => loadProfile(), []);
-  
+
   const [name, setName] = useState("");
   const [gender, setGender] = useState("");
   const [birthday, setBirthday] = useState("");
   const [mbti, setMbti] = useState("");
   const [enneagram, setEnneagram] = useState("");
   const [astrologySign, setAstrologySign] = useState("");
+  const [communicationStyle, setCommunicationStyle] = useState("");
+  const [workLifeBoundaries, setWorkLifeBoundaries] = useState("");
+  const [agentSoul, setAgentSoul] = useState("");
+  const [coreMemory, setCoreMemory] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (profileData.data) {
       setName(profileData.data.name || "");
       setGender(profileData.data.gender || "");
+      setAgentSoul(profileData.data.agentSoul || "");
+      setCoreMemory(profileData.data.coreMemory || "");
       if (profileData.data.birthdayTimestamp) {
         setBirthday(formatLocalYMD(profileData.data.birthdayTimestamp));
       }
@@ -50,6 +56,15 @@ export function ProfilePage() {
           // ignore parsing error
         }
       }
+      if (profileData.data.preferences) {
+        try {
+          const prefs = JSON.parse(profileData.data.preferences);
+          setCommunicationStyle(prefs?.communicationStyle || "");
+          setWorkLifeBoundaries(prefs?.workLifeBoundaries || "");
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
     }
   }, [profileData.data]);
 
@@ -57,18 +72,26 @@ export function ProfilePage() {
     setSaving(true);
     try {
       const birthdayTimestamp = birthday ? parseLocalYMD(birthday) : null;
-      
+
       const interpretationFramework = JSON.stringify({
         mbti,
         enneagram,
         astrologySign
       });
 
+      const preferences = JSON.stringify({
+        communicationStyle,
+        workLifeBoundaries
+      });
+
       const updated = await updateProfile({
         name,
         gender: gender || null,
         birthdayTimestamp,
-        interpretationFramework
+        interpretationFramework,
+        preferences,
+        agentSoul: agentSoul || null,
+        coreMemory: coreMemory || null
       });
       toast.success("Profile updated successfully");
       profileData.setData(updated);
@@ -147,6 +170,66 @@ export function ProfilePage() {
               />
             </Field>
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Base Preferences</CardTitle>
+          <CardDescription>
+            Your fundamental preferences for communication and boundaries.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Communication Style (沟通风格)">
+              <Input
+                value={communicationStyle}
+                onChange={(e) => setCommunicationStyle(e.target.value)}
+                placeholder="e.g. Direct and concise, Empathetic"
+              />
+            </Field>
+            <Field label="Work/Life Boundaries (工作生活边界)">
+              <Input
+                value={workLifeBoundaries}
+                onChange={(e) => setWorkLifeBoundaries(e.target.value)}
+                placeholder="e.g. No work topics on weekends"
+              />
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent SOUL</CardTitle>
+          <CardDescription>
+            High-priority behavior contract for the agent (in Markdown format).
+            This information is always injected into the LLM context.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={agentSoul}
+            onChange={(e) => setAgentSoul(e.target.value)}
+            placeholder="Write Agent SOUL in markdown..."
+            className="font-mono min-h-[300px]"
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Core Memory</CardTitle>
+          <CardDescription>
+            High-priority core memory (in Markdown format).
+            This information is always injected into the LLM context.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={coreMemory}
+            onChange={(e) => setCoreMemory(e.target.value)}
+            placeholder="Write core memory in markdown..."
+            className="font-mono min-h-[300px]"
+          />
         </CardContent>
       </Card>
       <div className="flex justify-end">

@@ -16,6 +16,7 @@ describe("admin profile", () => {
     const preferences = JSON.stringify({
       soul: ""
     });
+    const agentSoul = "# Agent SOUL\n保持中正、清明、温和。";
 
     const response = await app.request(
       "/api/admin/profile",
@@ -30,7 +31,8 @@ describe("admin profile", () => {
           gender: "male",
           birthdayTimestamp: 602611200000,
           interpretationFramework,
-          preferences
+          preferences,
+          agentSoul
         })
       },
       env
@@ -43,12 +45,14 @@ describe("admin profile", () => {
       gender: "male",
       birthdayTimestamp: 602611200000,
       interpretationFramework,
-      preferences
+      preferences,
+      agentSoul
     });
     expect(repositories.userProfiles).toHaveLength(1);
     expect(repositories.userProfiles[0]).toMatchObject({
       interpretationFramework,
-      preferences
+      preferences,
+      agentSoul
     });
   });
 });

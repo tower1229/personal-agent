@@ -2,6 +2,8 @@
 
 This file contains development conventions and rules for AI agents working on this project. Agents MUST review these rules before making code modifications to avoid recurring issues.
 
+AI IDEs and coding agents MUST also review and follow `docs/development-standards.md` before changing code, tests, migrations, configuration, or product docs. That document is part of this AGENTS.md instruction set, and its anti-pattern list is mandatory.
+
 ## 0. Product Implementation Principle
 
 When designing or implementing product capabilities, do not weaken the target solution, split the work into a reduced "first version", or trade away correctness and user goals for implementation cost unless the user explicitly asks for phased delivery or cost reduction.

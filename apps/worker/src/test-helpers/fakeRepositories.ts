@@ -1,13 +1,10 @@
 import { buildSessionCookie, signSession } from "../auth.js";
 import { createWorkerApp } from "../app.js";
-import {
-  type SearchClient,
-  type UrlFetcher
-} from "../externalTools.js";
+import { type SearchClient, type UrlFetcher } from "../externalTools.js";
 import {
   type LlmChatCompletionOutput,
   type LlmClient,
-  type LlmMessage
+  type LlmMessage,
 } from "../llm.js";
 import {
   type AgentRepositories,
@@ -38,7 +35,7 @@ import {
   type ToolCallRecord,
   type UserProfileRecord,
   type RunFeedbackRecord,
-  type RunEvaluationRecord
+  type RunEvaluationRecord,
 } from "../repositories.js";
 import { type TelegramClient } from "../telegram.js";
 import { type WorkerEnv } from "../types.js";
@@ -57,7 +54,7 @@ export const env: WorkerEnv = {
   LLM_MODEL: "test-model",
   LLM_MAX_TOOL_ROUNDS: "3",
   BRAVE_SEARCH_API_KEY: "brave-key",
-  FETCH_URL_MAX_BYTES: "200000"
+  FETCH_URL_MAX_BYTES: "200000",
 };
 
 export function ownerUpdate(text: string, updateId = 1) {
@@ -67,13 +64,13 @@ export function ownerUpdate(text: string, updateId = 1) {
       message_id: updateId,
       from: {
         id: 1229,
-        first_name: "Shixiong"
+        first_name: "Shixiong",
       },
       chat: {
-        id: 1229
+        id: 1229,
       },
-      text
-    }
+      text,
+    },
   };
 }
 
@@ -95,10 +92,10 @@ export function skillPackageFiles(input: {
       allowedTools ? "allowed-tools:" : "",
       allowedTools,
       "---",
-      input.instructions ?? "用简洁中文回应。"
+      input.instructions ?? "用简洁中文回应。",
     ]
       .filter((line) => line !== "")
-      .join("\n")
+      .join("\n"),
   };
 }
 
@@ -149,7 +146,8 @@ export function createFakeRepositories(): AgentRepositories & {
     skillVersions: [] as SkillVersionRecord[],
     skillRouteDecisions: [] as SkillRouteDecisionRecord[],
     plannerRouteDecisions: [] as PlannerRouteDecisionRecord[],
-    pendingPlannerRouteClarifications: [] as PendingPlannerRouteClarificationRecord[],
+    pendingPlannerRouteClarifications:
+      [] as PendingPlannerRouteClarificationRecord[],
     skillRuns: [] as SkillRunRecord[],
     longTasks: [] as LongTaskRecord[],
     longTaskSteps: [] as LongTaskStepRecord[],
@@ -161,7 +159,7 @@ export function createFakeRepositories(): AgentRepositories & {
     runEvaluations: [] as RunEvaluationRecord[],
     adminAssistRuns: [] as AdminAssistRunRecord[],
     nextTodoId: 1,
-    nextMemoryId: 1
+    nextMemoryId: 1,
   };
 
   return {
@@ -246,11 +244,17 @@ export function createFakeRepositories(): AgentRepositories & {
     get adminAssistRuns() {
       return state.adminAssistRuns;
     },
-    async createChatSession() { return {} as any; },
-    async getActiveChatSession() { return null; },
+    async createChatSession() {
+      return {} as any;
+    },
+    async getActiveChatSession() {
+      return null;
+    },
     async closeActiveChatSession() {},
     async updateChatSession() {},
-    async listRunsForSession() { return []; },
+    async listRunsForSession() {
+      return [];
+    },
     async createRun(input) {
       const run: RunRecord = {
         ...input,
@@ -258,7 +262,7 @@ export function createFakeRepositories(): AgentRepositories & {
         status: "running",
         responseText: null,
         error: null,
-        contextTraceJson: null
+        contextTraceJson: null,
       };
       state.runs.push(run);
       return run;
@@ -269,7 +273,10 @@ export function createFakeRepositories(): AgentRepositories & {
         return;
       }
       run.status = patch.status ?? run.status;
-      run.responseText = patch.responseText !== undefined ? patch.responseText : run.responseText;
+      run.responseText =
+        patch.responseText !== undefined
+          ? patch.responseText
+          : run.responseText;
       run.error = patch.error !== undefined ? patch.error : run.error;
       if (patch.contextTraceJson !== undefined) {
         run.contextTraceJson = patch.contextTraceJson;
@@ -286,7 +293,8 @@ export function createFakeRepositories(): AgentRepositories & {
     async getRun(input) {
       return (
         state.runs.find(
-          (run) => run.ownerTgUserId === input.ownerTgUserId && run.id === input.id
+          (run) =>
+            run.ownerTgUserId === input.ownerTgUserId && run.id === input.id,
         ) ?? null
       );
     },
@@ -298,7 +306,7 @@ export function createFakeRepositories(): AgentRepositories & {
         .filter(
           (toolCall) =>
             toolCall.ownerTgUserId === input.ownerTgUserId &&
-            toolCall.runId === input.runId
+            toolCall.runId === input.runId,
         )
         .slice()
         .sort((left, right) => left.createdAt - right.createdAt);
@@ -329,7 +337,8 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     async updateAdminAssistRun(input) {
       const run = state.adminAssistRuns.find(
-        (item) => item.id === input.id && item.ownerTgUserId === input.ownerTgUserId
+        (item) =>
+          item.id === input.id && item.ownerTgUserId === input.ownerTgUserId,
       );
       if (!run) {
         return;
@@ -348,7 +357,8 @@ export function createFakeRepositories(): AgentRepositories & {
     async getAdminAssistRun(input) {
       return (
         state.adminAssistRuns.find(
-          (run) => run.id === input.id && run.ownerTgUserId === input.ownerTgUserId
+          (run) =>
+            run.id === input.id && run.ownerTgUserId === input.ownerTgUserId,
         ) ?? null
       );
     },
@@ -361,7 +371,7 @@ export function createFakeRepositories(): AgentRepositories & {
         createdAt: input.createdAt,
         completedAt: null,
         dueAt: input.dueAt ?? null,
-        remindedAt: null
+        remindedAt: null,
       };
       state.nextTodoId += 1;
       state.todos.push(todo);
@@ -370,7 +380,8 @@ export function createFakeRepositories(): AgentRepositories & {
     async listOpenTodos(ownerTgUserId, limit) {
       return state.todos
         .filter(
-          (todo) => todo.ownerTgUserId === ownerTgUserId && todo.status === "open"
+          (todo) =>
+            todo.ownerTgUserId === ownerTgUserId && todo.status === "open",
         )
         .slice(0, limit);
     },
@@ -381,9 +392,11 @@ export function createFakeRepositories(): AgentRepositories & {
             todo.status === "open" &&
             todo.remindedAt === null &&
             todo.dueAt !== null &&
-            todo.dueAt <= now + advanceThreshold
+            todo.dueAt <= now + advanceThreshold,
         )
-        .sort((left, right) => (left.dueAt as number) - (right.dueAt as number));
+        .sort(
+          (left, right) => (left.dueAt as number) - (right.dueAt as number),
+        );
     },
     async markTodoReminded(id, remindedAt) {
       const todo = state.todos.find((t) => t.id === id);
@@ -403,7 +416,7 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.status === "open"
+          item.status === "open",
       );
       if (!todo) {
         return null;
@@ -415,8 +428,7 @@ export function createFakeRepositories(): AgentRepositories & {
     async updateTodo(input) {
       const todo = state.todos.find(
         (item) =>
-          item.ownerTgUserId === input.ownerTgUserId &&
-          item.id === input.id
+          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id,
       );
       if (!todo) {
         return null;
@@ -450,8 +462,7 @@ export function createFakeRepositories(): AgentRepositories & {
     async deleteTodo(input) {
       const idx = state.todos.findIndex(
         (item) =>
-          item.ownerTgUserId === input.ownerTgUserId &&
-          item.id === input.id
+          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id,
       );
       if (idx === -1) {
         return false;
@@ -467,7 +478,7 @@ export function createFakeRepositories(): AgentRepositories & {
         normalizedContent: input.normalizedContent,
         status: "active",
         createdAt: input.createdAt,
-        deletedAt: null
+        deletedAt: null,
       };
       state.nextMemoryId += 1;
       state.memories.push(memory);
@@ -479,7 +490,7 @@ export function createFakeRepositories(): AgentRepositories & {
           (memory) =>
             memory.ownerTgUserId === input.ownerTgUserId &&
             memory.status === "active" &&
-            memory.normalizedContent.includes(input.keyword)
+            memory.normalizedContent.includes(input.keyword),
         )
         .slice(0, input.limit);
     },
@@ -489,7 +500,7 @@ export function createFakeRepositories(): AgentRepositories & {
           (memory) =>
             memory.ownerTgUserId === input.ownerTgUserId &&
             memory.id === input.id &&
-            memory.status === "active"
+            memory.status === "active",
         ) ?? null
       );
     },
@@ -502,7 +513,7 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     async updateMemory(input) {
       const memory = state.memories.find(
-        (m) => m.id === input.id && m.ownerTgUserId === input.ownerTgUserId
+        (m) => m.id === input.id && m.ownerTgUserId === input.ownerTgUserId,
       );
       if (!memory) return null;
       memory.content = input.content;
@@ -512,8 +523,7 @@ export function createFakeRepositories(): AgentRepositories & {
     async deleteMemory(input) {
       const idx = state.memories.findIndex(
         (item) =>
-          item.ownerTgUserId === input.ownerTgUserId &&
-          item.id === input.id
+          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id,
       );
       if (idx === -1) {
         return false;
@@ -534,7 +544,7 @@ export function createFakeRepositories(): AgentRepositories & {
           (approval) =>
             approval.ownerTgUserId === input.ownerTgUserId &&
             approval.code === input.code &&
-            approval.status === "pending"
+            approval.status === "pending",
         ) ?? null
       );
     },
@@ -561,7 +571,7 @@ export function createFakeRepositories(): AgentRepositories & {
     async updatePersonalModelClaim(input) {
       const claim = state.personalModelClaims.find(
         (item) =>
-          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id,
       );
       if (!claim) {
         return null;
@@ -579,7 +589,7 @@ export function createFakeRepositories(): AgentRepositories & {
         state.personalModelClaims.find(
           (claim) =>
             claim.ownerTgUserId === input.ownerTgUserId &&
-            claim.id === input.id
+            claim.id === input.id,
         ) ?? null
       );
     },
@@ -589,7 +599,7 @@ export function createFakeRepositories(): AgentRepositories & {
           (claim) =>
             claim.ownerTgUserId === input.ownerTgUserId &&
             (!input.status || claim.status === input.status) &&
-            (!input.scenario || claim.scenario === input.scenario)
+            (!input.scenario || claim.scenario === input.scenario),
         )
         .slice()
         .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -603,7 +613,7 @@ export function createFakeRepositories(): AgentRepositories & {
             claim.status === "active" &&
             claim.usagePolicy !== "do_not_use" &&
             (claim.validFrom === null || claim.validFrom <= input.now) &&
-            (claim.validUntil === null || claim.validUntil > input.now)
+            (claim.validUntil === null || claim.validUntil > input.now),
         )
         .slice()
         .sort((left, right) => {
@@ -623,7 +633,7 @@ export function createFakeRepositories(): AgentRepositories & {
         .filter(
           (event) =>
             event.ownerTgUserId === input.ownerTgUserId &&
-            event.claimId === input.claimId
+            event.claimId === input.claimId,
         )
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
@@ -637,7 +647,7 @@ export function createFakeRepositories(): AgentRepositories & {
     async updatePersonalModelSourceDocument(input) {
       const source = state.personalModelSourceDocuments.find(
         (item) =>
-          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id
+          item.ownerTgUserId === input.ownerTgUserId && item.id === input.id,
       );
       if (!source) {
         return null;
@@ -650,16 +660,18 @@ export function createFakeRepositories(): AgentRepositories & {
       return source;
     },
     async deletePersonalModelSourceDocument(input) {
-      state.personalModelSourceDocuments = state.personalModelSourceDocuments.filter(
-        (doc) => !(doc.id === input.id && doc.ownerTgUserId === input.ownerTgUserId)
-      );
+      state.personalModelSourceDocuments =
+        state.personalModelSourceDocuments.filter(
+          (doc) =>
+            !(doc.id === input.id && doc.ownerTgUserId === input.ownerTgUserId),
+        );
     },
     async getPersonalModelSourceDocument(input) {
       return (
         state.personalModelSourceDocuments.find(
           (source) =>
             source.ownerTgUserId === input.ownerTgUserId &&
-            source.id === input.id
+            source.id === input.id,
         ) ?? null
       );
     },
@@ -669,7 +681,7 @@ export function createFakeRepositories(): AgentRepositories & {
           (source) =>
             source.ownerTgUserId === input.ownerTgUserId &&
             (!input.sourceType || source.sourceType === input.sourceType) &&
-            (!input.status || source.status === input.status)
+            (!input.status || source.status === input.status),
         )
         .slice()
         .sort((left, right) => right.ingestedAt - left.ingestedAt)
@@ -685,22 +697,31 @@ export function createFakeRepositories(): AgentRepositories & {
         state.personalModelSourceChunks.find(
           (chunk) =>
             chunk.ownerTgUserId === input.ownerTgUserId &&
-            chunk.id === input.id
+            chunk.id === input.id,
         ) ?? null
       );
     },
     async updatePersonalModelSourceChunk(input) {
       const chunkIndex = state.personalModelSourceChunks.findIndex(
-        (c) => c.ownerTgUserId === input.ownerTgUserId && c.id === input.id
+        (c) => c.ownerTgUserId === input.ownerTgUserId && c.id === input.id,
       );
       if (chunkIndex === -1) return null;
 
       const chunk = state.personalModelSourceChunks[chunkIndex];
       const updatedChunk = {
         ...chunk,
-        vectorId: input.patch.vectorId !== undefined ? input.patch.vectorId : chunk.vectorId,
-        indexedAt: input.patch.indexedAt !== undefined ? input.patch.indexedAt : chunk.indexedAt,
-        indexStatus: input.patch.indexStatus !== undefined ? input.patch.indexStatus : chunk.indexStatus,
+        vectorId:
+          input.patch.vectorId !== undefined
+            ? input.patch.vectorId
+            : chunk.vectorId,
+        indexedAt:
+          input.patch.indexedAt !== undefined
+            ? input.patch.indexedAt
+            : chunk.indexedAt,
+        indexStatus:
+          input.patch.indexStatus !== undefined
+            ? input.patch.indexStatus
+            : chunk.indexStatus,
       };
 
       state.personalModelSourceChunks[chunkIndex] = updatedChunk;
@@ -711,7 +732,7 @@ export function createFakeRepositories(): AgentRepositories & {
         .filter(
           (chunk) =>
             chunk.ownerTgUserId === input.ownerTgUserId &&
-            chunk.documentId === input.documentId
+            chunk.documentId === input.documentId,
         )
         .slice()
         .sort((left, right) => left.chunkIndex - right.chunkIndex)
@@ -721,8 +742,11 @@ export function createFakeRepositories(): AgentRepositories & {
       return state.personalModelSourceChunks
         .filter((chunk) => {
           if (chunk.ownerTgUserId !== input.ownerTgUserId) return false;
-          if (!chunk.normalizedContent.includes(input.keyword.toLowerCase())) return false;
-          const doc = state.personalModelSourceDocuments.find(d => d.id === chunk.documentId);
+          if (!chunk.normalizedContent.includes(input.keyword.toLowerCase()))
+            return false;
+          const doc = state.personalModelSourceDocuments.find(
+            (d) => d.id === chunk.documentId,
+          );
           if (!doc) return false;
           if (doc.status !== "active") return false;
           if (doc.usagePolicy === "do_not_use") return false;
@@ -734,17 +758,17 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     async getPersonalModelSourceChunksByIds(input) {
       const idSet = new Set(input.ids);
-      return state.personalModelSourceChunks.filter(
-        (chunk) => {
-          if (chunk.ownerTgUserId !== input.ownerTgUserId) return false;
-          if (!idSet.has(chunk.id)) return false;
-          const doc = state.personalModelSourceDocuments.find(d => d.id === chunk.documentId);
-          if (!doc) return false;
-          if (doc.status !== "active") return false;
-          if (doc.usagePolicy === "do_not_use") return false;
-          return true;
-        }
-      );
+      return state.personalModelSourceChunks.filter((chunk) => {
+        if (chunk.ownerTgUserId !== input.ownerTgUserId) return false;
+        if (!idSet.has(chunk.id)) return false;
+        const doc = state.personalModelSourceDocuments.find(
+          (d) => d.id === chunk.documentId,
+        );
+        if (!doc) return false;
+        if (doc.status !== "active") return false;
+        if (doc.usagePolicy === "do_not_use") return false;
+        return true;
+      });
     },
     async createPersonalModelEvidence(input) {
       const evidence: PersonalModelEvidenceRecord = { ...input };
@@ -756,7 +780,7 @@ export function createFakeRepositories(): AgentRepositories & {
         .filter(
           (evidence) =>
             evidence.ownerTgUserId === input.ownerTgUserId &&
-            evidence.claimId === input.claimId
+            evidence.claimId === input.claimId,
         )
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
@@ -776,12 +800,18 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     async listPersonalModelUnderstandingGaps(input) {
       return state.personalModelUnderstandingGaps
-        .filter((g) => g.ownerTgUserId === input.ownerTgUserId && (!input.status || g.status === input.status))
+        .filter(
+          (g) =>
+            g.ownerTgUserId === input.ownerTgUserId &&
+            (!input.status || g.status === input.status),
+        )
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(input.offset, input.offset + input.limit);
     },
     async updatePersonalModelUnderstandingGapStatus(input) {
-      const gap = state.personalModelUnderstandingGaps.find(g => g.id === input.gapId && g.ownerTgUserId === input.ownerTgUserId);
+      const gap = state.personalModelUnderstandingGaps.find(
+        (g) => g.id === input.gapId && g.ownerTgUserId === input.ownerTgUserId,
+      );
       if (gap) {
         gap.status = input.status;
         gap.updatedAt = input.updatedAt;
@@ -789,19 +819,17 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     async createSkill(input) {
       const baseParsed = parseSkillPackageFiles(input.files);
-      const parsed = state.skills.some(
-        (skill) => {
-          const publishedVersion = state.skillVersions.find(
-            (version) => version.id === skill.publishedVersionId
-          );
-          return (
-            skill.ownerTgUserId === input.ownerTgUserId &&
-            skill.deletedAt === null &&
-            (skill.name === baseParsed.metadata.name ||
-              publishedVersion?.name === baseParsed.metadata.name)
-          );
-        }
-      )
+      const parsed = state.skills.some((skill) => {
+        const publishedVersion = state.skillVersions.find(
+          (version) => version.id === skill.publishedVersionId,
+        );
+        return (
+          skill.ownerTgUserId === input.ownerTgUserId &&
+          skill.deletedAt === null &&
+          (skill.name === baseParsed.metadata.name ||
+            publishedVersion?.name === baseParsed.metadata.name)
+        );
+      })
         ? markSkillPackageNameConflict(baseParsed)
         : baseParsed;
       const skill: SkillRecord = {
@@ -820,7 +848,7 @@ export function createFakeRepositories(): AgentRepositories & {
         publishedVersionId: null,
         publishedVersion: null,
         createdAt: input.createdAt,
-        updatedAt: input.createdAt
+        updatedAt: input.createdAt,
       };
       state.skills.push(skill);
       return skill;
@@ -830,26 +858,24 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.deletedAt === null
+          item.deletedAt === null,
       );
       if (!skill) {
         return null;
       }
       const baseParsed = parseSkillPackageFiles(input.files);
-      const parsed = state.skills.some(
-        (item) => {
-          const publishedVersion = state.skillVersions.find(
-            (version) => version.id === item.publishedVersionId
-          );
-          return (
-            item.ownerTgUserId === input.ownerTgUserId &&
-            item.id !== input.id &&
-            item.deletedAt === null &&
-            (item.name === baseParsed.metadata.name ||
-              publishedVersion?.name === baseParsed.metadata.name)
-          );
-        }
-      )
+      const parsed = state.skills.some((item) => {
+        const publishedVersion = state.skillVersions.find(
+          (version) => version.id === item.publishedVersionId,
+        );
+        return (
+          item.ownerTgUserId === input.ownerTgUserId &&
+          item.id !== input.id &&
+          item.deletedAt === null &&
+          (item.name === baseParsed.metadata.name ||
+            publishedVersion?.name === baseParsed.metadata.name)
+        );
+      })
         ? markSkillPackageNameConflict(baseParsed)
         : baseParsed;
       skill.name = parsed.metadata.name;
@@ -868,8 +894,7 @@ export function createFakeRepositories(): AgentRepositories & {
       return state.skills
         .filter(
           (skill) =>
-            skill.ownerTgUserId === ownerTgUserId &&
-            skill.deletedAt === null
+            skill.ownerTgUserId === ownerTgUserId && skill.deletedAt === null,
         )
         .slice()
         .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -879,7 +904,8 @@ export function createFakeRepositories(): AgentRepositories & {
       return (
         state.skills.find(
           (skill) =>
-            skill.ownerTgUserId === input.ownerTgUserId && skill.id === input.id
+            skill.ownerTgUserId === input.ownerTgUserId &&
+            skill.id === input.id,
         ) ?? null
       );
     },
@@ -888,7 +914,7 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.deletedAt === null
+          item.deletedAt === null,
       );
       if (!skill) {
         return null;
@@ -902,7 +928,7 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.deletedAt === null
+          item.deletedAt === null,
       );
       if (!skill) {
         return (
@@ -910,7 +936,7 @@ export function createFakeRepositories(): AgentRepositories & {
             (item) =>
               item.ownerTgUserId === input.ownerTgUserId &&
               item.id === input.id &&
-              item.deletedAt !== null
+              item.deletedAt !== null,
           ) ?? null
         );
       }
@@ -924,7 +950,7 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.deletedAt === null
+          item.deletedAt === null,
       );
       if (!skill) {
         return null;
@@ -946,7 +972,7 @@ export function createFakeRepositories(): AgentRepositories & {
         fileInventory: skill.draftFileInventory,
         validation: skill.draftValidation,
         contentHash: skill.draftContentHash,
-        createdAt: input.createdAt
+        createdAt: input.createdAt,
       };
       state.skillVersions.push(version);
       skill.publishedVersionId = version.id;
@@ -964,11 +990,13 @@ export function createFakeRepositories(): AgentRepositories & {
           state.skillVersions.find(
             (version) =>
               version.id === item.publishedVersionId &&
-              version.name === input.name
-          )
+              version.name === input.name,
+          ),
       );
       const version = skill
-        ? state.skillVersions.find((item) => item.id === skill.publishedVersionId)
+        ? state.skillVersions.find(
+            (item) => item.id === skill.publishedVersionId,
+          )
         : null;
 
       return skill && version ? { skill, version } : null;
@@ -980,11 +1008,11 @@ export function createFakeRepositories(): AgentRepositories & {
             skill.ownerTgUserId === ownerTgUserId &&
             skill.enabled &&
             skill.deletedAt === null &&
-            skill.publishedVersionId
+            skill.publishedVersionId,
         )
         .flatMap((skill) => {
           const version = state.skillVersions.find(
-            (item) => item.id === skill.publishedVersionId
+            (item) => item.id === skill.publishedVersionId,
           );
           return version ? [{ skill, version }] : [];
         });
@@ -1006,7 +1034,7 @@ export function createFakeRepositories(): AgentRepositories & {
           .filter(
             (decision) =>
               decision.ownerTgUserId === input.ownerTgUserId &&
-              decision.runId === input.runId
+              decision.runId === input.runId,
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
@@ -1021,7 +1049,7 @@ export function createFakeRepositories(): AgentRepositories & {
           .filter(
             (decision) =>
               decision.ownerTgUserId === input.ownerTgUserId &&
-              decision.runId === input.runId
+              decision.runId === input.runId,
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
@@ -1036,14 +1064,14 @@ export function createFakeRepositories(): AgentRepositories & {
           .filter(
             (clarification) =>
               clarification.ownerTgUserId === ownerTgUserId &&
-              clarification.expiresAt > now
+              clarification.expiresAt > now,
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
     },
     async deletePendingPlannerRouteClarification(id) {
       const index = state.pendingPlannerRouteClarifications.findIndex(
-        (clarification) => clarification.id === id
+        (clarification) => clarification.id === id,
       );
       if (index >= 0) {
         state.pendingPlannerRouteClarifications.splice(index, 1);
@@ -1074,7 +1102,9 @@ export function createFakeRepositories(): AgentRepositories & {
       return state.skillIntents;
     },
     async deleteSkillIntent(input) {
-      state.skillIntents = state.skillIntents.filter((item) => item.id !== input.id);
+      state.skillIntents = state.skillIntents.filter(
+        (item) => item.id !== input.id,
+      );
     },
     async listSkillRuns(ownerTgUserId, limit) {
       return state.skillRuns
@@ -1089,7 +1119,7 @@ export function createFakeRepositories(): AgentRepositories & {
           .filter(
             (skillRun) =>
               skillRun.ownerTgUserId === input.ownerTgUserId &&
-              skillRun.runId === input.runId
+              skillRun.runId === input.runId,
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
@@ -1107,20 +1137,28 @@ export function createFakeRepositories(): AgentRepositories & {
       task.title = input.title ?? task.title;
       task.plannerReason = input.plannerReason ?? task.plannerReason;
       task.currentStepId =
-        input.currentStepId === undefined ? task.currentStepId : input.currentStepId;
+        input.currentStepId === undefined
+          ? task.currentStepId
+          : input.currentStepId;
       task.outputText =
         input.outputText === undefined ? task.outputText : input.outputText;
       task.error = input.error === undefined ? task.error : input.error;
       task.replanCount = input.replanCount ?? task.replanCount;
-      task.telegramChatId = input.telegramChatId === undefined ? task.telegramChatId : input.telegramChatId;
-      task.telegramMessageId = input.telegramMessageId === undefined ? task.telegramMessageId : input.telegramMessageId;
+      task.telegramChatId =
+        input.telegramChatId === undefined
+          ? task.telegramChatId
+          : input.telegramChatId;
+      task.telegramMessageId =
+        input.telegramMessageId === undefined
+          ? task.telegramMessageId
+          : input.telegramMessageId;
       task.updatedAt = input.updatedAt;
     },
     async getLongTask(input) {
       return (
         state.longTasks.find(
           (task) =>
-            task.ownerTgUserId === input.ownerTgUserId && task.id === input.id
+            task.ownerTgUserId === input.ownerTgUserId && task.id === input.id,
         ) ?? null
       );
     },
@@ -1131,18 +1169,22 @@ export function createFakeRepositories(): AgentRepositories & {
             (task) =>
               task.ownerTgUserId === ownerTgUserId &&
               ["planning", "running", "waiting_for_user", "paused"].includes(
-                task.status
-              )
+                task.status,
+              ),
           )
           .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null
       );
     },
     async deleteLongTask(input) {
       state.longTasks = state.longTasks.filter(
-        (t) => !(t.ownerTgUserId === input.ownerTgUserId && t.id === input.id)
+        (t) => !(t.ownerTgUserId === input.ownerTgUserId && t.id === input.id),
       );
-      state.longTaskSteps = state.longTaskSteps.filter((s) => s.longTaskId !== input.id);
-      state.longTaskEvents = state.longTaskEvents.filter((e) => e.longTaskId !== input.id);
+      state.longTaskSteps = state.longTaskSteps.filter(
+        (s) => s.longTaskId !== input.id,
+      );
+      state.longTaskEvents = state.longTaskEvents.filter(
+        (e) => e.longTaskId !== input.id,
+      );
     },
     async getLongTaskForRun(input) {
       return (
@@ -1150,7 +1192,7 @@ export function createFakeRepositories(): AgentRepositories & {
           .filter(
             (task) =>
               task.ownerTgUserId === input.ownerTgUserId &&
-              task.runId === input.runId
+              task.runId === input.runId,
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
@@ -1165,7 +1207,7 @@ export function createFakeRepositories(): AgentRepositories & {
     async listResumableLongTasks(now, limit) {
       return state.longTasks
         .filter(
-          (task) => task.status === "running" && task.updatedAt <= now - 30000
+          (task) => task.status === "running" && task.updatedAt <= now - 30000,
         )
         .slice()
         .sort((left, right) => left.updatedAt - right.updatedAt)
@@ -1193,7 +1235,7 @@ export function createFakeRepositories(): AgentRepositories & {
       const step = state.longTaskSteps
         .filter(
           (item) =>
-            item.longTaskId === input.longTaskId && item.status === "pending"
+            item.longTaskId === input.longTaskId && item.status === "pending",
         )
         .sort((left, right) => left.position - right.position)[0];
       if (!step) {
@@ -1228,7 +1270,7 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.deletedAt === null
+          item.deletedAt === null,
       );
       if (!schedule) {
         return null;
@@ -1242,7 +1284,7 @@ export function createFakeRepositories(): AgentRepositories & {
         timeOfDay: input.timeOfDay,
         daysOfWeek: input.daysOfWeek,
         nextRunAt: input.nextRunAt,
-        updatedAt: input.updatedAt
+        updatedAt: input.updatedAt,
       });
       return schedule;
     },
@@ -1251,7 +1293,7 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.deletedAt === null
+          item.deletedAt === null,
       );
       if (!schedule) {
         return null;
@@ -1266,7 +1308,7 @@ export function createFakeRepositories(): AgentRepositories & {
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
           item.id === input.id &&
-          item.deletedAt === null
+          item.deletedAt === null,
       );
       if (!schedule) {
         return (
@@ -1274,7 +1316,7 @@ export function createFakeRepositories(): AgentRepositories & {
             (item) =>
               item.ownerTgUserId === input.ownerTgUserId &&
               item.id === input.id &&
-              item.deletedAt !== null
+              item.deletedAt !== null,
           ) ?? null
         );
       }
@@ -1289,7 +1331,7 @@ export function createFakeRepositories(): AgentRepositories & {
           (item) =>
             item.ownerTgUserId === input.ownerTgUserId &&
             item.id === input.id &&
-            item.deletedAt === null
+            item.deletedAt === null,
         ) ?? null
       );
     },
@@ -1298,7 +1340,7 @@ export function createFakeRepositories(): AgentRepositories & {
         .filter(
           (schedule) =>
             schedule.ownerTgUserId === ownerTgUserId &&
-            schedule.deletedAt === null
+            schedule.deletedAt === null,
         )
         .slice()
         .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -1310,7 +1352,7 @@ export function createFakeRepositories(): AgentRepositories & {
           (schedule) =>
             schedule.enabled &&
             schedule.deletedAt === null &&
-            schedule.nextRunAt <= now
+            schedule.nextRunAt <= now,
         )
         .slice()
         .sort((left, right) => left.nextRunAt - right.nextRunAt)
@@ -1320,7 +1362,7 @@ export function createFakeRepositories(): AgentRepositories & {
       const existing = state.scheduleExecutions.find(
         (item) =>
           item.scheduleId === input.scheduleId &&
-          item.scheduledFor === input.scheduledFor
+          item.scheduledFor === input.scheduledFor,
       );
       if (existing) {
         return null;
@@ -1330,7 +1372,7 @@ export function createFakeRepositories(): AgentRepositories & {
     },
     async updateScheduleExecution(input) {
       const execution = state.scheduleExecutions.find(
-        (item) => item.id === input.id
+        (item) => item.id === input.id,
       );
       if (!execution) {
         return;
@@ -1355,7 +1397,7 @@ export function createFakeRepositories(): AgentRepositories & {
         .filter(
           (execution) =>
             execution.ownerTgUserId === input.ownerTgUserId &&
-            (!input.scheduleId || execution.scheduleId === input.scheduleId)
+            (!input.scheduleId || execution.scheduleId === input.scheduleId),
         )
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)
@@ -1367,7 +1409,7 @@ export function createFakeRepositories(): AgentRepositories & {
           .filter(
             (execution) =>
               execution.ownerTgUserId === input.ownerTgUserId &&
-              execution.runId === input.runId
+              execution.runId === input.runId,
           )
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
@@ -1383,13 +1425,17 @@ export function createFakeRepositories(): AgentRepositories & {
         state.userProfiles.push(input);
       }
       return input;
-    }
+    },
   };
 }
 
-export function createFakeTelegramClient(options: { fail?: boolean } = {}):
-  TelegramClient & { messages: Array<{ messageId?: number; chatId: number; text: string }> } {
-  const messages: Array<{ messageId?: number; chatId: number; text: string }> = [];
+export function createFakeTelegramClient(
+  options: { fail?: boolean } = {},
+): TelegramClient & {
+  messages: Array<{ messageId?: number; chatId: number; text: string }>;
+} {
+  const messages: Array<{ messageId?: number; chatId: number; text: string }> =
+    [];
   let nextMessageId = 1;
 
   return {
@@ -1417,7 +1463,7 @@ export function createFakeTelegramClient(options: { fail?: boolean } = {}):
       }
     },
     async sendChatAction() {},
-    async answerCallbackQuery() {}
+    async answerCallbackQuery() {},
   };
 }
 
@@ -1428,9 +1474,8 @@ export function createFakeLlmClient(
     plannerContent?: string;
     executionPlanContent?: string;
     semanticConfidence?: number;
-  } = {}
-):
-  LlmClient & { calls: LlmMessage[][] } {
+  } = {},
+): LlmClient & { calls: LlmMessage[][] } {
   const calls: LlmMessage[][] = [];
 
   return {
@@ -1442,35 +1487,63 @@ export function createFakeLlmClient(
       calls.push(input.messages);
       const latest = input.messages.at(-1);
       const systemText = input.messages[0]?.content ?? "";
-      if (systemText.includes("统一路由调度器")) {
+      if (
+        systemText.includes("skill 路由器") ||
+        systemText.includes("统一路由调度器")
+      ) {
         const payload = JSON.parse(latest?.content ?? "{}") as {
           inputText?: string;
           skills?: Array<{ name: string; description: string }>;
         };
         const text = payload.inputText ?? "";
         const matched = (payload.skills ?? []).find((skill) =>
-          `${text} ${skill.name} ${skill.description}`.includes("规划")
+          `${text} ${skill.name} ${skill.description}`.includes("规划"),
         );
-        const confidence = matched ? options.semanticConfidence ?? 0.88 : 0.2;
+        const confidence = matched ? (options.semanticConfidence ?? 0.88) : 0.2;
+        const skillResult = {
+          matchedSkillName: matched?.name ?? null,
+          confidence,
+          reason: matched ? "fake semantic match" : "fake no match",
+          candidates: matched
+            ? [
+                {
+                  name: matched.name,
+                  confidence,
+                  reason: "fake semantic match",
+                },
+              ]
+            : [],
+        };
+        return {
+          content: JSON.stringify(
+            systemText.includes("统一路由调度器")
+              ? { semanticSkill: skillResult }
+              : skillResult,
+          ),
+          toolCalls: [],
+        };
+      }
+      if (systemText.includes("任务复杂度分类器")) {
+        const text = latest?.content ?? "";
         const isLongTask =
           /调研|研究|比较|对比|报告|规划|计划|方案|分析|多步|整理|搜索.*并/u.test(
-            text
+            text,
           ) || text.length >= 120;
 
         return {
           content: JSON.stringify({
             semanticSkill: {
-              matchedSkillName: matched?.name ?? null,
-              confidence,
-              reason: matched ? "fake semantic match" : "fake no match",
-              candidates: matched
-                ? [{ name: matched.name, confidence, reason: "fake semantic match" }]
-                : []
+              matchedSkillName: null,
+              confidence: 0.2,
+              reason: "fake no match",
+              candidates: [],
             },
             taskComplexity: {
               mode: isLongTask ? "long_task" : "simple",
               score: isLongTask ? 0.8 : 0.2,
-              reason: isLongTask ? "fake complex request" : "fake simple request"
+              reason: isLongTask
+                ? "fake complex request"
+                : "fake simple request",
             },
             plannerRoute: {
               policyVersion: "planner-route-v1",
@@ -1482,21 +1555,32 @@ export function createFakeLlmClient(
               freshnessRisk: "low",
               privacyRisk: "low",
               confirmationRequired: false,
-              searchPolicy: { allowedTopics: [], suggestedQueries: [], forbiddenTerms: [], redactionRequired: false, maxQueries: 0 },
-              fetchPolicy: { explicitAllowedUrls: [], allowSearchResultUrls: false, allowedDomains: [], maxUrls: 0 },
+              searchPolicy: {
+                allowedTopics: [],
+                suggestedQueries: [],
+                forbiddenTerms: [],
+                redactionRequired: false,
+                maxQueries: 0,
+              },
+              fetchPolicy: {
+                explicitAllowedUrls: [],
+                allowSearchResultUrls: false,
+                allowedDomains: [],
+                maxUrls: 0,
+              },
               signals: [],
               classifierUsed: true,
-              question: null
-            }
+              question: null,
+            },
           }),
-          toolCalls: []
+          toolCalls: [],
         };
       }
       if (systemText.includes("执行规划者")) {
         if (options.executionPlanContent !== undefined) {
           return {
             content: options.executionPlanContent,
-            toolCalls: []
+            toolCalls: [],
           };
         }
         const text = latest?.content ?? "";
@@ -1507,16 +1591,16 @@ export function createFakeLlmClient(
                 step: 1,
                 action: "tool",
                 tool: "web_search",
-                reason: "需要搜索公开网页"
+                reason: "需要搜索公开网页",
               },
               {
                 step: 2,
                 action: "tool",
                 tool: "submit_answer",
-                reason: "提交搜索结果"
-              }
+                reason: "提交搜索结果",
+              },
             ]),
-            toolCalls: []
+            toolCalls: [],
           };
         }
         if (/读取|抓取网页/u.test(text)) {
@@ -1526,16 +1610,16 @@ export function createFakeLlmClient(
                 step: 1,
                 action: "tool",
                 tool: "fetch_url",
-                reason: "需要读取指定网页"
+                reason: "需要读取指定网页",
               },
               {
                 step: 2,
                 action: "tool",
                 tool: "submit_answer",
-                reason: "提交网页内容"
-              }
+                reason: "提交网页内容",
+              },
             ]),
-            toolCalls: []
+            toolCalls: [],
           };
         }
         if (text.includes("新增待办")) {
@@ -1545,22 +1629,22 @@ export function createFakeLlmClient(
                 step: 1,
                 action: "tool",
                 tool: "create_todo",
-                reason: "需要写入待办"
-              }
+                reason: "需要写入待办",
+              },
             ]),
-            toolCalls: []
+            toolCalls: [],
           };
         }
         return {
           content: "[]",
-          toolCalls: []
+          toolCalls: [],
         };
       }
       if (systemText.includes("长任务规划器")) {
         if (options.plannerContent !== undefined) {
           return {
             content: options.plannerContent,
-            toolCalls: []
+            toolCalls: [],
           };
         }
         return {
@@ -1571,26 +1655,26 @@ export function createFakeLlmClient(
                 title: "收集信息",
                 description: "搜索网页",
                 toolPolicy: "external_send",
-                successCriteria: "拿到搜索结果"
+                successCriteria: "拿到搜索结果",
               },
               {
                 title: "总结结果",
                 description: "整理结论",
                 toolPolicy: "none",
-                successCriteria: "输出总结"
-              }
+                successCriteria: "输出总结",
+              },
             ],
             userConfirmationRequired: false,
-            confirmationQuestion: null
+            confirmationQuestion: null,
           }),
-          toolCalls: []
+          toolCalls: [],
         };
       }
       if (latest?.role === "tool") {
         if (latest.content?.includes('"blocked":true')) {
           return {
             content: "这个 skill 不允许使用工具 delete_memory_request。",
-            toolCalls: []
+            toolCalls: [],
           };
         }
 
@@ -1598,7 +1682,7 @@ export function createFakeLlmClient(
         if (toolResultContent.includes("疑似指令注入")) {
           return {
             content: toolResultContent,
-            toolCalls: []
+            toolCalls: [],
           };
         }
 
@@ -1624,13 +1708,13 @@ export function createFakeLlmClient(
                           ? "https://example.com/"
                           : "https://developers.cloudflare.com/workers/",
                         title: "Cloudflare Workers",
-                        snippet_used: "Workers docs"
-                      }
-                    ]
-                  })
-                }
-              }
-            ]
+                        snippet_used: "Workers docs",
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
           };
         }
 
@@ -1643,11 +1727,11 @@ export function createFakeLlmClient(
                   type: "function",
                   function: {
                     name: "list_todos",
-                    arguments: "{}"
-                  }
-                }
+                    arguments: "{}",
+                  },
+                },
               ]
-            : []
+            : [],
         };
       }
 
@@ -1662,11 +1746,11 @@ export function createFakeLlmClient(
               function: {
                 name: "create_todo",
                 arguments: JSON.stringify({
-                  title: text.split(/[:：]/u).at(-1)?.trim() ?? text
-                })
-              }
-            }
-          ]
+                  title: text.split(/[:：]/u).at(-1)?.trim() ?? text,
+                }),
+              },
+            },
+          ],
         };
       }
       if (text.includes("删除记忆")) {
@@ -1678,10 +1762,10 @@ export function createFakeLlmClient(
               type: "function",
               function: {
                 name: "delete_memory_request",
-                arguments: JSON.stringify({ id: 1 })
-              }
-            }
-          ]
+                arguments: JSON.stringify({ id: 1 }),
+              },
+            },
+          ],
         };
       }
       if (/搜索网页|联网|查一下|查找|搜索/u.test(text)) {
@@ -1693,14 +1777,15 @@ export function createFakeLlmClient(
               type: "function",
               function: {
                 name: "web_search",
-                arguments: JSON.stringify({ query: "Cloudflare Workers" })
-              }
-            }
-          ]
+                arguments: JSON.stringify({ query: "Cloudflare Workers" }),
+              },
+            },
+          ],
         };
       }
       if (/读取|抓取网页/u.test(text)) {
-        const url = text.match(/\bhttps?:\/\/[^\s]+/u)?.[0] ?? "https://example.com";
+        const url =
+          text.match(/\bhttps?:\/\/[^\s]+/u)?.[0] ?? "https://example.com";
         return {
           content: "",
           toolCalls: [
@@ -1709,23 +1794,24 @@ export function createFakeLlmClient(
               type: "function",
               function: {
                 name: "fetch_url",
-                arguments: JSON.stringify({ url })
-              }
-            }
-          ]
+                arguments: JSON.stringify({ url }),
+              },
+            },
+          ],
         };
       }
 
       return {
         content: `LLM 回复：${text}`,
-        toolCalls: []
+        toolCalls: [],
       };
-    }
+    },
   };
 }
 
-export function createFakeSearchClient(options: { fail?: boolean } = {}):
-  SearchClient & { queries: string[] } {
+export function createFakeSearchClient(
+  options: { fail?: boolean } = {},
+): SearchClient & { queries: string[] } {
   const queries: string[] = [];
 
   return {
@@ -1742,16 +1828,17 @@ export function createFakeSearchClient(options: { fail?: boolean } = {}):
               url: "https://developers.cloudflare.com/workers/",
               description: "Workers docs",
               source: "brave",
-              rank: 1
-            }
+              rank: 1,
+            },
           ]
         : [];
-    }
+    },
   };
 }
 
-export function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boolean; text?: string } = {}):
-  UrlFetcher & { urls: string[] } {
+export function createFakeUrlFetcher(
+  options: { fail?: boolean; tooLarge?: boolean; text?: string } = {},
+): UrlFetcher & { urls: string[] } {
   const urls: string[] = [];
 
   return {
@@ -1766,7 +1853,7 @@ export function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boole
           title: "Example",
           text: (options.text ?? "Example page content").slice(0, 1),
           bytesRead: 1,
-          isTruncated: true
+          isTruncated: true,
         };
       }
       urls.push(input.url);
@@ -1775,9 +1862,9 @@ export function createFakeUrlFetcher(options: { fail?: boolean; tooLarge?: boole
         title: "Example",
         text: options.text ?? "Example page content",
         bytesRead: 20,
-        isTruncated: false
+        isTruncated: false,
       };
-    }
+    },
   };
 }
 
@@ -1792,11 +1879,11 @@ export function createFakeD1Database(tableNames: string[]): D1Database {
           return {
             results: tableNames.map((name) => ({ name })),
             success: true,
-            meta: {}
+            meta: {},
           };
-        }
+        },
       };
-    }
+    },
   } as unknown as D1Database;
 }
 
@@ -1811,23 +1898,23 @@ export function createTestApp(
     fetchText?: string;
     executionPlanContent?: string;
     semanticConfidence?: number;
-  } = {}
+  } = {},
 ) {
   const repositories = createFakeRepositories();
   const telegramClient = createFakeTelegramClient({
-    fail: options.telegramFails
+    fail: options.telegramFails,
   });
   const llmClient = createFakeLlmClient({
     fail: options.llmFails,
     alwaysTool: options.llmAlwaysTool,
     plannerContent: options.plannerContent,
     executionPlanContent: options.executionPlanContent,
-    semanticConfidence: options.semanticConfidence
+    semanticConfidence: options.semanticConfidence,
   });
   const searchClient = createFakeSearchClient({ fail: options.searchFails });
   const urlFetcher = createFakeUrlFetcher({
     fail: options.fetchFails,
-    text: options.fetchText
+    text: options.fetchText,
   });
   let id = 0;
   const app = createWorkerApp({
@@ -1841,7 +1928,7 @@ export function createTestApp(
       id += 1;
       return `id-${id}`;
     },
-    generateApprovalCode: () => "123456"
+    generateApprovalCode: () => "123456",
   });
 
   return {
@@ -1850,22 +1937,25 @@ export function createTestApp(
     telegramClient,
     llmClient,
     searchClient,
-    urlFetcher
+    urlFetcher,
   };
 }
 
-export async function postWebhook(app: ReturnType<typeof createWorkerApp>, body: unknown) {
+export async function postWebhook(
+  app: ReturnType<typeof createWorkerApp>,
+  body: unknown,
+) {
   const res = await app.request(
     "/telegram/webhook",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Telegram-Bot-Api-Secret-Token": "webhook-secret"
+        "X-Telegram-Bot-Api-Secret-Token": "webhook-secret",
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     },
-    env
+    env,
   );
   if (!res.ok) {
     throw new Error(`postWebhook failed: ${res.status} ${await res.text()}`);
@@ -1878,22 +1968,30 @@ export async function ownerCookie() {
     user: {
       id: 1229,
       username: "shixiong",
-      firstName: "Shixiong"
+      firstName: "Shixiong",
     },
-    secret: env.ADMIN_SESSION_SECRET
+    secret: env.ADMIN_SESSION_SECRET,
   });
 
   return buildSessionCookie({ value: session });
 }
 
-export function ownerCallback(data: string, messageId: number = 1, fromId: number = 1229) {
+export function ownerCallback(
+  data: string,
+  messageId: number = 1,
+  fromId: number = 1229,
+) {
   return {
     update_id: 1,
     callback_query: {
       id: "cb_1",
       from: { id: fromId, is_bot: false, first_name: "Test" },
-      message: { message_id: messageId, chat: { id: fromId, type: "private" }, date: 1000 },
-      data
-    }
+      message: {
+        message_id: messageId,
+        chat: { id: fromId, type: "private" },
+        date: 1000,
+      },
+      data,
+    },
   };
 }

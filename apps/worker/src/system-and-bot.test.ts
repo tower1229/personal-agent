@@ -623,7 +623,7 @@ describe("worker system and bot commands", () => {
       claimId: repositories.personalModelClaims[0]?.id,
       eventType: "created"
     });
-    expect(telegramClient.messages[0]?.text).toMatch(/已记录理解 id-\d+。/);
+    expect(telegramClient.messages[0]?.text).toBe("已记录理解 id-3。");
   });
 
   it("records typed personal model claims from Telegram", async () => {
@@ -1127,6 +1127,33 @@ describe("worker system and bot commands", () => {
     expect(systemText).toContain("关系问题中优先判断边界");
     expect(systemText).not.toContain("这条不应该进入上下文");
     expect(systemText).not.toContain("未来才生效的理解");
+  });
+
+  it("injects Agent SOUL from the user profile instead of runtime hardcoding it", async () => {
+    const { app, repositories, llmClient } = createTestApp();
+    await repositories.upsertUserProfile({
+      id: "1229",
+      name: "Owner",
+      birthdayTimestamp: null,
+      gender: null,
+      interpretationFramework: null,
+      preferences: null,
+      agentSoul: "# Agent SOUL\n只使用数据库中的行为契约。",
+      coreMemory: "# Core Memory\n核心记忆也应该注入。",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+
+    await postWebhook(app, ownerUpdate("普通聊天", 1));
+
+    const agentCall = llmClient.calls.find((call) =>
+      call[0]?.content?.includes("你是一个个人 Telegram agent")
+    );
+    const systemText = agentCall?.[0]?.content ?? "";
+    expect(systemText).toContain("[Agent SOUL / 行为契约 (最高优先级)]");
+    expect(systemText).toContain("只使用数据库中的行为契约。");
+    expect(systemText).toContain("核心记忆也应该注入。");
+    expect(systemText).not.toContain("你是用户的高阶自我映射：中正、清明、温和，但必要时观点锋利。");
   });
 
   it("marks the run failed when Telegram sendMessage fails without returning 5xx", async () => {
