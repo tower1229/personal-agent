@@ -42,7 +42,7 @@ export function createD1CoreDataRepositories(
   | "getActiveMemory"
   | "listMemories"
   | "updateMemory"
-  | "markMemoryDeleted"
+  | "deleteMemory"
   | "recordMemoryEvent"
   | "createApproval"
   | "findPendingApprovalByCode"
@@ -276,18 +276,12 @@ export function createD1CoreDataRepositories(
       return row ? toMemory(row) : null;
     },
 
-    async markMemoryDeleted(input) {
-      const row = await db
-        .prepare(
-          `UPDATE memories
-          SET status = 'deleted', deleted_at = ?
-          WHERE owner_tg_user_id = ? AND id = ? AND status = 'active'
-          RETURNING *`
-        )
-        .bind(input.deletedAt, input.ownerTgUserId, input.id)
-        .first<MemoryRow>();
-
-      return row ? toMemory(row) : null;
+    async deleteMemory(input) {
+      const result = await db
+        .prepare(`DELETE FROM memories WHERE owner_tg_user_id = ? AND id = ?`)
+        .bind(input.ownerTgUserId, input.id)
+        .run();
+      return (result.meta.changes ?? 0) > 0;
     },
 
     async recordMemoryEvent(input) {

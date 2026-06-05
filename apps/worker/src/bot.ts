@@ -666,11 +666,10 @@ export async function executeCommand(
       typeof payload.memoryId === "number" ? payload.memoryId : null;
     const deleted =
       memoryId === null
-        ? null
-        : await repositories.markMemoryDeleted({
+        ? false
+        : await repositories.deleteMemory({
             ownerTgUserId: context.ownerTgUserId,
-            id: memoryId,
-            deletedAt: decidedAt
+            id: memoryId
           });
 
     if (!deleted) {
@@ -689,7 +688,7 @@ export async function executeCommand(
     }
 
     await repositories.recordMemoryEvent({
-      memoryId: deleted.id,
+      memoryId: memoryId!,
       ownerTgUserId: context.ownerTgUserId,
       eventType: "deleted",
       payload: { approvalId: approval.id },
@@ -702,10 +701,10 @@ export async function executeCommand(
     });
 
     return {
-      responseText: `已删除记忆 #${deleted.id}。`,
+      responseText: `已删除记忆 #${memoryId!}。`,
       toolName: "approval_decision",
       riskLevel: "destructive",
-      input: { code, decision, memoryId: deleted.id },
+      input: { code, decision, memoryId: memoryId! },
       output: { status: "executed" }
     };
   }

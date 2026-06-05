@@ -33,7 +33,7 @@ export const memoryEventTypes = [
 ] as const;
 export type MemoryEventType = (typeof memoryEventTypes)[number];
 
-export const memoryStatuses = ["active", "archived", "deleted"] as const;
+export const memoryStatuses = ["active", "archived"] as const;
 export type MemoryStatus = (typeof memoryStatuses)[number];
 
 export const personalModelLayers = [

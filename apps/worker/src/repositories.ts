@@ -503,11 +503,10 @@ export interface AgentRepositories {
     content: string;
     normalizedContent: string;
   }): Promise<MemoryRecord | null>;
-  markMemoryDeleted(input: {
+  deleteMemory(input: {
     ownerTgUserId: number;
     id: number;
-    deletedAt: number;
-  }): Promise<MemoryRecord | null>;
+  }): Promise<boolean>;
   recordMemoryEvent(input: {
     memoryId: number;
     ownerTgUserId: number;

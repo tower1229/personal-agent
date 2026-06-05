@@ -362,10 +362,9 @@ export function registerAdminDataRoutes(
       return c.json({ error: "Invalid id" }, 400);
     }
 
-    const deleted = await repositories(c.env).markMemoryDeleted({
+    const deleted = await repositories(c.env).deleteMemory({
       ownerTgUserId: authenticatedOwnerId,
-      id,
-      deletedAt: (options.now ?? Date.now)()
+      id
     });
 
     if (!deleted) {

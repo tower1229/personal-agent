@@ -275,7 +275,6 @@ export function DataPage() {
                       <SelectGroup>
                         <SelectItem value="all">All</SelectItem>
                         <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="deleted">Deleted</SelectItem>
                         <SelectItem value="archived">Archived</SelectItem>
                       </SelectGroup>
                     </SelectContent>
@@ -315,7 +314,6 @@ export function DataPage() {
                               size="icon-sm"
                               onClick={() => handleOpenEdit(memory)}
                               className="h-8 w-8 cursor-pointer text-muted-foreground hover:text-foreground"
-                              disabled={memory.status === "deleted"}
                             >
                               <EditIcon size={14} />
                               <span className="sr-only">编辑</span>
@@ -325,7 +323,6 @@ export function DataPage() {
                               size="icon-sm"
                               onClick={() => setDeletingMemory(memory)}
                               className="h-8 w-8 cursor-pointer text-red-500 hover:text-red-600 hover:bg-red-500/5"
-                              disabled={memory.status === "deleted"}
                             >
                               <TrashIcon size={14} />
                               <span className="sr-only">删除</span>
@@ -400,7 +397,7 @@ export function DataPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>确定删除该记忆吗？</AlertDialogTitle>
             <AlertDialogDescription>
-              此操作将删除该日志记忆（设为 deleted 状态），且不可逆。
+              此操作将永久删除该日志记忆，且不可逆。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

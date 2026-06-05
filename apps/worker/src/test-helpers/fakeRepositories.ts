@@ -509,19 +509,17 @@ export function createFakeRepositories(): AgentRepositories & {
       memory.normalizedContent = input.normalizedContent;
       return memory;
     },
-    async markMemoryDeleted(input) {
-      const memory = state.memories.find(
+    async deleteMemory(input) {
+      const idx = state.memories.findIndex(
         (item) =>
           item.ownerTgUserId === input.ownerTgUserId &&
-          item.id === input.id &&
-          item.status === "active"
+          item.id === input.id
       );
-      if (!memory) {
-        return null;
+      if (idx === -1) {
+        return false;
       }
-      memory.status = "deleted";
-      memory.deletedAt = input.deletedAt;
-      return memory;
+      state.memories.splice(idx, 1);
+      return true;
     },
     async recordMemoryEvent() {
       return;
