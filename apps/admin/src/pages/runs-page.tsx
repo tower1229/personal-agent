@@ -350,9 +350,7 @@ function RunTrace(props: { detail: AdminRunDetailResponse }) {
         <TraceSection title="Skill Run">
           <CodeBlock value={detail.skillRun ?? "No skill run"} />
         </TraceSection>
-        <TraceSection title="Long Task">
-          <CodeBlock value={detail.longTask ?? "No long task"} />
-        </TraceSection>
+
         <TraceSection title="Schedule">
           <CodeBlock value={detail.scheduleExecution ?? "No schedule execution"} />
         </TraceSection>

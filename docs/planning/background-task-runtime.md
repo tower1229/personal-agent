@@ -12,6 +12,7 @@
 
 - **后台任务 (Background Task)** 是一个活动账本，记录了发生了什么、发生时间以及最终结果。
 - **交互式聊天 (Interactive Chat)** 专用于问答、指令和简单的命令。后台任务将这些耗时领域分离出来。
+- **边界保持 (Boundary Preservation):** 后台机制绝不是绕过安全审核的后门。如果一个任务涉及到领域模型中需要 `Owner Apply`（所有者在后台确认）的操作，后台任务的最终产出只能是 `Typed Draft`（类型化草案），任务本身将以 `succeeded` 终结，并通知用户前往 Admin UI 进行审核。
 - 我们将分三层演进此能力，当前阶段严格聚焦于第一层。
 
 ## 演进架构
@@ -51,7 +52,7 @@ tasks
   updated_at
 ```
 
-*(未来的第二层扩展可能会引入 `task_steps` 表)*
+*(注：未来的第二层扩展可能会引入 `task_steps` 表。只有在引入具体的任务步骤后，才会支持 `paused` 状态和 Recoverable Failure（可恢复的失败）机制。在当前的第一层设计中，任务是一个黑盒，`failed` 即为不可恢复的终态。)*
 
 ## 用户体验
 
@@ -65,19 +66,23 @@ tasks
 
 ## 实现策略
 
-1. **Schema 与 Repositories**
-   - 编写 `tasks` 表的 D1 迁移脚本。
-   - 实现 `TaskRepository` 以支持基本的 CRUD 操作。
+1. **彻底清理旧版 Long Task 残留 (Legacy Cleanup)**
+   - 根据全局重构规则，彻底移除代码库中旧的 `longTasks.ts`, `repositories/d1/longTasks.ts`, `long-tasks-page.tsx` 等实现。
+   - 编写 D1 迁移脚本，安全移除（Drop）旧的 `long_tasks`, `long_task_steps`, `long_task_events` 表，确保不保留任何冗余的废弃设计。
 
-2. **脱离执行 (Runtime)**
+2. **Schema 与 Repositories**
+   - 编写新的 `tasks` 表的 D1 迁移脚本（遵循第一层的极简设计）。
+   - 实现全新的 `TaskRepository` 以支持基本的 CRUD 操作。
+
+3. **脱离执行 (Runtime)**
    - 避免在 webhook 请求内同步执行繁重的操作，改为派发到后台 worker 执行（例如使用 Cloudflare Queues，或者对于较短的任务使用 `ctx.waitUntil`，但 Queues 对于真正的后台可靠性来说更安全）。
    - 确保任务在状态流转时（`queued` -> `running` -> `terminal`）实时更新 D1 数据库中的状态。
 
-3. **Telegram 指令**
+4. **Telegram 指令**
    - 实现 `/list tasks`, `/show task`, `/cancel task` 指令。
    - 实现通知派发器 (Notification Dispatcher)，在任务完成时向用户推送消息。
 
-4. **集成现有重型工具**
+5. **集成现有重型工具**
    - 挑选 1-2 个容易超时或执行时间过长的现有能力（例如：大型代码库扫描、重度文档解析）。
    - 将它们封装进新的任务账本 (Task Ledger) 机制中运行。
 

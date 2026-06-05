@@ -11,12 +11,7 @@ import {
 import { executeLlmAgent, type AgentRuntime, type AgentToolResult } from "./agent.js";
 import { type SearchClient, type UrlFetcher } from "./externalTools.js";
 import { type LlmClient } from "./llm.js";
-import {
-  classifyTaskComplexity,
-  executeLongTaskForRecord,
-  startLongTask,
-  syncLongTaskMessage
-} from "./longTasks.js";
+
 import { classifyHeuristically, decidePlannerRoute, extractUrls } from "./plannerRouteDecision.js";
 import { type AgentRepositories, type RunnableSkillRecord } from "./repositories.js";
 import { allowedBuiltInToolsForSkill } from "./skillPackages.js";
@@ -932,7 +927,6 @@ async function executeCommandOrSkillOrLlmFallback(input: {
     };
   });
 
-  const heuristicComplexity = classifyTaskComplexity(input.text);
   const heuristicPlanner = classifyHeuristically(input.text);
 
   const unifiedRouting = await executeUnifiedRouting({
@@ -990,26 +984,7 @@ async function executeCommandOrSkillOrLlmFallback(input: {
     }
   }
 
-  const decision = heuristicComplexity.mode === "long_task" 
-    ? heuristicComplexity 
-    : (unifiedRouting.taskComplexity || heuristicComplexity);
 
-  if (decision.mode === "long_task") {
-    const started = await startLongTask({
-      runId: input.runId,
-      ownerTgUserId: input.ownerTgUserId,
-      text: input.text,
-      decision: decision as any,
-      runtime: input.runtime
-    });
-    return {
-      responseText: started.responseText,
-      toolName: "long_task_start",
-      riskLevel: "external_send",
-      input: { text: input.text },
-      output: { taskId: started.task.id }
-    };
-  }
 
   const plannerRoute = await decidePlannerRoute({
     runId: input.runId,
@@ -1192,139 +1167,6 @@ export async function handleOwnerUpdate(
       }).catch(() => {});
     }
     return { runId };
-  } else if (cbData && cbData.startsWith("long_task_action_")) {
-    const parts = cbData.split("_");
-    if (parts.length >= 4) {
-      const action = parts[3]; // confirm, skip, cancel, retry
-      const taskId = parts.slice(4).join("_");
-      console.error("PARSED ACTION:", action, "TASKID:", taskId);
-      
-      const task = await input.runtime.repositories.getLongTask({
-        ownerTgUserId: input.ownerTgUserId,
-        id: taskId
-      });
-      
-      if (task) {
-        if (action === "cancel") {
-          const { canCancelLongTask } = await import("./longTasks.js");
-          if (!canCancelLongTask(task)) {
-             await input.runtime.telegramClient.answerCallbackQuery({
-               callbackQueryId: input.update.callback_query?.id ?? "",
-               text: "不能取消已完成的长任务",
-               showAlert: true
-             }).catch(() => {});
-             return { runId };
-          }
-          console.error("EXECUTE CANCEL FOR", task.id);
-          await input.runtime.repositories.updateLongTask({
-            id: task.id,
-            status: "cancelled",
-            currentStepId: task.currentStepId,
-            outputText: task.outputText,
-            error: "用户取消",
-            updatedAt: now
-          });
-          await input.runtime.repositories.createLongTaskEvent({
-            id: input.runtime.generateId(),
-            longTaskId: task.id,
-            ownerTgUserId: input.ownerTgUserId,
-            stepId: null,
-            eventType: "cancelled",
-            payloadJson: JSON.stringify({ source: "telegram_callback" }),
-            createdAt: now
-          });
-          const cancelledTask = await input.runtime.repositories.getLongTask({ ownerTgUserId: input.ownerTgUserId, id: task.id });
-          if (cancelledTask) {
-            await syncLongTaskMessage({ runtime: input.runtime, task: cancelledTask });
-          }
-        } else if (action === "confirm" || action === "skip") {
-          if (task.status !== "waiting_for_user") {
-             await input.runtime.telegramClient.answerCallbackQuery({
-               callbackQueryId: input.update.callback_query?.id ?? "",
-               text: "当前状态无法继续",
-               showAlert: true
-             }).catch(() => {});
-             return { runId };
-          }
-          const steps = await input.runtime.repositories.listLongTaskSteps(task.id);
-          const blocked = steps.find((step) => step.status === "blocked");
-          if (blocked) {
-            await input.runtime.repositories.updateLongTaskStep({
-              id: blocked.id,
-              status: action === "confirm" ? "succeeded" : "skipped",
-              outputJson: JSON.stringify(action === "confirm" ? { confirmedByUser: true } : { skippedByUser: true }),
-              error: null,
-              completedAt: now
-            });
-          }
-          await input.runtime.repositories.updateLongTask({
-            id: task.id,
-            status: "running",
-            currentStepId: task.currentStepId,
-            outputText: task.outputText,
-            error: null,
-            updatedAt: now
-          });
-          await input.runtime.repositories.createLongTaskEvent({
-            id: input.runtime.generateId(),
-            longTaskId: task.id,
-            ownerTgUserId: input.ownerTgUserId,
-            stepId: blocked?.id ?? null,
-            eventType: "resumed",
-            payloadJson: JSON.stringify({ source: "telegram_callback", action }),
-            createdAt: now
-          });
-          
-          const runningTask = await input.runtime.repositories.getLongTask({ ownerTgUserId: input.ownerTgUserId, id: task.id });
-          if (runningTask) {
-            await syncLongTaskMessage({ runtime: input.runtime, task: runningTask });
-            // Run in background without awaiting so the callback is answered quickly
-            executeLongTaskForRecord({ runtime: input.runtime, task: runningTask }).catch(console.error);
-          }
-        } else if (action === "retry") {
-          if (task.status !== "failed") {
-             await input.runtime.telegramClient.answerCallbackQuery({
-               callbackQueryId: input.update.callback_query?.id ?? "",
-               text: "当前状态无法重试",
-               showAlert: true
-             }).catch(() => {});
-             return { runId };
-          }
-          await input.runtime.repositories.updateLongTask({
-            id: task.id,
-            status: "running",
-            currentStepId: task.currentStepId,
-            outputText: task.outputText,
-            error: null,
-            updatedAt: now
-          });
-          await input.runtime.repositories.createLongTaskEvent({
-            id: input.runtime.generateId(),
-            longTaskId: task.id,
-            ownerTgUserId: input.ownerTgUserId,
-            stepId: task.currentStepId,
-            eventType: "resumed",
-            payloadJson: JSON.stringify({ source: "telegram_callback", action: "retry" }),
-            createdAt: now
-          });
-          
-          const retryingTask = await input.runtime.repositories.getLongTask({ ownerTgUserId: input.ownerTgUserId, id: task.id });
-          if (retryingTask) {
-            await syncLongTaskMessage({ runtime: input.runtime, task: retryingTask });
-            executeLongTaskForRecord({ runtime: input.runtime, task: retryingTask }).catch(console.error);
-          }
-        }
-      }
-      
-      if (input.update.callback_query?.id) {
-        await input.runtime.telegramClient.answerCallbackQuery({
-          callbackQueryId: input.update.callback_query.id,
-          text: "操作已收到"
-        }).catch(e => console.error("Failed to answer callback query", e));
-      }
-      
-      return { runId };
-    }
   }
 
   const run = await input.runtime.repositories.createRun({
@@ -1429,63 +1271,11 @@ export async function handleOwnerUpdate(
             }
           : undefined;
 
-      let currentTask = null;
-      if (
-        result.toolName === "long_task_start" &&
-        typeof result.output === "object" &&
-        result.output !== null &&
-        "taskId" in result.output
-      ) {
-        currentTask = await input.runtime.repositories.getLongTask({
-          ownerTgUserId: input.ownerTgUserId,
-          id: result.output.taskId as string
-        });
-        if (currentTask) {
-          if (currentTask.status === "running" || currentTask.status === "planning" || currentTask.status === "paused") {
-            inlineKeyboard = {
-              inline_keyboard: [
-                [{ text: "取消", callback_data: `long_task_action_cancel_${currentTask.id}` }]
-              ]
-            };
-          } else if (currentTask.status === "waiting_for_user") {
-            inlineKeyboard = {
-              inline_keyboard: [
-                [
-                  { text: "✅ 确认", callback_data: `long_task_action_confirm_${currentTask.id}` },
-                  { text: "⏭️ 跳过", callback_data: `long_task_action_skip_${currentTask.id}` },
-                  { text: "❌ 取消", callback_data: `long_task_action_cancel_${currentTask.id}` }
-                ]
-              ]
-            };
-          } else if (currentTask.status === "failed") {
-            inlineKeyboard = {
-              inline_keyboard: [
-                [
-                  { text: "🔄 重试", callback_data: `long_task_action_retry_${currentTask.id}` },
-                  { text: "❌ 取消", callback_data: `long_task_action_cancel_${currentTask.id}` }
-                ]
-              ]
-            };
-          }
-        }
-      }
-
-      const msgResp = await input.runtime.telegramClient.sendMessage({
+      await input.runtime.telegramClient.sendMessage({
         chatId,
         text: result.responseText,
         replyMarkup: inlineKeyboard
-      });
-      
-      if (currentTask) {
-        await input.runtime.repositories.updateLongTask({
-          id: currentTask.id,
-          status: currentTask.status,
-          telegramChatId: chatId,
-          telegramMessageId: msgResp.messageId,
-          updatedAt: input.runtime.now()
-        });
-      }
-      await input.runtime.repositories.updateRun(run.id, {
+      });      await input.runtime.repositories.updateRun(run.id, {
         status: "succeeded",
         responseText: result.responseText,
         error: null,

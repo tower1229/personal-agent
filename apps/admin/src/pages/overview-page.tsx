@@ -3,7 +3,6 @@ import {
   ActivityIcon,
   BotIcon,
   DatabaseIcon,
-  ListChecksIcon,
   type LucideIcon
 } from "lucide-react";
 import type { DashboardData } from "@/lib/api";
@@ -98,12 +97,7 @@ export function OverviewPage() {
               title="Skills"
               value={dashboard.skills.items.length}
             />
-            <MetricCard
-              description="自动规划和执行的长任务"
-              icon={ListChecksIcon}
-              title="Long Tasks"
-              value={dashboard.longTasks.items.length}
-            />
+
             <MetricCard
               description="待办、记忆和审批数据面"
               icon={DatabaseIcon}

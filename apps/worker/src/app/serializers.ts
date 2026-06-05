@@ -1,8 +1,5 @@
 import {
   type ApprovalRequestRecord,
-  type LongTaskEventRecord,
-  type LongTaskRecord,
-  type LongTaskStepRecord,
   type MemoryRecord,
   type PersonalModelClaimRecord,
   type PersonalModelEvidenceRecord,
@@ -275,52 +272,6 @@ export function toAdminPlannerRouteDecision(
   };
 }
 
-export function toAdminLongTask(task: LongTaskRecord) {
-  return {
-    id: task.id,
-    runId: task.runId,
-    title: task.title,
-    originalInput: task.originalInput,
-    status: task.status,
-    complexityScore: task.complexityScore,
-    plannerReason: task.plannerReason,
-    currentStepId: task.currentStepId,
-    outputText: task.outputText,
-    error: task.error,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt
-  };
-}
-
-export function toAdminLongTaskStep(step: LongTaskStepRecord) {
-  return {
-    id: step.id,
-    longTaskId: step.longTaskId,
-    position: step.position,
-    title: step.title,
-    description: step.description,
-    status: step.status,
-    toolPolicy: step.toolPolicy,
-    successCriteria: step.successCriteria,
-    inputJson: step.inputJson,
-    outputJson: step.outputJson,
-    error: step.error,
-    startedAt: step.startedAt,
-    completedAt: step.completedAt,
-    createdAt: step.createdAt
-  };
-}
-
-export function toAdminLongTaskEvent(event: LongTaskEventRecord) {
-  return {
-    id: event.id,
-    longTaskId: event.longTaskId,
-    stepId: event.stepId,
-    eventType: event.eventType,
-    payloadJson: event.payloadJson,
-    createdAt: event.createdAt
-  };
-}
 
 export function toAdminSchedule(schedule: ScheduleRecord) {
   return {

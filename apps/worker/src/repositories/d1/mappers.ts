@@ -7,9 +7,7 @@ import {
   type ApprovalRequestStatus,
   type ChatSessionStatus,
   type ControlledToolName,
-  type LongTaskStatus,
-  type LongTaskStepStatus,
-  type LongTaskToolPolicy,
+
   type MemoryStatus,
   type MetacognitionReflectionType,
   type PendingPlannerRouteClarificationOption,
@@ -47,9 +45,7 @@ import {
 import {
   type ApprovalRequestRecord,
   type ChatSessionRecord,
-  type LongTaskEventRecord,
-  type LongTaskRecord,
-  type LongTaskStepRecord,
+
   type MemoryRecord,
   type PendingPlannerRouteClarificationRecord,
   type PersonalModelClaimRecord,
@@ -395,52 +391,6 @@ export interface ScheduleExecutionRow {
   updated_at: number;
 }
 
-export interface LongTaskRow {
-  id: string;
-  run_id: string;
-  owner_tg_user_id: number;
-  title: string;
-  original_input: string;
-  status: LongTaskStatus;
-  complexity_score: number;
-  planner_reason: string;
-  current_step_id: string | null;
-  output_text: string | null;
-  error: string | null;
-  replan_count: number;
-  telegram_chat_id: number | null;
-  telegram_message_id: number | null;
-  created_at: number;
-  updated_at: number;
-}
-
-export interface LongTaskStepRow {
-  id: string;
-  long_task_id: string;
-  owner_tg_user_id: number;
-  position: number;
-  title: string;
-  description: string;
-  status: LongTaskStepStatus;
-  tool_policy: LongTaskToolPolicy;
-  success_criteria: string;
-  input_json: string;
-  output_json: string | null;
-  error: string | null;
-  started_at: number | null;
-  completed_at: number | null;
-  created_at: number;
-}
-
-export interface LongTaskEventRow {
-  id: string;
-  long_task_id: string;
-  owner_tg_user_id: number;
-  step_id: string | null;
-  event_type: string;
-  payload_json: string;
-  created_at: number;
-}
 
 export function toRun(row: RunRow): RunRecord {
   return {
@@ -894,58 +844,6 @@ export function toRunEvaluation(row: RunEvaluationRow): RunEvaluationRecord {
   };
 }
 
-export function toLongTask(row: LongTaskRow): LongTaskRecord {
-  return {
-    id: row.id,
-    runId: row.run_id,
-    ownerTgUserId: row.owner_tg_user_id,
-    title: row.title,
-    originalInput: row.original_input,
-    status: row.status,
-    complexityScore: row.complexity_score,
-    plannerReason: row.planner_reason,
-    currentStepId: row.current_step_id,
-    outputText: row.output_text,
-    error: row.error,
-    replanCount: row.replan_count,
-    telegramChatId: row.telegram_chat_id,
-    telegramMessageId: row.telegram_message_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  };
-}
-
-export function toLongTaskStep(row: LongTaskStepRow): LongTaskStepRecord {
-  return {
-    id: row.id,
-    longTaskId: row.long_task_id,
-    ownerTgUserId: row.owner_tg_user_id,
-    position: row.position,
-    title: row.title,
-    description: row.description,
-    status: row.status,
-    toolPolicy: row.tool_policy,
-    successCriteria: row.success_criteria,
-    inputJson: row.input_json,
-    outputJson: row.output_json,
-    error: row.error,
-    startedAt: row.started_at,
-    completedAt: row.completed_at,
-    createdAt: row.created_at
-  };
-}
-
-export function toLongTaskEvent(row: LongTaskEventRow): LongTaskEventRecord {
-  return {
-    id: row.id,
-    longTaskId: row.long_task_id,
-    ownerTgUserId: row.owner_tg_user_id,
-    stepId: row.step_id,
-    eventType: row.event_type,
-    payloadJson: row.payload_json,
-    createdAt: row.created_at
-  };
-}
 
 export function escapeLike(input: string): string {
   return input.replace(/[\\%_]/g, (match) => `\\${match}`);

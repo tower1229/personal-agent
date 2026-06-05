@@ -1,6 +1,6 @@
 import { type AgentRepositories } from "../../repositories.js";
 import { createD1CoreDataRepositories } from "./coreData.js";
-import { createD1LongTaskRepositories } from "./longTasks.js";
+
 import { createD1PersonalModelRepositories } from "./personalModel.js";
 import { createD1PlannerRouteRepositories } from "./plannerRoutes.js";
 import { createD1RunRepositories } from "./runs.js";
@@ -18,7 +18,7 @@ export function createD1Repositories(db: D1Database): AgentRepositories {
     ...createD1PersonalModelRepositories(db),
     ...createD1PlannerRouteRepositories(db),
     ...createD1SkillRepositories(db),
-    ...createD1LongTaskRepositories(db),
+
     ...createD1ScheduleRepositories(db),
     ...createD1AdminAssistRunRepositories(db)
   };

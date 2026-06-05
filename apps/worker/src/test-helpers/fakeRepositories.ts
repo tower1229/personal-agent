@@ -10,9 +10,7 @@ import {
   type AgentRepositories,
   type AdminAssistRunRecord,
   type ApprovalRequestRecord,
-  type LongTaskEventRecord,
-  type LongTaskRecord,
-  type LongTaskStepRecord,
+
   type MemoryRecord,
   type PersonalModelClaimRecord,
   type PersonalModelEvidenceRecord,
@@ -118,9 +116,7 @@ export function createFakeRepositories(): AgentRepositories & {
   plannerRouteDecisions: PlannerRouteDecisionRecord[];
   pendingPlannerRouteClarifications: PendingPlannerRouteClarificationRecord[];
   skillRuns: SkillRunRecord[];
-  longTasks: LongTaskRecord[];
-  longTaskSteps: LongTaskStepRecord[];
-  longTaskEvents: LongTaskEventRecord[];
+
   schedules: ScheduleRecord[];
   scheduleExecutions: ScheduleExecutionRecord[];
   userProfiles: UserProfileRecord[];
@@ -149,9 +145,7 @@ export function createFakeRepositories(): AgentRepositories & {
     pendingPlannerRouteClarifications:
       [] as PendingPlannerRouteClarificationRecord[],
     skillRuns: [] as SkillRunRecord[],
-    longTasks: [] as LongTaskRecord[],
-    longTaskSteps: [] as LongTaskStepRecord[],
-    longTaskEvents: [] as LongTaskEventRecord[],
+
     schedules: [] as ScheduleRecord[],
     scheduleExecutions: [] as ScheduleExecutionRecord[],
     userProfiles: [] as UserProfileRecord[],
@@ -220,15 +214,7 @@ export function createFakeRepositories(): AgentRepositories & {
     get skillRuns() {
       return state.skillRuns;
     },
-    get longTasks() {
-      return state.longTasks;
-    },
-    get longTaskSteps() {
-      return state.longTaskSteps;
-    },
-    get longTaskEvents() {
-      return state.longTaskEvents;
-    },
+
     get schedules() {
       return state.schedules;
     },
@@ -1135,143 +1121,7 @@ export function createFakeRepositories(): AgentRepositories & {
           .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       );
     },
-    async createLongTask(input) {
-      state.longTasks.push(input);
-      return input;
-    },
-    async updateLongTask(input) {
-      const task = state.longTasks.find((item) => item.id === input.id);
-      if (!task) {
-        return;
-      }
-      task.status = input.status;
-      task.title = input.title ?? task.title;
-      task.plannerReason = input.plannerReason ?? task.plannerReason;
-      task.currentStepId =
-        input.currentStepId === undefined
-          ? task.currentStepId
-          : input.currentStepId;
-      task.outputText =
-        input.outputText === undefined ? task.outputText : input.outputText;
-      task.error = input.error === undefined ? task.error : input.error;
-      task.replanCount = input.replanCount ?? task.replanCount;
-      task.telegramChatId =
-        input.telegramChatId === undefined
-          ? task.telegramChatId
-          : input.telegramChatId;
-      task.telegramMessageId =
-        input.telegramMessageId === undefined
-          ? task.telegramMessageId
-          : input.telegramMessageId;
-      task.updatedAt = input.updatedAt;
-    },
-    async getLongTask(input) {
-      return (
-        state.longTasks.find(
-          (task) =>
-            task.ownerTgUserId === input.ownerTgUserId && task.id === input.id,
-        ) ?? null
-      );
-    },
-    async getLatestActiveLongTask(ownerTgUserId) {
-      return (
-        state.longTasks
-          .filter(
-            (task) =>
-              task.ownerTgUserId === ownerTgUserId &&
-              ["planning", "running", "waiting_for_user", "paused"].includes(
-                task.status,
-              ),
-          )
-          .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null
-      );
-    },
-    async deleteLongTask(input) {
-      state.longTasks = state.longTasks.filter(
-        (t) => !(t.ownerTgUserId === input.ownerTgUserId && t.id === input.id),
-      );
-      state.longTaskSteps = state.longTaskSteps.filter(
-        (s) => s.longTaskId !== input.id,
-      );
-      state.longTaskEvents = state.longTaskEvents.filter(
-        (e) => e.longTaskId !== input.id,
-      );
-    },
-    async getLongTaskForRun(input) {
-      return (
-        state.longTasks
-          .filter(
-            (task) =>
-              task.ownerTgUserId === input.ownerTgUserId &&
-              task.runId === input.runId,
-          )
-          .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
-      );
-    },
-    async listLongTasks(ownerTgUserId, limit) {
-      return state.longTasks
-        .filter((task) => task.ownerTgUserId === ownerTgUserId)
-        .slice()
-        .sort((left, right) => right.updatedAt - left.updatedAt)
-        .slice(0, limit);
-    },
-    async listResumableLongTasks(now, limit) {
-      return state.longTasks
-        .filter(
-          (task) => task.status === "running" && task.updatedAt <= now - 30000,
-        )
-        .slice()
-        .sort((left, right) => left.updatedAt - right.updatedAt)
-        .slice(0, limit);
-    },
-    async createLongTaskStep(input) {
-      state.longTaskSteps.push(input);
-      return input;
-    },
-    async updateLongTaskStep(input) {
-      const step = state.longTaskSteps.find((item) => item.id === input.id);
-      if (!step) {
-        return;
-      }
-      step.status = input.status;
-      step.outputJson =
-        input.outputJson === undefined ? step.outputJson : input.outputJson;
-      step.error = input.error === undefined ? step.error : input.error;
-      step.startedAt =
-        input.startedAt === undefined ? step.startedAt : input.startedAt;
-      step.completedAt =
-        input.completedAt === undefined ? step.completedAt : input.completedAt;
-    },
-    async claimNextLongTaskStep(input) {
-      const step = state.longTaskSteps
-        .filter(
-          (item) =>
-            item.longTaskId === input.longTaskId && item.status === "pending",
-        )
-        .sort((left, right) => left.position - right.position)[0];
-      if (!step) {
-        return null;
-      }
-      step.status = "running";
-      step.startedAt = input.startedAt;
-      return step;
-    },
-    async listLongTaskSteps(longTaskId) {
-      return state.longTaskSteps
-        .filter((step) => step.longTaskId === longTaskId)
-        .slice()
-        .sort((left, right) => left.position - right.position);
-    },
-    async createLongTaskEvent(input) {
-      state.longTaskEvents.push(input);
-      return input;
-    },
-    async listLongTaskEvents(longTaskId) {
-      return state.longTaskEvents
-        .filter((event) => event.longTaskId === longTaskId)
-        .slice()
-        .sort((left, right) => left.createdAt - right.createdAt);
-    },
+
     async createSchedule(input) {
       state.schedules.push(input);
       return input;

@@ -1,7 +1,7 @@
 import { type Hono } from "hono";
 import { type WorkerEnv } from "../types.js";
 import { registerAdminDataRoutes } from "./adminDataRoutes.js";
-import { registerAdminLongTaskRoutes } from "./adminLongTaskRoutes.js";
+
 import { registerAdminPersonalModelRoutes } from "./adminPersonalModelRoutes.js";
 import { registerAdminScheduleRoutes } from "./adminScheduleRoutes.js";
 import { registerAdminSkillRoutes } from "./adminSkillRoutes.js";
@@ -18,7 +18,7 @@ export function registerWorkerRoutes(
 ) {
   registerAdminSystemRoutes(app, context);
   registerAdminDataRoutes(app, context);
-  registerAdminLongTaskRoutes(app, context);
+
   registerAdminPersonalModelRoutes(app, context);
   registerAdminSkillRoutes(app, context);
   registerAdminSkillIntentsRoutes(app, context);

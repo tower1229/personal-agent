@@ -7,8 +7,7 @@ import {
   adminD1ReadinessResponseSchema,
   adminEvaluationsResponseSchema,
   adminFeedbacksResponseSchema,
-  adminLongTaskDetailResponseSchema,
-  adminLongTasksResponseSchema,
+
   adminMemoriesResponseSchema,
   adminMemoryCreateRequestSchema,
   adminMemorySchema,
@@ -55,8 +54,7 @@ import {
   type AdminD1ReadinessResponse,
   type AdminEvaluationsResponse,
   type AdminFeedbacksResponse,
-  type AdminLongTaskDetailResponse,
-  type AdminLongTasksResponse,
+
   type AdminMemoriesResponse,
   type AdminMemory,
   type AdminMeResponse,
@@ -105,7 +103,7 @@ export interface DashboardData {
   skills: AdminSkillsResponse;
   skillRuns: AdminSkillRunsResponse;
   routeDecisions: AdminSkillRouteDecisionsResponse;
-  longTasks: AdminLongTasksResponse;
+
   schedules: AdminSchedulesResponse;
   scheduleExecutions: AdminScheduleExecutionsResponse;
 }
@@ -199,7 +197,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     skills,
     skillRuns,
     routeDecisions,
-    longTasks,
+
     schedules,
     scheduleExecutions
   ] = await Promise.all([
@@ -211,7 +209,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     loadSkills(),
     loadSkillRuns(),
     loadSkillRouteDecisions(),
-    loadLongTasks(),
+
     loadSchedules(),
     loadScheduleExecutions()
   ]);
@@ -225,7 +223,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     skills,
     skillRuns,
     routeDecisions,
-    longTasks,
+
     schedules,
     scheduleExecutions
   };
@@ -307,35 +305,6 @@ export function loadSkillRouteDecisions(): Promise<AdminSkillRouteDecisionsRespo
   );
 }
 
-export function loadLongTasks(): Promise<AdminLongTasksResponse> {
-  return fetchJson("/api/admin/long-tasks", (input) =>
-    adminLongTasksResponseSchema.parse(input)
-  );
-}
-
-export function loadLongTaskDetail(
-  id: string
-): Promise<AdminLongTaskDetailResponse> {
-  return fetchJson(`/api/admin/long-tasks/${id}`, (input) =>
-    adminLongTaskDetailResponseSchema.parse(input)
-  );
-}
-
-export async function pauseLongTask(id: string): Promise<void> {
-  await postEmpty(`/api/admin/long-tasks/${id}/pause`);
-}
-
-export async function resumeLongTask(id: string): Promise<void> {
-  await postEmpty(`/api/admin/long-tasks/${id}/resume`);
-}
-
-export async function cancelLongTask(id: string): Promise<void> {
-  await postEmpty(`/api/admin/long-tasks/${id}/cancel`);
-}
-
-export async function deleteLongTask(id: string): Promise<void> {
-  await deleteEmpty(`/api/admin/long-tasks/${id}`);
-}
 
 export function loadSchedules(): Promise<AdminSchedulesResponse> {
   return fetchJson("/api/admin/schedules", (input) =>

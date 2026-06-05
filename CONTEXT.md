@@ -69,7 +69,7 @@ The single Telegram message used to display the execution progress of a Long Tas
 _Avoid_: separate progress push, batch status messages, silent background execution
 
 **Recoverable Failure**:
-A Long Task state where a step execution fails but the task is not immediately terminated. The task transitions to a suspended `Paused` state, and an inline keyboard is provided on the In-Place Progress Message allowing the owner to retry the failed step or cancel the task.
+A state in a multi-step Long Task (Template-based Steps) where a step execution fails but the task is not immediately terminated. The task transitions to a suspended `Paused` state, and an inline keyboard is provided on the In-Place Progress Message allowing the owner to retry the failed step or cancel the task. (Note: In simple, single-step Detached Executions, failures are terminal `failed` states, not Recoverable Failures).
 _Avoid_: fatal error, automatic silent abort, unrecoverable crash
 
 **Personal Model Entry**:
@@ -150,6 +150,6 @@ Developer: Should every step in a long task trigger a new Telegram message to up
 
 Domain expert: No. Use an In-Place Progress Message that updates a single message via `editMessageText` to avoid spamming the user.
 
-Developer: If a step in a long task fails, does the task end immediately?
+Developer: If a step in a multi-step long task fails, does the task end immediately?
 
 Domain expert: No. It results in a Recoverable Failure where the task is paused, and the In-Place Progress Message presents an inline keyboard allowing the user to retry the step.

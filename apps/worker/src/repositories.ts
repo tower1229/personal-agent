@@ -2,9 +2,7 @@ import {
   type ChatSessionStatus,
   type ApprovalRequestStatus,
   type ControlledToolName,
-  type LongTaskStatus,
-  type LongTaskStepStatus,
-  type LongTaskToolPolicy,
+
   type MemoryStatus,
   type PersonalModelConfidence,
   type PersonalModelEventType,
@@ -367,52 +365,6 @@ export interface ScheduleExecutionRecord {
   updatedAt: number;
 }
 
-export interface LongTaskRecord {
-  id: string;
-  runId: string;
-  ownerTgUserId: number;
-  title: string;
-  originalInput: string;
-  status: LongTaskStatus;
-  complexityScore: number;
-  plannerReason: string;
-  currentStepId: string | null;
-  outputText: string | null;
-  error: string | null;
-  replanCount: number;
-  telegramChatId: number | null;
-  telegramMessageId: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface LongTaskStepRecord {
-  id: string;
-  longTaskId: string;
-  ownerTgUserId: number;
-  position: number;
-  title: string;
-  description: string;
-  status: LongTaskStepStatus;
-  toolPolicy: LongTaskToolPolicy;
-  successCriteria: string;
-  inputJson: string;
-  outputJson: string | null;
-  error: string | null;
-  startedAt: number | null;
-  completedAt: number | null;
-  createdAt: number;
-}
-
-export interface LongTaskEventRecord {
-  id: string;
-  longTaskId: string;
-  ownerTgUserId: number;
-  stepId: string | null;
-  eventType: string;
-  payloadJson: string;
-  createdAt: number;
-}
 
 export interface UserProfileRecord {
   id: string;
@@ -757,51 +709,7 @@ export interface AgentRepositories {
   createSkillIntentsBatch(inputs: SkillIntentRecord[]): Promise<void>;
   deleteSkillIntent(input: { ownerTgUserId: number; id: string }): Promise<void>;
   listSkillIntents(ownerTgUserId: number): Promise<SkillIntentRecord[]>;
-  createLongTask(input: LongTaskRecord): Promise<LongTaskRecord>;
-  updateLongTask(input: {
-    id: string;
-    status: LongTaskStatus;
-    title?: string;
-    plannerReason?: string;
-    currentStepId?: string | null;
-    outputText?: string | null;
-    error?: string | null;
-    replanCount?: number;
-    telegramChatId?: number | null;
-    telegramMessageId?: number | null;
-    updatedAt: number;
-  }): Promise<void>;
-  getLongTask(input: {
-    ownerTgUserId: number;
-    id: string;
-  }): Promise<LongTaskRecord | null>;
-  deleteLongTask(input: {
-    ownerTgUserId: number;
-    id: string;
-  }): Promise<void>;
-  getLatestActiveLongTask(ownerTgUserId: number): Promise<LongTaskRecord | null>;
-  getLongTaskForRun(input: {
-    ownerTgUserId: number;
-    runId: string;
-  }): Promise<LongTaskRecord | null>;
-  listLongTasks(ownerTgUserId: number, limit: number): Promise<LongTaskRecord[]>;
-  listResumableLongTasks(now: number, limit: number): Promise<LongTaskRecord[]>;
-  createLongTaskStep(input: LongTaskStepRecord): Promise<LongTaskStepRecord>;
-  updateLongTaskStep(input: {
-    id: string;
-    status: LongTaskStepStatus;
-    outputJson?: string | null;
-    error?: string | null;
-    startedAt?: number | null;
-    completedAt?: number | null;
-  }): Promise<void>;
-  claimNextLongTaskStep(input: {
-    longTaskId: string;
-    startedAt: number;
-  }): Promise<LongTaskStepRecord | null>;
-  listLongTaskSteps(longTaskId: string): Promise<LongTaskStepRecord[]>;
-  createLongTaskEvent(input: LongTaskEventRecord): Promise<LongTaskEventRecord>;
-  listLongTaskEvents(longTaskId: string): Promise<LongTaskEventRecord[]>;
+
   createSchedule(input: ScheduleRecord): Promise<ScheduleRecord>;
   updateSchedule(input: {
     ownerTgUserId: number;

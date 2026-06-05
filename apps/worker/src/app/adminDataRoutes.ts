@@ -20,7 +20,7 @@ import { type WorkerEnv } from "../types.js";
 import { limitParam } from "./helpers.js";
 import {
   toAdminApproval,
-  toAdminLongTask,
+
   toAdminMemory,
   toAdminPlannerRouteDecision,
   toAdminRun,
@@ -78,7 +78,7 @@ export function registerAdminDataRoutes(
       skillRouteDecision,
       plannerRouteDecision,
       skillRun,
-      longTask,
+
       scheduleExecution
     ] = await Promise.all([
       repo.listToolCallsForRun({
@@ -97,10 +97,7 @@ export function registerAdminDataRoutes(
         ownerTgUserId: authenticatedOwnerId,
         runId: run.id
       }),
-      repo.getLongTaskForRun({
-        ownerTgUserId: authenticatedOwnerId,
-        runId: run.id
-      }),
+
       repo.getScheduleExecutionForRun({
         ownerTgUserId: authenticatedOwnerId,
         runId: run.id
@@ -118,7 +115,7 @@ export function registerAdminDataRoutes(
           ? toAdminPlannerRouteDecision(plannerRouteDecision)
           : null,
         skillRun: skillRun ? toAdminSkillRun(skillRun) : null,
-        longTask: longTask ? toAdminLongTask(longTask) : null,
+
         scheduleExecution: scheduleExecution
           ? toAdminScheduleExecution(scheduleExecution)
           : null

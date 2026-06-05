@@ -14,7 +14,7 @@ import {
   parseMaxToolRounds,
   type LlmClient
 } from "./llm.js";
-import { resumeDueLongTasks } from "./longTasks.js";
+
 import { type AgentRepositories } from "./repositories.js";
 import { pollDueSchedules } from "./schedules.js";
 import { createTelegramClient } from "./telegram.js";
@@ -174,12 +174,8 @@ export async function runScheduled(
         options.generateApprovalCode ?? defaultGenerateApprovalCode,
       env
     };
-  const [schedules, longTasks, todosCron] = await Promise.all([
+  const [schedules, todosCron] = await Promise.all([
     pollDueSchedules({
-      now: scheduledTime,
-      runtime
-    }),
-    resumeDueLongTasks({
       now: scheduledTime,
       runtime
     }),
@@ -191,7 +187,6 @@ export async function runScheduled(
 
   return {
     ...schedules,
-    longTasks,
     ...todosCron
   };
 }

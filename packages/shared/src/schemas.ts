@@ -7,9 +7,6 @@ import {
   documentIndexStatuses,
   documentSourceTypes,
   evalCategories,
-  longTaskStatuses,
-  longTaskStepStatuses,
-  longTaskToolPolicies,
   memoryStatuses,
   memoryTypes,
   metacognitionReflectionTypes,
@@ -48,9 +45,6 @@ export const plannerToolActionRiskSchema = z.enum(plannerToolActionRisks);
 export const plannerFreshnessRiskSchema = z.enum(plannerFreshnessRisks);
 export const plannerPrivacyRiskSchema = z.enum(plannerPrivacyRisks);
 export const scheduleCadenceSchema = z.enum(scheduleCadences);
-export const longTaskStatusSchema = z.enum(longTaskStatuses);
-export const longTaskStepStatusSchema = z.enum(longTaskStepStatuses);
-export const longTaskToolPolicySchema = z.enum(longTaskToolPolicies);
 
 export const plannerSearchPolicySchema = z.object({
   allowedTopics: z.array(z.string().min(1)),
@@ -431,73 +425,6 @@ export type AdminAgentTestSearchResponse = z.infer<
   typeof adminAgentTestSearchResponseSchema
 >;
 
-export const adminLongTaskSchema = z.object({
-  id: z.string().min(1),
-  runId: z.string().min(1),
-  title: z.string().min(1),
-  originalInput: z.string(),
-  status: longTaskStatusSchema,
-  complexityScore: z.number().min(0).max(1),
-  plannerReason: z.string(),
-  currentStepId: z.string().min(1).nullable(),
-  outputText: z.string().nullable(),
-  error: z.string().nullable(),
-  replanCount: z.number().int().min(0).optional(),
-  telegramChatId: z.number().int().nullable().optional(),
-  telegramMessageId: z.number().int().nullable().optional(),
-  createdAt: z.number().int().min(0),
-  updatedAt: z.number().int().min(0)
-});
-
-export type AdminLongTask = z.infer<typeof adminLongTaskSchema>;
-
-export const adminLongTaskStepSchema = z.object({
-  id: z.string().min(1),
-  longTaskId: z.string().min(1),
-  position: z.number().int().min(1),
-  title: z.string().min(1),
-  description: z.string(),
-  status: longTaskStepStatusSchema,
-  toolPolicy: longTaskToolPolicySchema,
-  successCriteria: z.string(),
-  inputJson: z.string(),
-  outputJson: z.string().nullable(),
-  error: z.string().nullable(),
-  startedAt: z.number().int().min(0).nullable(),
-  completedAt: z.number().int().min(0).nullable(),
-  createdAt: z.number().int().min(0)
-});
-
-export type AdminLongTaskStep = z.infer<typeof adminLongTaskStepSchema>;
-
-export const adminLongTaskEventSchema = z.object({
-  id: z.string().min(1),
-  longTaskId: z.string().min(1),
-  stepId: z.string().min(1).nullable(),
-  eventType: z.string().min(1),
-  payloadJson: z.string(),
-  createdAt: z.number().int().min(0)
-});
-
-export type AdminLongTaskEvent = z.infer<typeof adminLongTaskEventSchema>;
-
-export const adminLongTasksResponseSchema = z.object({
-  items: z.array(adminLongTaskSchema)
-});
-
-export type AdminLongTasksResponse = z.infer<
-  typeof adminLongTasksResponseSchema
->;
-
-export const adminLongTaskDetailResponseSchema = z.object({
-  task: adminLongTaskSchema,
-  steps: z.array(adminLongTaskStepSchema),
-  events: z.array(adminLongTaskEventSchema)
-});
-
-export type AdminLongTaskDetailResponse = z.infer<
-  typeof adminLongTaskDetailResponseSchema
->;
 
 export const adminScheduleSchema = z.object({
   id: z.string().min(1),
@@ -623,7 +550,7 @@ export const adminRunDetailResponseSchema = z.object({
   skillRouteDecision: adminSkillRouteDecisionSchema.nullable(),
   plannerRouteDecision: adminPlannerRouteDecisionSchema.nullable(),
   skillRun: adminSkillRunSummarySchema.nullable(),
-  longTask: adminLongTaskSchema.nullable(),
+
   scheduleExecution: adminScheduleExecutionSchema.nullable()
 });
 

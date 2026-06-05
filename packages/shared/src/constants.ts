@@ -198,35 +198,6 @@ export const scheduleExecutionStatuses = [
 export type ScheduleExecutionStatus =
   (typeof scheduleExecutionStatuses)[number];
 
-export const longTaskStatuses = [
-  "planning",
-  "running",
-  "waiting_for_user",
-  "paused",
-  "succeeded",
-  "failed",
-  "cancelled"
-] as const;
-export type LongTaskStatus = (typeof longTaskStatuses)[number];
-
-export const longTaskStepStatuses = [
-  "pending",
-  "running",
-  "succeeded",
-  "failed",
-  "skipped",
-  "blocked"
-] as const;
-export type LongTaskStepStatus = (typeof longTaskStepStatuses)[number];
-
-export const longTaskToolPolicies = [
-  "none",
-  "read",
-  "write_low",
-  "external_send",
-  "destructive"
-] as const;
-export type LongTaskToolPolicy = (typeof longTaskToolPolicies)[number];
 
 export const evalCategories = [
   "casual_chat",
