@@ -14,6 +14,7 @@ This document is mandatory project guidance for AI IDEs and coding agents. Follo
 - Runtime-editable product data must live in the database or an explicit configuration store, not in prompt strings or UI constants.
 - Agent SOUL, Core Memory, profile fields, skill routing rules, and governance state are owner-scoped data. Do not hardcode them in `apps/worker/src/agent.ts`.
 - Agent SOUL has one persisted contract field: `user_profiles.agent_soul` / API `agentSoul`. Do not store or read SOUL from `preferences.soul`, UI defaults, prompt constants, or alternate compatibility fields.
+- Admin-editable configuration fields must have a concrete runtime or product consumption path. Do not expose profile or settings fields that are only stored but never read by the agent, router, jobs, or UI workflow.
 - Prompt assembly may label and order data, but the content of editable memory/configuration must come from the repository layer.
 - If existing hardcoded data must become persisted data, add a forward migration that seeds current rows once, then remove runtime hardcoding.
 
@@ -54,6 +55,7 @@ The following are not allowed:
 
 - Hardcoding owner-editable prompt content, memory, SOUL, profile facts, or governance state in runtime code.
 - Creating alternate storage paths for the same owner-editable concept, such as storing Agent SOUL in both `agentSoul` and `preferences.soul`.
+- Exposing Admin configuration controls that do not affect runtime behavior or any visible product workflow.
 - Protecting Admin owner-data routes with `ownerId(c.env)` instead of session-backed `adminOwnerId(c)`.
 - Adding new responsibilities to `agent.ts` instead of extracting a module.
 - Updating only UI while leaving API, schema, repository, migration, or tests inconsistent.

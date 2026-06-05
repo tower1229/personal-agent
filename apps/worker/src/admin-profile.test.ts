@@ -55,4 +55,48 @@ describe("admin profile", () => {
       agentSoul
     });
   });
+
+  it("preserves preferences and agent memory fields when profile update omits them", async () => {
+    const { app, repositories } = createTestApp();
+    const existingPreferences = JSON.stringify({
+      lastMemoryExtractionDate: "2026-06-05"
+    });
+
+    await repositories.upsertUserProfile({
+      id: "1229",
+      name: "Original",
+      birthdayTimestamp: null,
+      gender: null,
+      interpretationFramework: null,
+      preferences: existingPreferences,
+      agentSoul: "# Agent SOUL\n只在 Agent Memory System 编辑。",
+      coreMemory: "# Core Memory\n也只在 Agent Memory System 编辑。",
+      createdAt: 1000,
+      updatedAt: 1000
+    });
+
+    const response = await app.request(
+      "/api/admin/profile",
+      {
+        method: "PUT",
+        headers: {
+          Cookie: await ownerCookie(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: "Updated",
+          interpretationFramework: JSON.stringify({ mbti: "INTJ" })
+        })
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      name: "Updated",
+      preferences: existingPreferences,
+      agentSoul: "# Agent SOUL\n只在 Agent Memory System 编辑。",
+      coreMemory: "# Core Memory\n也只在 Agent Memory System 编辑。"
+    });
+  });
 });
