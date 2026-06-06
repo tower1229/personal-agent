@@ -52,7 +52,6 @@ const primaryNav: NavItem[] = [
   { label: "Runs", to: "/admin/runs", icon: ActivityIcon },
   { label: "Skills", to: "/admin/skills", icon: BotIcon },
   { label: "Todos", to: "/admin/todos", icon: CheckSquareIcon },
-  { label: "Long Tasks", to: "/admin/long-tasks", icon: ListChecksIcon },
   { label: "Schedules", to: "/admin/schedules", icon: CalendarClockIcon },
   { label: "Approvals", to: "/admin/approvals", icon: ClipboardCheckIcon },
   { label: "Evaluations", to: "/admin/evaluations", icon: BarChartIcon }
