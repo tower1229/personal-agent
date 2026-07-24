@@ -19,7 +19,7 @@
     "db:reset": "npm run db:clear && npm run db:migrate"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.2",
+    "@hono/node-server": "^2.0.10",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.45.2",
